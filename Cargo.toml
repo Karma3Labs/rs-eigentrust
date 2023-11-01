@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+    "indexer",
+    "attestation-transformer",
+    "linear-combination",
+    "core-compute",
+    "snap-score-computer",
+    "job-manager",
+]
