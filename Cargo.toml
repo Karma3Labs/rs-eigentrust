@@ -3,8 +3,8 @@
 members = [
     "indexer",
     "attestation-transformer",
-    "linear-combination",
-    "core-compute",
+    "linear-combinator",
+    "core-computer",
     "snap-score-computer",
     "job-manager",
 ]
