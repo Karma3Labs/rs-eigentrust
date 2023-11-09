@@ -1,0 +1,10 @@
+syntax = "proto3";
+package transformer;
+
+import "indexer.proto";
+
+service Transformer {
+    rpc SyncVerax (indexer.QueryVerax) returns (Void);
+}
+
+message Void {}

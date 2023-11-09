@@ -1,0 +1,18 @@
+syntax = "proto3";
+package indexer;
+
+service Indexer {
+    rpc Subscribe (QueryVerax) returns (stream VeraxEvent);
+}
+
+message QueryVerax {
+    string source_address = 1;
+    repeated string schema_id = 2;
+}
+
+message VeraxEvent {
+    uint32 id = 1;
+    string schema_id = 2;
+    string schema_value = 3;
+    uint32 timestamp = 4;
+}
