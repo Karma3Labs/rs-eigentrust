@@ -1,12 +1,17 @@
-use prost::Message;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::QueryVerax;
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::Void;
 use rocksdb::DB;
+use schemas::FollowSchema;
+use serde_json::from_str;
 use std::error::Error;
+use term::{IntoTerm, Term};
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
+
+mod schemas;
+mod term;
 
 #[derive(Debug)]
 struct TransformerService {
@@ -50,8 +55,10 @@ impl Transformer for TransformerService {
 				assert!(res.id == count);
 
 				let id = res.id.to_be_bytes();
-				let data = res.encode_to_vec();
-				db.put(id, &data).unwrap();
+				let parsed_att: FollowSchema = from_str(&res.schema_value).unwrap();
+				let term: Term = parsed_att.into_term();
+				let term_bytes = term.into_bytes();
+				db.put(id, &term_bytes).unwrap();
 
 				db.put(b"checkpoint", count.to_be_bytes()).unwrap();
 			}
