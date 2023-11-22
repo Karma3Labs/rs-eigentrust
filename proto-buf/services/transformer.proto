@@ -5,6 +5,19 @@ import "indexer.proto";
 
 service Transformer {
     rpc SyncVerax (indexer.QueryVerax) returns (Void);
+    rpc TermStream (TermBatch) returns (stream TermObject);
 }
 
 message Void {}
+
+message TermBatch {
+    uint32 start = 1;
+    uint32 size = 2;
+}
+
+message TermObject {
+    string from = 1;
+    string to = 2;
+    uint32 weight = 3;
+    uint32 domain = 4;
+}
