@@ -8,6 +8,7 @@ members = [
     "core-computer",
     "snap-score-computer",
     "job-manager",
+    "proto-buf",
 ]
 
 [workspace.package]
