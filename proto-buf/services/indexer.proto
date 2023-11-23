@@ -1,0 +1,20 @@
+syntax = "proto3";
+package indexer;
+
+service Indexer {
+    rpc Subscribe (Query) returns (stream IndexerEvent);
+}
+
+message Query {
+    string source_address = 1;
+    repeated string schema_id = 2;
+    uint32 offset = 3;
+    uint32 count = 4;
+}
+
+message IndexerEvent {
+    uint32 id = 1;
+    uint32 schema_id = 2;
+    string schema_value = 3;
+    uint32 timestamp = 4;
+}
