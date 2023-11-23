@@ -1,5 +1,5 @@
 use proto_buf::indexer::indexer_client::IndexerClient;
-use proto_buf::indexer::QueryVerax;
+use proto_buf::indexer::Query;
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{TermBatch, TermObject, Void};
 use rocksdb::DB;
@@ -40,7 +40,7 @@ impl TransformerService {
 impl Transformer for TransformerService {
 	type TermStreamStream = ReceiverStream<Result<TermObject, Status>>;
 
-	async fn sync_verax(&self, request: Request<QueryVerax>) -> Result<Response<Void>, Status> {
+	async fn sync_indexer(&self, request: Request<Query>) -> Result<Response<Void>, Status> {
 		let req_obj = request.into_inner();
 		let request = Request::new(req_obj);
 		let mut client = IndexerClient::new(self.channel.clone());

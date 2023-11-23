@@ -4,7 +4,7 @@ package transformer;
 import "indexer.proto";
 
 service Transformer {
-    rpc SyncVerax (indexer.QueryVerax) returns (Void);
+    rpc SyncIndexer (indexer.Query) returns (Void);
     rpc TermStream (TermBatch) returns (stream TermObject);
 }
 
