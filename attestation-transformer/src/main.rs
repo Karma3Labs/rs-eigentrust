@@ -16,6 +16,9 @@ mod schemas;
 mod term;
 
 const MAX_TERM_BATCH_SIZE: u32 = 1000;
+const MAX_ATT_BATCH_SIZE: u32 = 1000;
+const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";
+const FOLLOW_SCHEMA_ID: &str = "0x2";
 
 #[derive(Debug)]
 struct TransformerService {
@@ -40,22 +43,27 @@ impl TransformerService {
 impl Transformer for TransformerService {
 	type TermStreamStream = ReceiverStream<Result<TermObject, Status>>;
 
-	async fn sync_indexer(&self, request: Request<Query>) -> Result<Response<Void>, Status> {
-		let req_obj = request.into_inner();
-		let request = Request::new(req_obj);
+	async fn sync_indexer(&self, _: Request<Void>) -> Result<Response<Void>, Status> {
 		let mut client = IndexerClient::new(self.channel.clone());
-		let mut response = client.subscribe(request).await?.into_inner();
 
 		let db_url = self.db.clone();
+		let db = DB::open_default(db_url).unwrap();
+		let mut bytes: [u8; 4] = [0; 4];
+		let offset_bytes = db.get(b"checkpoint").unwrap().unwrap();
+		bytes.copy_from_slice(&offset_bytes);
+		let offset = u32::from_be_bytes(bytes);
+
+		let indexer_query = Query {
+			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
+			schema_id: vec![FOLLOW_SCHEMA_ID.to_owned()],
+			offset,
+			count: MAX_ATT_BATCH_SIZE,
+		};
+		let mut response = client.subscribe(indexer_query).await?.into_inner();
+
 		tokio::spawn(async move {
+			let mut count = offset;
 			// ResponseStream
-			let db = DB::open_default(db_url).unwrap();
-
-			let mut bytes: [u8; 4] = [0; 4];
-			let count_bytes = db.get(b"checkpoint").unwrap().unwrap();
-			bytes.copy_from_slice(&count_bytes);
-
-			let mut count = u32::from_be_bytes(bytes);
 			while let Some(res) = response.message().await.unwrap() {
 				count += 1;
 				assert!(res.id == count);
@@ -65,9 +73,9 @@ impl Transformer for TransformerService {
 				let term: Term = parsed_att.into_term();
 				let term_bytes = term.into_bytes();
 				db.put(id, &term_bytes).unwrap();
-
-				db.put(b"checkpoint", count.to_be_bytes()).unwrap();
 			}
+
+			db.put(b"checkpoint", count.to_be_bytes()).unwrap();
 		});
 
 		Ok(Response::new(Void::default()))
