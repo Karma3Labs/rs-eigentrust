@@ -1,10 +1,8 @@
 syntax = "proto3";
 package transformer;
 
-import "indexer.proto";
-
 service Transformer {
-    rpc SyncIndexer (indexer.Query) returns (Void);
+    rpc SyncIndexer (Void) returns (Void);
     rpc TermStream (TermBatch) returns (stream TermObject);
 }
 
