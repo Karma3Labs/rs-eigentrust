@@ -8,6 +8,8 @@ service Indexer {
 message Query {
     string source_address = 1;
     repeated string schema_id = 2;
+    uint32 offset = 3;
+    uint32 count = 4;
 }
 
 message IndexerEvent {
