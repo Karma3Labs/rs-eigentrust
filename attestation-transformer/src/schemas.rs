@@ -1,6 +1,6 @@
 use secp256k1::{
 	ecdsa::{RecoverableSignature, RecoveryId},
-	Message, PublicKey, Secp256k1,
+	Keypair, Message, PublicKey, Secp256k1, SecretKey, SignOnlyPreallocated, Signing,
 };
 use serde_derive::Deserialize;
 use sha3::{digest::Digest, Keccak256};
@@ -32,6 +32,35 @@ pub struct FollowSchema {
 	is_trustworthy: bool,
 	scope: Scope,
 	sig: (i32, [u8; 32], [u8; 32]),
+}
+
+impl FollowSchema {
+	fn mock_sig(&self) -> (i32, [u8; 32], [u8; 32]) {
+		let mut keccak = Keccak256::default();
+		keccak.update(self.id.as_bytes());
+		keccak.update(&[self.is_trustworthy.into()]);
+		keccak.update(&[self.scope.clone().into()]);
+		let digest = keccak.finalize();
+		let message = Message::from_digest_slice(digest.as_ref()).unwrap();
+
+		let secret_key = SecretKey::from_slice(&[
+			43, 43, 43, 54, 64, 67, 77, 87, 86, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
+			67, 67, 67, 67, 67, 67, 67, 67, 67, 67,
+		])
+		.unwrap();
+
+		let secp = Secp256k1::signing_only();
+		let sig = secp.sign_ecdsa_recoverable(&message, &secret_key);
+
+		let (rid, bytes) = sig.serialize_compact();
+
+		let mut s = [0; 32];
+		let mut r = [0; 32];
+		s.copy_from_slice(&bytes[..32]);
+		r.copy_from_slice(&bytes[32..]);
+
+		(rid.to_i32(), s, r)
+	}
 }
 
 impl Validation for FollowSchema {

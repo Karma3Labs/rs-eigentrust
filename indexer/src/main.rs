@@ -10,7 +10,16 @@ use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 
-const FOLLOW_MOCK: &str = "{ 'id': '0x0', 'is_trustworthy': true, 'scope': 'Reviewer', 'sig': [ 0, [43, 43, 43, 54, 64, 67, 77, 87, 86, 67], [43, 43, 43, 54, 64, 67, 77, 87, 86, 67] ] }";
+const FOLLOW_MOCK: &str = "{
+    \"id\": \"0x0\",
+    \"is_trustworthy\": true,
+    \"scope\": \"Reviewer\",
+    \"sig\": [
+        0,
+        [43, 43, 43, 54, 64, 67, 77, 87, 86, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67],
+        [43, 43, 43, 54, 64, 67, 77, 87, 86, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67],
+    ]
+}";
 
 struct IndexerService;
 
