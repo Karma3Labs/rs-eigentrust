@@ -16,5 +16,5 @@ message IndexerEvent {
     uint32 id = 1;
     uint32 schema_id = 2;
     string schema_value = 3;
-    uint32 timestamp = 4;
+    uint64 timestamp = 4;
 }

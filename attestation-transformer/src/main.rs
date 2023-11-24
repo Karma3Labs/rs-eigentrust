@@ -115,7 +115,7 @@ impl Transformer for TransformerService {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let channel = Channel::from_static("[::1]:50052").connect().await?;
+	let channel = Channel::from_static("[::1]:50050").connect().await?;
 	let db_url = "att-tr-storage";
 	let tr_service = TransformerService::new(channel, db_url);
 
