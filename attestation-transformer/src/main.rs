@@ -3,7 +3,7 @@ use proto_buf::indexer::Query;
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{TermBatch, TermObject, Void};
 use rocksdb::DB;
-use schemas::FollowSchema;
+use schemas::{AuditApproveSchema, AuditDisapproveSchema, FollowSchema, SchemaType};
 use serde_json::from_str;
 use std::error::Error;
 use term::{IntoTerm, Term};
@@ -14,6 +14,7 @@ use tonic::{transport::Server, Request, Response, Status};
 
 mod schemas;
 mod term;
+mod utils;
 
 const MAX_TERM_BATCH_SIZE: u32 = 1000;
 const MAX_ATT_BATCH_SIZE: u32 = 1000;
@@ -67,10 +68,25 @@ impl Transformer for TransformerService {
 			while let Some(res) = response.message().await.unwrap() {
 				assert!(res.id == count);
 
-				let id = res.id.to_be_bytes();
-				let parsed_att: FollowSchema = from_str(&res.schema_value).unwrap();
-				let term: Term = parsed_att.into_term();
+				let schema_id = res.schema_id;
+				let schema_type = SchemaType::from(schema_id);
+				let term = match schema_type {
+					SchemaType::Follow => {
+						let parsed_att: FollowSchema = from_str(&res.schema_value).unwrap();
+						parsed_att.into_term()
+					},
+					SchemaType::AuditApprove => {
+						let parsed_att: AuditApproveSchema = from_str(&res.schema_value).unwrap();
+						parsed_att.into_term()
+					},
+					SchemaType::AuditDisapprove => {
+						let parsed_att: AuditDisapproveSchema =
+							from_str(&res.schema_value).unwrap();
+						parsed_att.into_term()
+					},
+				};
 				let term_bytes = term.into_bytes();
+				let id = res.id.to_be_bytes();
 				db.put(id, &term_bytes).unwrap();
 
 				count += 1;

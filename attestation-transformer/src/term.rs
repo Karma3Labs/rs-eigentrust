@@ -1,16 +1,28 @@
 use proto_buf::transformer::TermObject;
 use secp256k1::PublicKey;
 
+enum TermForm {
+	Trust,
+	Distrust,
+}
+
 pub struct Term {
 	from: String,
 	to: String,
 	weight: u32,
 	domain: u32,
+	form: TermForm,
 }
 
 impl Term {
-	pub fn new(from: String, to: String, weight: u32, domain: u32) -> Term {
-		Term { from, to, weight, domain }
+	pub fn new(from: String, to: String, weight: u32, domain: u32, is_trust: bool) -> Term {
+		Term {
+			from,
+			to,
+			weight,
+			domain,
+			form: if is_trust { TermForm::Trust } else { TermForm::Distrust },
+		}
 	}
 
 	pub fn into_bytes(self) -> Vec<u8> {
@@ -54,8 +66,7 @@ pub trait Validation {
 	fn validate(&self) -> (PublicKey, bool);
 }
 
-pub trait IntoTerm {
-	const WEIGHT: u32;
+pub trait IntoTerm: Validation {
 	const DOMAIN: u32;
 
 	fn into_term(self) -> Term;
