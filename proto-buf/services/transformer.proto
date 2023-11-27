@@ -13,9 +13,15 @@ message TermBatch {
     uint32 size = 2;
 }
 
+enum Form {
+    Trust = 0;
+    Distrust = 1;
+}
+
 message TermObject {
     string from = 1;
     string to = 2;
     uint32 weight = 3;
     uint32 domain = 4;
+    Form form = 5;
 }
