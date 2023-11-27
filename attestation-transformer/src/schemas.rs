@@ -10,7 +10,7 @@ use crate::term::{IntoTerm, Term};
 use super::term::Validation;
 
 #[derive(Deserialize, Clone)]
-enum Scope {
+pub enum Scope {
 	Reviewer,
 	Developer,
 	Auditor,

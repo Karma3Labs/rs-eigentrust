@@ -65,7 +65,6 @@ impl Transformer for TransformerService {
 			let mut count = offset;
 			// ResponseStream
 			while let Some(res) = response.message().await.unwrap() {
-				count += 1;
 				assert!(res.id == count);
 
 				let id = res.id.to_be_bytes();
@@ -73,6 +72,8 @@ impl Transformer for TransformerService {
 				let term: Term = parsed_att.into_term();
 				let term_bytes = term.into_bytes();
 				db.put(id, &term_bytes).unwrap();
+
+				count += 1;
 			}
 
 			db.put(b"checkpoint", count.to_be_bytes()).unwrap();
@@ -115,7 +116,7 @@ impl Transformer for TransformerService {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let channel = Channel::from_static("[::1]:50052").connect().await?;
+	let channel = Channel::from_static("http://localhost:50050").connect().await?;
 	let db_url = "att-tr-storage";
 	let tr_service = TransformerService::new(channel, db_url);
 
