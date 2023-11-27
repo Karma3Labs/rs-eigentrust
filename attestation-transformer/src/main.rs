@@ -53,8 +53,6 @@ impl Transformer for TransformerService {
 		bytes.copy_from_slice(&offset_bytes);
 		let offset = u32::from_be_bytes(bytes);
 
-		println!("{}", offset);
-
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
 			schema_id: vec![FOLLOW_SCHEMA_ID.to_owned()],

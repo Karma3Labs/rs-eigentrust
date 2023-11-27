@@ -1,6 +1,6 @@
 use secp256k1::{
 	ecdsa::{RecoverableSignature, RecoveryId},
-	Keypair, Message, PublicKey, Secp256k1, SecretKey, SignOnlyPreallocated, Signing,
+	Message, PublicKey, Secp256k1, SecretKey,
 };
 use serde_derive::Deserialize;
 use sha3::{digest::Digest, Keccak256};
@@ -10,7 +10,7 @@ use crate::term::{IntoTerm, Term};
 use super::term::Validation;
 
 #[derive(Deserialize, Clone)]
-enum Scope {
+pub enum Scope {
 	Reviewer,
 	Developer,
 	Auditor,
@@ -35,7 +35,11 @@ pub struct FollowSchema {
 }
 
 impl FollowSchema {
-	fn mock_sig(&self) -> (i32, [u8; 32], [u8; 32]) {
+	pub fn new(id: String, is_trustworthy: bool, scope: Scope) -> Self {
+		Self { id, is_trustworthy, scope, sig: (0, [0; 32], [0; 32]) }
+	}
+
+	pub fn mock_sig(&self) -> (i32, [u8; 32], [u8; 32]) {
 		let mut keccak = Keccak256::default();
 		keccak.update(self.id.as_bytes());
 		keccak.update(&[self.is_trustworthy.into()]);
