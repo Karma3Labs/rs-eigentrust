@@ -1,0 +1,8 @@
+syntax = "proto3";
+package combiner;
+
+service LinearCombiner {
+    rpc SyncTransformer (Void) returns (Void);
+}
+
+message Void {}
