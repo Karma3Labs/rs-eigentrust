@@ -1,3 +1,7 @@
+pub mod common {
+	tonic::include_proto!("common");
+}
+
 pub mod indexer {
 	tonic::include_proto!("indexer");
 }

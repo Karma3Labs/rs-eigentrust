@@ -1,5 +1,5 @@
 [package]
-name = "linear-combination"
+name = "linear-combiner"
 version.workspace = true
 edition.workspace = true
 

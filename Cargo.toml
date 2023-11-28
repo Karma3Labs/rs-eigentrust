@@ -4,7 +4,7 @@ resolver = "2"
 members = [
     "indexer",
     "attestation-transformer",
-    "linear-combinator",
+    "linear-combiner",
     "core-computer",
     "snap-score-computer",
     "job-manager",

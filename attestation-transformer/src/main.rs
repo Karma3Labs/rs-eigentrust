@@ -1,7 +1,8 @@
+use proto_buf::common::Void;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query;
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
-use proto_buf::transformer::{TermBatch, TermObject, Void};
+use proto_buf::transformer::{TermBatch, TermObject};
 use rocksdb::DB;
 use schemas::{AuditApproveSchema, AuditDisapproveSchema, FollowSchema, SchemaType};
 use serde_json::from_str;

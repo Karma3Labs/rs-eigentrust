@@ -1,8 +1,8 @@
 syntax = "proto3";
 package combiner;
 
-service LinearCombiner {
-    rpc SyncTransformer (Void) returns (Void);
-}
+import "common.proto";
 
-message Void {}
+service LinearCombiner {
+    rpc SyncTransformer (common.Void) returns (common.Void);
+}

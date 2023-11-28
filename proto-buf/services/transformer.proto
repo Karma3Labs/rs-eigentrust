@@ -1,12 +1,12 @@
 syntax = "proto3";
 package transformer;
 
+import "common.proto";
+
 service Transformer {
-    rpc SyncIndexer (Void) returns (Void);
+    rpc SyncIndexer (common.Void) returns (common.Void);
     rpc TermStream (TermBatch) returns (stream TermObject);
 }
-
-message Void {}
 
 message TermBatch {
     uint32 start = 1;
