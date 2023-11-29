@@ -1,6 +1,7 @@
+use error::AttTrError;
 use proto_buf::common::Void;
 use proto_buf::indexer::indexer_client::IndexerClient;
-use proto_buf::indexer::Query;
+use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{TermBatch, TermObject};
 use rocksdb::DB;
@@ -13,6 +14,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
 
+mod error;
 mod schemas;
 mod term;
 mod utils;
@@ -29,15 +31,70 @@ struct TransformerService {
 }
 
 impl TransformerService {
-	fn new(channel: Channel, db_url: &str) -> Self {
-		let db = DB::open_default(db_url).unwrap();
-		let checkpoint = db.get(b"checkpoint").unwrap();
+	fn new(channel: Channel, db_url: &str) -> Result<Self, AttTrError> {
+		let db = DB::open_default(db_url).map_err(|x| AttTrError::DbError(x))?;
+		let checkpoint = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
 		if let None = checkpoint {
 			let count = 0u32.to_be_bytes();
-			db.put(b"checkpoint", count).unwrap();
+			db.put(b"checkpoint", count).map_err(|x| AttTrError::DbError(x))?;
 		}
 
-		Self { channel, db: db_url.to_string() }
+		Ok(Self { channel, db: db_url.to_string() })
+	}
+
+	fn read_terms(db: &DB, batch: TermBatch) -> Result<Vec<TermObject>, AttTrError> {
+		let mut terms = Vec::new();
+		for i in batch.start..batch.size {
+			let id_bytes = i.to_be_bytes();
+			let res_opt = db.get(id_bytes).map_err(|x| AttTrError::DbError(x))?;
+			let res = res_opt.ok_or_else(|| AttTrError::NotFoundError)?;
+			let term = Term::from_bytes(res)?;
+			let term_obj: TermObject = term.into();
+			terms.push(term_obj);
+		}
+		Ok(terms)
+	}
+
+	fn read_checkpoint(db: &DB) -> Result<u32, AttTrError> {
+		let offset_bytes_opt = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
+		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
+			let mut bytes: [u8; 4] = [0; 4];
+			bytes.copy_from_slice(&x);
+			bytes
+		});
+		let offset = u32::from_be_bytes(offset_bytes);
+		Ok(offset)
+	}
+
+	fn write_checkpoint(db: &DB, count: u32) -> Result<(), AttTrError> {
+		db.put(b"checkpoint", count.to_be_bytes()).map_err(|x| AttTrError::DbError(x))?;
+		Ok(())
+	}
+
+	fn write_term(db: &DB, event: IndexerEvent) -> Result<(), AttTrError> {
+		let schema_id = event.schema_id;
+		let schema_type = SchemaType::from(schema_id);
+		let term = match schema_type {
+			SchemaType::Follow => {
+				let parsed_att: FollowSchema =
+					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+				parsed_att.into_term()?
+			},
+			SchemaType::AuditApprove => {
+				let parsed_att: AuditApproveSchema =
+					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+				parsed_att.into_term()?
+			},
+			SchemaType::AuditDisapprove => {
+				let parsed_att: AuditDisapproveSchema =
+					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+				parsed_att.into_term()?
+			},
+		};
+		let term_bytes = term.into_bytes();
+		let id = event.id.to_be_bytes();
+		db.put(id, &term_bytes).map_err(|_| AttTrError::ParseError)?;
+		Ok(())
 	}
 }
 
@@ -46,14 +103,11 @@ impl Transformer for TransformerService {
 	type TermStreamStream = ReceiverStream<Result<TermObject, Status>>;
 
 	async fn sync_indexer(&self, _: Request<Void>) -> Result<Response<Void>, Status> {
-		let mut client = IndexerClient::new(self.channel.clone());
+		let db = DB::open_default(self.db.clone())
+			.map_err(|_| Status::internal("Failed to connect to DB"))?;
 
-		let db_url = self.db.clone();
-		let db = DB::open_default(db_url).unwrap();
-		let mut bytes: [u8; 4] = [0; 4];
-		let offset_bytes = db.get(b"checkpoint").unwrap().unwrap();
-		bytes.copy_from_slice(&offset_bytes);
-		let offset = u32::from_be_bytes(bytes);
+		let offset = Self::read_checkpoint(&db)
+			.map_err(|_| Status::internal("Failed to read checkpoint"))?;
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
@@ -61,40 +115,19 @@ impl Transformer for TransformerService {
 			offset,
 			count: MAX_ATT_BATCH_SIZE,
 		};
+
+		let mut client = IndexerClient::new(self.channel.clone());
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
+		let mut count = offset;
+		// ResponseStream
+		while let Ok(Some(res)) = response.message().await {
+			assert!(res.id == count);
+			Self::write_term(&db, res).map_err(|_| Status::internal("Failed to write term"))?;
+			count += 1;
+		}
 
-		tokio::spawn(async move {
-			let mut count = offset;
-			// ResponseStream
-			while let Some(res) = response.message().await.unwrap() {
-				assert!(res.id == count);
-
-				let schema_id = res.schema_id;
-				let schema_type = SchemaType::from(schema_id);
-				let term = match schema_type {
-					SchemaType::Follow => {
-						let parsed_att: FollowSchema = from_str(&res.schema_value).unwrap();
-						parsed_att.into_term()
-					},
-					SchemaType::AuditApprove => {
-						let parsed_att: AuditApproveSchema = from_str(&res.schema_value).unwrap();
-						parsed_att.into_term()
-					},
-					SchemaType::AuditDisapprove => {
-						let parsed_att: AuditDisapproveSchema =
-							from_str(&res.schema_value).unwrap();
-						parsed_att.into_term()
-					},
-				};
-				let term_bytes = term.into_bytes();
-				let id = res.id.to_be_bytes();
-				db.put(id, &term_bytes).unwrap();
-
-				count += 1;
-			}
-
-			db.put(b"checkpoint", count.to_be_bytes()).unwrap();
-		});
+		Self::write_checkpoint(&db, count)
+			.map_err(|_| Status::internal("Failed to write checkpoint"))?;
 
 		Ok(Response::new(Void::default()))
 	}
@@ -110,22 +143,19 @@ impl Transformer for TransformerService {
 			)));
 		}
 
-		let mut terms = Vec::new();
-		let db = DB::open_default(self.db.clone()).unwrap();
-		for i in inner.start..inner.size {
-			let id_bytes = i.to_be_bytes();
-			let res = db.get(id_bytes).unwrap().unwrap();
-			let term = Term::from_bytes(res);
-			let term_obj: TermObject = term.into();
-			terms.push(term_obj);
-		}
+		let db = DB::open_default(self.db.clone())
+			.map_err(|_| Status::internal("Failed to connect to DB"))?;
+
+		let terms =
+			Self::read_terms(&db, inner).map_err(|_| Status::internal("Failed to read terms"))?;
 
 		let (tx, rx) = channel(1);
-		tokio::spawn(async move {
-			for term in terms {
-				tx.send(Ok(term)).await.unwrap();
-			}
-		});
+		for term in terms {
+			let res = tx.send(Ok(term)).await.map_err(|x| x.0);
+			if let Err(err) = res {
+				err?;
+			};
+		}
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -135,7 +165,7 @@ impl Transformer for TransformerService {
 async fn main() -> Result<(), Box<dyn Error>> {
 	let channel = Channel::from_static("http://localhost:50050").connect().await?;
 	let db_url = "att-tr-storage";
-	let tr_service = TransformerService::new(channel, db_url);
+	let tr_service = TransformerService::new(channel, db_url)?;
 
 	let addr = "[::1]:50051".parse()?;
 	Server::builder().add_service(TransformerServer::new(tr_service)).serve(addr).await?;

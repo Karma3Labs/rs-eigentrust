@@ -15,9 +15,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let mut lc_channel = LinearCombinerClient::new(lc_channel);
 
 	// BasicRequest
-	// let void_request = Request::new(Void {});
-	// let response = tr_client.sync_indexer(void_request).await?.into_inner();
-	// println!("basic response {:?}", response);
+	let void_request = Request::new(Void {});
+	let response = tr_client.sync_indexer(void_request).await?.into_inner();
+	println!("basic response {:?}", response);
 
 	// BasicRequest
 	let void_request = Request::new(Void {});

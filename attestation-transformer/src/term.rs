@@ -1,6 +1,8 @@
 use proto_buf::transformer::{Form, TermObject};
 use secp256k1::PublicKey;
 
+use crate::error::AttTrError;
+
 enum TermForm {
 	Trust,
 	Distrust,
@@ -69,20 +71,28 @@ impl Term {
 		bytes
 	}
 
-	pub fn from_bytes(mut bytes: Vec<u8>) -> Self {
+	pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, AttTrError> {
 		let from_bytes: Vec<u8> = bytes.drain(..20).collect();
 		let to_bytes: Vec<u8> = bytes.drain(..20).collect();
-		let weight_bytes: [u8; 4] = bytes.drain(..4).collect::<Vec<u8>>().try_into().unwrap();
-		let domain_bytes: [u8; 4] = bytes.drain(..4).collect::<Vec<u8>>().try_into().unwrap();
+		let weight_bytes: [u8; 4] = bytes
+			.drain(..4)
+			.collect::<Vec<u8>>()
+			.try_into()
+			.map_err(|_| AttTrError::SerialisationError)?;
+		let domain_bytes: [u8; 4] = bytes
+			.drain(..4)
+			.collect::<Vec<u8>>()
+			.try_into()
+			.map_err(|_| AttTrError::SerialisationError)?;
 		let form_byte = bytes[0];
 
-		let from = String::from_utf8(from_bytes).unwrap();
-		let to = String::from_utf8(to_bytes).unwrap();
+		let from = String::from_utf8(from_bytes).map_err(|_| AttTrError::SerialisationError)?;
+		let to = String::from_utf8(to_bytes).map_err(|_| AttTrError::SerialisationError)?;
 		let weight = u32::from_be_bytes(weight_bytes);
 		let domain = u32::from_be_bytes(domain_bytes);
 		let form = TermForm::from(form_byte);
 
-		Self { from, to, weight, domain, form }
+		Ok(Self { from, to, weight, domain, form })
 	}
 }
 
@@ -100,11 +110,11 @@ impl Into<TermObject> for Term {
 }
 
 pub trait Validation {
-	fn validate(&self) -> (PublicKey, bool);
+	fn validate(&self) -> Result<(PublicKey, bool), AttTrError>;
 }
 
 pub trait IntoTerm: Validation {
 	const DOMAIN: u32;
 
-	fn into_term(self) -> Term;
+	fn into_term(self) -> Result<Term, AttTrError>;
 }
