@@ -3,6 +3,7 @@ use secp256k1::PublicKey;
 
 use crate::error::AttTrError;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum TermForm {
 	Trust,
 	Distrust,
@@ -36,6 +37,7 @@ impl Into<Form> for TermForm {
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Term {
 	from: String,
 	to: String,
@@ -58,15 +60,17 @@ impl Term {
 	pub fn into_bytes(self) -> Vec<u8> {
 		let mut bytes = Vec::new();
 
-		let from_bytes = self.from.as_bytes();
-		let to_bytes = self.to.as_bytes();
+		let from_bytes = hex::decode(self.from).unwrap();
+		let to_bytes = hex::decode(self.to).unwrap();
 		let weight_bytes = self.weight.to_be_bytes();
 		let domain_bytes = self.domain.to_be_bytes();
+		let form_byte: u8 = self.form.into();
 
-		bytes.extend_from_slice(from_bytes);
-		bytes.extend_from_slice(to_bytes);
+		bytes.extend_from_slice(&from_bytes);
+		bytes.extend_from_slice(&to_bytes);
 		bytes.extend_from_slice(&weight_bytes);
 		bytes.extend_from_slice(&domain_bytes);
+		bytes.push(form_byte);
 
 		bytes
 	}
@@ -86,8 +90,8 @@ impl Term {
 			.map_err(|_| AttTrError::SerialisationError)?;
 		let form_byte = bytes[0];
 
-		let from = String::from_utf8(from_bytes).map_err(|_| AttTrError::SerialisationError)?;
-		let to = String::from_utf8(to_bytes).map_err(|_| AttTrError::SerialisationError)?;
+		let from = hex::encode(from_bytes);
+		let to = hex::encode(to_bytes);
 		let weight = u32::from_be_bytes(weight_bytes);
 		let domain = u32::from_be_bytes(domain_bytes);
 		let form = TermForm::from(form_byte);
@@ -117,4 +121,25 @@ pub trait IntoTerm: Validation {
 	const DOMAIN: u32;
 
 	fn into_term(self) -> Result<Term, AttTrError>;
+}
+
+#[cfg(test)]
+mod test {
+	use super::{Term, TermForm};
+
+	#[test]
+	fn should_convert_term_to_bytes_and_back() {
+		let term = Term {
+			from: "90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned(),
+			to: "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
+			weight: 50,
+			domain: 67834578,
+			form: TermForm::Trust,
+		};
+
+		let bytes = term.clone().into_bytes();
+		let rec_term = Term::from_bytes(bytes).unwrap();
+
+		assert_eq!(term, rec_term);
+	}
 }

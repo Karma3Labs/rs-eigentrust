@@ -42,19 +42,6 @@ impl TransformerService {
 		Ok(Self { channel, db: db_url.to_string() })
 	}
 
-	fn read_terms(db: &DB, batch: TermBatch) -> Result<Vec<TermObject>, AttTrError> {
-		let mut terms = Vec::new();
-		for i in batch.start..batch.size {
-			let id_bytes = i.to_be_bytes();
-			let res_opt = db.get(id_bytes).map_err(|x| AttTrError::DbError(x))?;
-			let res = res_opt.ok_or_else(|| AttTrError::NotFoundError)?;
-			let term = Term::from_bytes(res)?;
-			let term_obj: TermObject = term.into();
-			terms.push(term_obj);
-		}
-		Ok(terms)
-	}
-
 	fn read_checkpoint(db: &DB) -> Result<u32, AttTrError> {
 		let offset_bytes_opt = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
 		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
@@ -69,6 +56,19 @@ impl TransformerService {
 	fn write_checkpoint(db: &DB, count: u32) -> Result<(), AttTrError> {
 		db.put(b"checkpoint", count.to_be_bytes()).map_err(|x| AttTrError::DbError(x))?;
 		Ok(())
+	}
+
+	fn read_terms(db: &DB, batch: TermBatch) -> Result<Vec<TermObject>, AttTrError> {
+		let mut terms = Vec::new();
+		for i in batch.start..batch.size {
+			let id_bytes = i.to_be_bytes();
+			let res_opt = db.get(id_bytes).map_err(|x| AttTrError::DbError(x))?;
+			let res = res_opt.ok_or_else(|| AttTrError::NotFoundError)?;
+			let term = Term::from_bytes(res)?;
+			let term_obj: TermObject = term.into();
+			terms.push(term_obj);
+		}
+		Ok(terms)
 	}
 
 	fn write_term(db: &DB, event: IndexerEvent) -> Result<(), AttTrError> {
@@ -91,6 +91,8 @@ impl TransformerService {
 				parsed_att.into_term()?
 			},
 		};
+
+		println!("{:?}", term);
 		let term_bytes = term.into_bytes();
 		let id = event.id.to_be_bytes();
 		db.put(id, &term_bytes).map_err(|_| AttTrError::ParseError)?;
@@ -170,4 +172,49 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let addr = "[::1]:50051".parse()?;
 	Server::builder().add_service(TransformerServer::new(tr_service)).serve(addr).await?;
 	Ok(())
+}
+
+#[cfg(test)]
+mod test {
+	use proto_buf::indexer::IndexerEvent;
+	use proto_buf::transformer::{TermBatch, TermObject};
+	use rocksdb::DB;
+	use serde_json::to_string;
+
+	use crate::schemas::Scope;
+	use crate::term::IntoTerm;
+	use crate::{schemas::FollowSchema, TransformerService};
+
+	#[test]
+	fn should_write_read_checkpoint() {
+		let db = DB::open_default("att-tr-checkpoint-test-storage").unwrap();
+		TransformerService::write_checkpoint(&db, 15).unwrap();
+		let checkpoint = TransformerService::read_checkpoint(&db).unwrap();
+		assert_eq!(checkpoint, 15);
+	}
+
+	#[test]
+	fn should_write_read_term() {
+		let db = DB::open_default("att-tr-terms-test-storage").unwrap();
+
+		let follow_schema = FollowSchema::new(
+			"90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
+			true,
+			Scope::Auditor,
+		);
+		let indexed_event = IndexerEvent {
+			id: 0,
+			schema_id: 1,
+			schema_value: to_string(&follow_schema).unwrap(),
+			timestamp: 2397848,
+		};
+		TransformerService::write_term(&db, indexed_event).unwrap();
+
+		let term_batch = TermBatch { start: 0, size: 1 };
+		let terms = TransformerService::read_terms(&db, term_batch).unwrap();
+
+		let term = follow_schema.into_term().unwrap();
+		let term_obj: TermObject = term.into();
+		assert_eq!(terms, vec![term_obj]);
+	}
 }
