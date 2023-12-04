@@ -57,11 +57,11 @@ impl Term {
 		}
 	}
 
-	pub fn into_bytes(self) -> Vec<u8> {
+	pub fn into_bytes(self) -> Result<Vec<u8>, AttTrError> {
 		let mut bytes = Vec::new();
 
-		let from_bytes = hex::decode(self.from).unwrap();
-		let to_bytes = hex::decode(self.to).unwrap();
+		let from_bytes = hex::decode(self.from).map_err(|_| AttTrError::SerialisationError)?;
+		let to_bytes = hex::decode(self.to).map_err(|_| AttTrError::SerialisationError)?;
 		let weight_bytes = self.weight.to_be_bytes();
 		let domain_bytes = self.domain.to_be_bytes();
 		let form_byte: u8 = self.form.into();
@@ -72,7 +72,7 @@ impl Term {
 		bytes.extend_from_slice(&domain_bytes);
 		bytes.push(form_byte);
 
-		bytes
+		Ok(bytes)
 	}
 
 	pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, AttTrError> {
@@ -137,7 +137,7 @@ mod test {
 			form: TermForm::Trust,
 		};
 
-		let bytes = term.clone().into_bytes();
+		let bytes = term.clone().into_bytes().unwrap();
 		let rec_term = Term::from_bytes(bytes).unwrap();
 
 		assert_eq!(term, rec_term);

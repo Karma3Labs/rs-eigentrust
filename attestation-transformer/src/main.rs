@@ -93,7 +93,7 @@ impl TransformerService {
 		};
 
 		println!("{:?}", term);
-		let term_bytes = term.into_bytes();
+		let term_bytes = term.into_bytes()?;
 		let id = event.id.to_be_bytes();
 		db.put(id, &term_bytes).map_err(|_| AttTrError::ParseError)?;
 		Ok(())
