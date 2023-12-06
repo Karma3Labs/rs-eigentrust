@@ -1,0 +1,8 @@
+syntax = "proto3";
+package combiner;
+
+import "common.proto";
+
+service LinearCombiner {
+    rpc SyncTransformer (common.Void) returns (common.Void);
+}

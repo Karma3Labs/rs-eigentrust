@@ -3,27 +3,26 @@ use sha3::{digest::Digest, Keccak256};
 
 pub fn address_from_ecdsa_key(pub_key: &PublicKey) -> String {
 	let raw_pub_key = pub_key.serialize_uncompressed();
-	let (x, y) = raw_pub_key.split_at(32);
-
-	// Reverse and concatenate x and y coordinates.
-	let rev_x: Vec<u8> = x.iter().rev().cloned().collect();
-	let rev_y: Vec<u8> = y.iter().rev().cloned().collect();
-	let pub_key = [rev_x, rev_y].concat();
-
 	// Hash and get the last 20 bytes.
-	let pub_key_hash = Keccak256::digest(pub_key);
-	let address: &[u8] = &pub_key_hash[pub_key_hash.len() - 20..];
-
-	// Get little endian address
-	let le_address: Vec<u8> = address.iter().rev().cloned().collect();
-	let address = hex::encode(&le_address);
-
+	let pub_key_hash = Keccak256::digest(&raw_pub_key[1..]);
+	let address = hex::encode(&pub_key_hash[12..]);
 	address
 }
 
-pub fn address_to_did(address: &str) -> String {
-	let mut did = "did:eth:".to_string();
-	did.push_str(address);
+#[cfg(test)]
+mod test {
+	use super::address_from_ecdsa_key;
+	use secp256k1::PublicKey;
+	use std::str::FromStr;
 
-	did
+	#[test]
+	fn should_recreate_address_and_did_from_pk() {
+		let address = "90f8bf6a479f320ead074411a4b0e7944ea8c9c1";
+		let pk = "04e68acfc0253a10620dff706b0a1b1f1f5833ea3beb3bde2250d5f271f3563606672ebc45e0b7ea2e816ecb70ca03137b1c9476eec63d4632e990020b7b6fba39";
+
+		let pk = PublicKey::from_str(pk).unwrap();
+		let rec_address = address_from_ecdsa_key(&pk);
+
+		assert_eq!(address, rec_address);
+	}
 }
