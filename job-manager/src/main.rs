@@ -20,9 +20,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	println!("basic response {:?}", response);
 
 	// BasicRequest
-	let void_request = Request::new(Void {});
-	let response = lc_channel.sync_transformer(void_request).await?.into_inner();
-	println!("basic response {:?}", response);
+	// let void_request = Request::new(Void {});
+	// let response = lc_channel.sync_transformer(void_request).await?.into_inner();
+	// println!("basic response {:?}", response);
 
 	Ok(())
 }
