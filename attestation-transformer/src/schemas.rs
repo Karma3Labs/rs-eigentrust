@@ -1,5 +1,6 @@
 use super::term::Validation;
 use crate::{
+	did::Did,
 	error::AttTrError,
 	term::{IntoTerm, Term},
 	utils::address_from_ecdsa_key,
@@ -50,7 +51,7 @@ impl Into<u8> for Scope {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct FollowSchema {
-	id: String,
+	id: Did,
 	is_trustworthy: bool,
 	scope: Scope,
 	sig: (i32, [u8; 32], [u8; 32]),
@@ -59,8 +60,9 @@ pub struct FollowSchema {
 #[cfg(test)]
 impl FollowSchema {
 	pub fn new(id: String, is_trustworthy: bool, scope: Scope) -> Self {
+		let did = Did::parse(id).unwrap();
 		let mut keccak = Keccak256::default();
-		keccak.update(id.as_bytes());
+		keccak.update(&did.key);
 		keccak.update(&[is_trustworthy.into()]);
 		keccak.update(&[scope.clone().into()]);
 		let digest = keccak.finalize();
@@ -79,14 +81,14 @@ impl FollowSchema {
 		r_bytes.copy_from_slice(&bytes[..32]);
 		s_bytes.copy_from_slice(&bytes[32..]);
 
-		FollowSchema { id, is_trustworthy, scope, sig: (rec_id_i32, r_bytes, s_bytes) }
+		FollowSchema { id: did, is_trustworthy, scope, sig: (rec_id_i32, r_bytes, s_bytes) }
 	}
 }
 
 impl Validation for FollowSchema {
 	fn validate(&self) -> Result<(PublicKey, bool), AttTrError> {
 		let mut keccak = Keccak256::default();
-		keccak.update(self.id.as_bytes());
+		keccak.update(&self.id.key);
 		keccak.update(&[self.is_trustworthy.into()]);
 		keccak.update(&[self.scope.clone().into()]);
 		let digest = keccak.finalize();
@@ -118,10 +120,17 @@ impl IntoTerm for FollowSchema {
 		let (pk, valid) = self.validate()?;
 		assert!(valid);
 
-		let address = address_from_ecdsa_key(&pk);
+		let from_address = address_from_ecdsa_key(&pk);
+		let to_address = hex::encode(&self.id.key);
 		let weight = 50;
 
-		Ok(Term::new(address, self.id, weight, Self::DOMAIN, true))
+		Ok(Term::new(
+			from_address,
+			to_address,
+			weight,
+			Self::DOMAIN,
+			true,
+		))
 	}
 }
 
@@ -297,6 +306,7 @@ mod test {
 	use sha3::{Digest, Keccak256};
 
 	use crate::{
+		did::Did,
 		schemas::{AuditApproveSchema, AuditDisapproveSchema, StatusReason},
 		term::Validation,
 	};
@@ -309,8 +319,9 @@ mod test {
 		let is_trustworthy = true;
 		let scope = Scope::Auditor;
 
+		let id_bytes = hex::decode(id).unwrap();
 		let mut keccak = Keccak256::default();
-		keccak.update(id.as_bytes());
+		keccak.update(&id_bytes);
 		keccak.update(&[is_trustworthy.into()]);
 		keccak.update(&[scope.clone().into()]);
 		let digest = keccak.finalize();
@@ -329,9 +340,9 @@ mod test {
 		r_bytes.copy_from_slice(&bytes[..32]);
 		s_bytes.copy_from_slice(&bytes[32..]);
 
+		let did = Did::new(crate::did::Schema::Pkh, id_bytes);
 		let follow_schema =
-			FollowSchema { id, is_trustworthy, scope, sig: (rec_id_i32, r_bytes, s_bytes) };
-
+			FollowSchema { id: did, is_trustworthy, scope, sig: (rec_id_i32, r_bytes, s_bytes) };
 		let (rec_pk, valid) = follow_schema.validate().unwrap();
 
 		assert_eq!(rec_pk, pk);
