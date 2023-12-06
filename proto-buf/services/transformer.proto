@@ -1,0 +1,27 @@
+syntax = "proto3";
+package transformer;
+
+service Transformer {
+    rpc SyncIndexer (Void) returns (Void);
+    rpc TermStream (TermBatch) returns (stream TermObject);
+}
+
+message Void {}
+
+message TermBatch {
+    uint32 start = 1;
+    uint32 size = 2;
+}
+
+enum Form {
+    Trust = 0;
+    Distrust = 1;
+}
+
+message TermObject {
+    string from = 1;
+    string to = 2;
+    uint32 weight = 3;
+    uint32 domain = 4;
+    Form form = 5;
+}
