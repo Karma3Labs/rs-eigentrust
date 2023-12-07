@@ -7,10 +7,9 @@ pub struct AppLogger {
     subscriber: Arc<FmtSubscriber>,
 }
 
-// todo rename file and class
 impl AppLogger {
     pub fn new(logger_config: LoggerConfig) -> Self {
-        // logger settings
+        // todo more logger settings (transport etc)
         let subscriber = FmtSubscriber::builder()
             .with_max_level(logger_config.logger_level)
             .with_target(true)

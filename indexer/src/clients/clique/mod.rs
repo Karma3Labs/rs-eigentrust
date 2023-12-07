@@ -1,1 +1,1 @@
-pub mod indexer;
+pub mod client;

@@ -6,7 +6,7 @@ use tracing::{ Level };
 pub struct EVMIndexerConfig {
     pub rpc_url: String,
     pub master_registry_contract: String,
-    pub from_block: String,
+    pub from_block: u64,
 }
 
 #[derive(Clone)]
@@ -37,12 +37,16 @@ impl Config {
         let rpc_url = env
             ::var("CLIQUE_EVM_INDEXER_RPC_URL")
             .expect("CLIQUE_EVM_INDEXER_RPC_URL not found in .env");
+
         let from_block = env
             ::var("CLIQUE_EVM_INDEXER_FROM_BLOCK")
-            .expect("CLIQUE_EVM_INDEXER_FROM_BLOCK not found in .env");
+            .expect("CLIQUE_EVM_INDEXER_FROM_BLOCK not found in .env")
+            .parse::<u64>().unwrap_or_else(|_| 0);
+
         let master_registry_contract = env
             ::var("CLIQUE_EVM_INDEXER_MASTER_REGISTRY_ADDRESS")
             .expect("CLIQUE_EVM_INDEXER_MASTER_REGISTRY_ADDRESS not found in .env");
+
         let logger_level_str = env::var("LOGGER_LEVEL").unwrap_or_else(|_| "info".to_string());
         let logger_level = parse_level_from_string(&logger_level_str).unwrap();
 

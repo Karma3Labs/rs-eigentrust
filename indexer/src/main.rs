@@ -10,6 +10,7 @@ use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{ transport::Server, Request, Response, Status };
 
+// todo clean this up
 const FOLLOW_MOCK: &str =
     "{
     \"id\": \"0x0\",
@@ -54,7 +55,7 @@ impl Indexer for IndexerService {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() { //-> Result<(), Box<dyn Error>> {
     let config = config::Config::from_env();
     let logger_config = config.logger_config.clone();
 
@@ -63,13 +64,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Application started");
 
-    let indexer_config = config.evm_indexer_config.clone();
-    let indexer = clients::clique::indexer::init(indexer_config).await;
+    let client_config = config.evm_indexer_config.clone();
+    let client = clients::clique::client::CliqueClient::new(client_config);
 
     let task_config = config.evm_indexer_config.clone();
-    tasks::clique::task::init(task_config);
+    let task = tasks::clique::task::CliqueTask::new(task_config, client);
+    task.run().await;
 
-    let addr = "[::1]:50050".parse()?;
-    Server::builder().add_service(IndexerServer::new(IndexerService)).serve(addr).await?;
-    Ok(())
+    // let addr = "[::1]:50050".parse()?;
+    // Server::builder().add_service(IndexerServer::new(IndexerService)).serve(addr).await?;
+    // Ok(())
 }
