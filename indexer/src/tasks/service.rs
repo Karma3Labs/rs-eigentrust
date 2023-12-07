@@ -11,7 +11,7 @@ pub struct TaskService {
 
 impl TaskService {
     pub fn new(task: Box<dyn TaskBase>) -> Self {
-        info!("Task created");
+        info!("Task service created");
         TaskService { task }
     }
 

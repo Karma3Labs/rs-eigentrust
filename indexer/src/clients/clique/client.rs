@@ -3,10 +3,11 @@ use web3::types::{ Block, FilterBuilder, Log };
 use web3::api::Eth;
 use web3::Web3;
 use ethabi::{ Contract, RawLog, Token };
-
-use crate::config::EVMIndexerConfig;
 use tracing::{ info, Level };
 use serde_json;
+
+use crate::config::EVMIndexerConfig;
+pub use crate::clients::types::{ EVMLogsClient };
 
 pub struct CliqueClient {
     config: EVMIndexerConfig,
@@ -60,12 +61,13 @@ impl CliqueClient {
             .build();
 
         let logs = self.web3.eth().logs(filter.clone()).await.expect("Failed to get logs");
-        let logs_copy = logs.clone();
 
-        for log in logs {
-        //    parse_log(&log, contract_abi);
-        }
-
-        logs_copy
+        logs
     }
 }
+
+/*
+#[tonic::async_trait]
+impl EVMLogsClient for CliqueClient {  
+}
+ */
