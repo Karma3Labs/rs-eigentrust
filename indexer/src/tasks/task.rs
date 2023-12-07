@@ -20,4 +20,8 @@ impl Task {
     pub async fn run(&self) {
         self.task.run();
     }
+
+
+    fn sleep(&self) {}
+    fn normalize(&self) {}
 }

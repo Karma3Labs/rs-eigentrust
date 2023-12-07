@@ -19,16 +19,21 @@ impl CliqueTask {
         info!("Clique task created");
         CliqueTask { config, client }
     }
+
+    async fn query(&self) {
+
+    }
 }
 
 impl TaskBase for CliqueTask {
      fn run(&self) {
         let get_logs = || { self.client.query(None, None) };
-
         let logs = block_in_place(|| tokio::runtime::Runtime::new().unwrap().block_on(get_logs()));
 
         for log in logs {
             info!("Log: {:?}", log);
         }
     }
+
+    fn normalize(&self) {}
 }

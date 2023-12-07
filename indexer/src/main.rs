@@ -65,8 +65,6 @@ async fn main() {
     let logger: logger::factory::AppLogger = logger::factory::AppLogger::new(logger_config);
     logger.init_global_default();
 
-    info!("Indexer started");
-
     let client_config = config.evm_indexer_config.clone();
     let client = clients::clique::client::CliqueClient::new(client_config);
 
