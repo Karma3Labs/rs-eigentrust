@@ -10,6 +10,8 @@ use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{ transport::Server, Request, Response, Status };
 
+use crate::tasks::task::Task;
+
 // todo clean this up
 const FOLLOW_MOCK: &str =
     "{
@@ -55,20 +57,23 @@ impl Indexer for IndexerService {
 }
 
 #[tokio::main]
-async fn main() { //-> Result<(), Box<dyn Error>> {
+async fn main() {
+    //-> Result<(), Box<dyn Error>> {
     let config = config::Config::from_env();
     let logger_config = config.logger_config.clone();
 
     let logger: logger::factory::AppLogger = logger::factory::AppLogger::new(logger_config);
     logger.init_global_default();
 
-    info!("Application started");
+    info!("Indexer started");
 
     let client_config = config.evm_indexer_config.clone();
     let client = clients::clique::client::CliqueClient::new(client_config);
 
-    let task_config = config.evm_indexer_config.clone();
-    let task = tasks::clique::task::CliqueTask::new(task_config, client);
+    let clique_task_config = config.evm_indexer_config.clone();
+    let clique_task = tasks::clique::task::CliqueTask::new(clique_task_config, client);
+
+    let task = Task::new(Box::new(clique_task));
     task.run().await;
 
     // let addr = "[::1]:50050".parse()?;

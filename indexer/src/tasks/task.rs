@@ -5,19 +5,19 @@ use tracing::{ info, Level };
 
 // todo higher level interface
 pub use crate::clients::clique::client::{ CliqueClient };
+pub use crate::tasks::types::{ TaskBase };
 
-pub struct Indexer {
-    task: CliqueClient,
+pub struct Task {
+    task: Box<dyn TaskBase>,
 }
 
-impl Indexer {
-    pub fn new(task: CliqueClient) -> Self {
-        // todo debug!
-        info!("Indexer created");
-        Indexer { client }
+impl Task {
+    pub fn new(task: Box<dyn TaskBase>) -> Self {
+        info!("Task created");
+        Task { task }
     }
 
     pub async fn run(&self) {
-        
+        self.task.run();
     }
 }

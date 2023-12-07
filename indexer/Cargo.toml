@@ -15,3 +15,5 @@ proto-buf = { path = "../proto-buf" }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = "0.1"
 tonic = "0.7"
+serde_json = "1.0"
+ethabi = "18.0.0"
