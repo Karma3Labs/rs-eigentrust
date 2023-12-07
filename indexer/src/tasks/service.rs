@@ -3,22 +3,20 @@ use web3::types::{ Block, FilterBuilder };
 use crate::config::EVMIndexerConfig;
 use tracing::{ info, Level };
 
-// todo higher level interface
-pub use crate::clients::clique::client::{ CliqueClient };
 pub use crate::tasks::types::{ TaskBase };
 
-pub struct Task {
+pub struct TaskService {
     task: Box<dyn TaskBase>,
 }
 
-impl Task {
+impl TaskService {
     pub fn new(task: Box<dyn TaskBase>) -> Self {
         info!("Task created");
-        Task { task }
+        TaskService { task }
     }
 
     pub async fn run(&self) {
-        self.task.run();
+        self.task.run().await;
     }
 
 

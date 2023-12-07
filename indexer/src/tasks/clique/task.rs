@@ -3,7 +3,7 @@ use web3::types::{ Block, FilterBuilder, Log };
 use tracing::{ info, Level };
 use tokio::task::block_in_place;
 
-// todo higher level interface
+
 pub use crate::clients::clique::client::{ CliqueClient };
 pub use crate::tasks::types::{ TaskBase };
 use crate::config::EVMIndexerConfig;
@@ -15,7 +15,7 @@ pub struct CliqueTask {
 
 impl CliqueTask {
     pub fn new(config: EVMIndexerConfig, client: CliqueClient) -> Self {
-        // todo debug!
+        
         info!("Clique task created");
         CliqueTask { config, client }
     }
@@ -25,15 +25,15 @@ impl CliqueTask {
     }
 }
 
+#[tonic::async_trait]
 impl TaskBase for CliqueTask {
-     fn run(&self) {
-        let get_logs = || { self.client.query(None, None) };
-        let logs = block_in_place(|| tokio::runtime::Runtime::new().unwrap().block_on(get_logs()));
+     async fn run(&self) {
+        let logs = self.client.query(None, None).await;
 
         for log in logs {
             info!("Log: {:?}", log);
         }
     }
 
-    fn normalize(&self) {}
+    async fn normalize(&self) {}
 }

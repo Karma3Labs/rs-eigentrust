@@ -10,7 +10,7 @@ use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{ transport::Server, Request, Response, Status };
 
-use crate::tasks::task::Task;
+use crate::tasks::service::TaskService;
 
 // todo clean this up
 const FOLLOW_MOCK: &str =
@@ -71,8 +71,8 @@ async fn main() {
     let clique_task_config = config.evm_indexer_config.clone();
     let clique_task = tasks::clique::task::CliqueTask::new(clique_task_config, client);
 
-    let task = Task::new(Box::new(clique_task));
-    task.run().await;
+    let task_service = TaskService::new(Box::new(clique_task));
+    task_service.run().await;
 
     // let addr = "[::1]:50050".parse()?;
     // Server::builder().add_service(IndexerServer::new(IndexerService)).serve(addr).await?;
