@@ -6,7 +6,9 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proto-buf = { path = "../proto-buf" }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
-tokio-stream = "0.1"
-tonic = "0.7"
+dotenv = "0.15.0"
+serde = "1.0.192"
+tokio = "1.33.0"
+tracing = "0.1.40"
+tracing-subscriber = "0.3.17"
+web3 = "0.19.0"
