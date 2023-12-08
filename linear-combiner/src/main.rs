@@ -21,8 +21,11 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<Streaming<TermObject>>,
 	) -> Result<Response<Void>, Status> {
 		let mut stream = request.into_inner();
-		while let Some(req) = stream.message().await? {
-			println!("{:?}", req.from);
+		while let Some(term) = stream.message().await? {
+			println!(
+				"Received: Term({:?}, {:?}, {:?})",
+				term.from, term.to, term.weight
+			);
 		}
 		Ok(Response::new(Void {}))
 	}
@@ -30,7 +33,7 @@ impl LinearCombiner for LinearCombinerService {
 	async fn sync_core_computer(
 		&self, request: Request<LtBatch>,
 	) -> Result<Response<Self::SyncCoreComputerStream>, Status> {
-		let req_obj = request.into_inner();
+		let _req_obj = request.into_inner();
 		let num_buffers = 4;
 		let (tx, rx) = channel(num_buffers);
 		for _ in 0..num_buffers {

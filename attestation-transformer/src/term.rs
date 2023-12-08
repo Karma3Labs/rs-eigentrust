@@ -1,7 +1,7 @@
 use proto_buf::transformer::{Form, TermObject};
 use secp256k1::PublicKey;
 
-use crate::error::AttTrError;
+use crate::{did::Did, error::AttTrError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TermForm {
@@ -114,7 +114,7 @@ impl Into<TermObject> for Term {
 }
 
 pub trait Validation {
-	fn validate(&self) -> Result<(PublicKey, bool), AttTrError>;
+	fn validate(&self) -> Result<(PublicKey, Did, bool), AttTrError>;
 }
 
 pub trait IntoTerm: Validation {
