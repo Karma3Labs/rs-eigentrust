@@ -1,7 +1,4 @@
-use web3::transports::Http;
-use web3::types::{ Block, FilterBuilder, Log };
 use tracing::{ info, Level };
-use std::cell::RefCell;
 use tokio::task;
 
 pub use crate::clients::types::{ EVMLogsClient };
@@ -27,12 +24,8 @@ pub struct CliqueTask {
 impl CliqueTask {
     pub fn new(config: EVMIndexerConfig, client: CliqueClient) -> Self {
         // restore prev state
-
-        println!("{}", config.from_block);
-        println!("{}", config.rpc_url);
-
         let from_block = config.from_block;
-        let range = 1024;
+        let range = 100;
 
         let state = CliqueTaskState {
             from_block,

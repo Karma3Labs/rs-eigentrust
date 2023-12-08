@@ -1,5 +1,3 @@
-use web3::transports::Http;
-use web3::types::{ Block, FilterBuilder };
 use crate::config::EVMIndexerConfig;
 use tracing::{ info, Level };
 use std::thread;

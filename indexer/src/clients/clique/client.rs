@@ -46,17 +46,20 @@ impl CliqueClient {
         let config = &self.config;
         let contract_address = &config.master_registry_contract;
 
+        let http = Http::new(&config.rpc_url).expect("Failed to create HTTP transport");
+        let web3 = Web3::new(http);
+
         // todo to constructor
         let contract_abi = include_str!(
             concat!(env!("CARGO_MANIFEST_DIR"), "/assets/clique/clique_master_registry_abi.json")
         );
 
-        let latest_onchain_block = self.web3.eth().block_number().await.unwrap().as_u64();
+        let latest_onchain_block = web3.eth().block_number().await.unwrap().as_u64();
 
         let block_range = range.unwrap_or(1024);
-        let from_block = from.unwrap_or(config.from_block);
 
-        let to_block = cmp::min(config.from_block + block_range, latest_onchain_block);
+        let from_block = from.unwrap_or(config.from_block);
+        let to_block = cmp::min(from_block + block_range, latest_onchain_block);
 
         let filter = FilterBuilder::default()
             .address(vec![contract_address.parse().unwrap()])
@@ -64,7 +67,7 @@ impl CliqueClient {
             .to_block(to_block.into())
             .build();
 
-        let logs = self.web3.eth().logs(filter.clone()).await.expect("Failed to get logs");
+        let logs = web3.eth().logs(filter.clone()).await.expect("Failed to get logs");
 
         logs
     }
