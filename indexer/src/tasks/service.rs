@@ -2,6 +2,8 @@ use web3::transports::Http;
 use web3::types::{ Block, FilterBuilder };
 use crate::config::EVMIndexerConfig;
 use tracing::{ info, Level };
+use std::thread;
+use std::time::Duration;
 
 pub use crate::tasks::types::{ TaskBase };
 
@@ -15,11 +17,22 @@ impl TaskService {
         TaskService { task }
     }
 
-    pub async fn run(&self) {
-        self.task.run().await;
+    pub async fn run(&mut self) {
+        self.index().await;
     }
 
+    pub async fn index(&mut self) {
+        loop {
+            self.task.run().await;
+            // self.sleep().await;
+        }
+    }
 
-    fn sleep(&self) {}
+    pub async fn sleep(&self) {
+        // todo interval
+        let duration = Duration::from_secs(2);
+        thread::sleep(duration);
+    }
+
     fn normalize(&self) {}
 }

@@ -69,9 +69,9 @@ async fn main() {
     let client = clients::clique::client::CliqueClient::new(client_config);
 
     let clique_task_config = config.evm_indexer_config.clone();
-    let clique_task = tasks::clique::task::CliqueTask::new(clique_task_config, client);
+    let mut clique_task = tasks::clique::task::CliqueTask::new(clique_task_config, client);
 
-    let task_service = TaskService::new(Box::new(clique_task));
+    let mut task_service = TaskService::new(Box::new(clique_task));
     task_service.run().await;
 
     // let addr = "[::1]:50050".parse()?;

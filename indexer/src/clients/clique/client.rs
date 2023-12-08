@@ -5,6 +5,7 @@ use web3::Web3;
 use ethabi::{ Contract, RawLog, Token };
 use tracing::{ info, Level };
 use serde_json;
+use std::cmp;
 
 use crate::config::EVMIndexerConfig;
 pub use crate::clients::types::{ EVMLogsClient };
@@ -50,9 +51,12 @@ impl CliqueClient {
             concat!(env!("CARGO_MANIFEST_DIR"), "/assets/clique/clique_master_registry_abi.json")
         );
 
+        let latest_onchain_block = self.web3.eth().block_number().await.unwrap().as_u64();
+
         let block_range = range.unwrap_or(1024);
-        let to_block = config.from_block + block_range;
         let from_block = from.unwrap_or(config.from_block);
+
+        let to_block = cmp::min(config.from_block + block_range, latest_onchain_block);
 
         let filter = FilterBuilder::default()
             .address(vec![contract_address.parse().unwrap()])
@@ -67,6 +71,7 @@ impl CliqueClient {
 }
 
 /*
+todo
 #[tonic::async_trait]
 impl EVMLogsClient for CliqueClient {  
 }
