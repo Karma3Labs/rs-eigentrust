@@ -11,7 +11,9 @@ pub struct TaskService {
 
 impl TaskService {
     pub fn new(task: Box<dyn TaskBase>) -> Self {
-        info!("Task service created");
+        let id = task.get_id();
+
+        info!("Task service created id={}", id);
         TaskService { task }
     }
 
@@ -22,13 +24,13 @@ impl TaskService {
     pub async fn index(&mut self) {
         loop {
             self.task.run().await;
-            // self.sleep().await;
+
+            let duration = self.task.get_sleep_interval();
+            self.sleep(duration).await;
         }
     }
 
-    pub async fn sleep(&self) {
-        // todo interval
-        let duration = Duration::from_secs(2);
+    pub async fn sleep(&self, duration: Duration) {
         thread::sleep(duration);
     }
 

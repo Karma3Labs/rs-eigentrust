@@ -3,7 +3,7 @@ use web3::types::{ Block, FilterBuilder, Log };
 use web3::api::Eth;
 use web3::Web3;
 use ethabi::{ Contract, RawLog, Token };
-use tracing::{ info, Level };
+use tracing::{ info, debug, Level };
 use serde_json;
 use std::cmp;
 
@@ -32,10 +32,11 @@ fn parse_log(log: &Log, contract_abi: &[u8]) -> Result<(), Box<dyn std::error::E
 }
 */
 
+const DEFAULT_BLOCK_RANGE: u64 = 1024;
+
 impl CliqueClient {
     pub fn new(config: EVMIndexerConfig) -> Self {
-        // todo change to debug!
-        info!("Clique client created");
+        debug!("Clique client created");
         let http = Http::new(&config.rpc_url).expect("Failed to create HTTP transport");
         let web3 = Web3::new(http);
 
@@ -46,18 +47,14 @@ impl CliqueClient {
         let config = &self.config;
         let contract_address = &config.master_registry_contract;
 
-        let http = Http::new(&config.rpc_url).expect("Failed to create HTTP transport");
-        let web3 = Web3::new(http);
-
         // todo to constructor
         let contract_abi = include_str!(
             concat!(env!("CARGO_MANIFEST_DIR"), "/assets/clique/clique_master_registry_abi.json")
         );
 
-        let latest_onchain_block = web3.eth().block_number().await.unwrap().as_u64();
+        let latest_onchain_block = self.web3.eth().block_number().await.unwrap().as_u64();
 
-        let block_range = range.unwrap_or(1024);
-
+        let block_range = range.unwrap_or(DEFAULT_BLOCK_RANGE);
         let from_block = from.unwrap_or(config.from_block);
         let to_block = cmp::min(from_block + block_range, latest_onchain_block);
 
@@ -67,8 +64,9 @@ impl CliqueClient {
             .to_block(to_block.into())
             .build();
 
-        let logs = web3.eth().logs(filter.clone()).await.expect("Failed to get logs");
+        let logs = self.web3.eth().logs(filter.clone()).await.expect("Failed to get logs");
 
+        // todo parse
         logs
     }
 }

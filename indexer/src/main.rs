@@ -2,6 +2,8 @@ mod config;
 mod logger;
 mod clients;
 mod tasks;
+mod storage;
+
 use tracing::{ info, Level };
 
 use proto_buf::indexer::{ indexer_server::{ Indexer, IndexerServer }, IndexerEvent, Query };
@@ -11,6 +13,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{ transport::Server, Request, Response, Status };
 
 use crate::tasks::service::TaskService;
+use crate::storage::level_db::level_db::LevelDBClient;
 
 // todo clean this up
 const FOLLOW_MOCK: &str =
@@ -70,6 +73,14 @@ async fn main() {
 
     let clique_task_config = config.evm_indexer_config.clone();
     let clique_task = tasks::clique::task::CliqueTask::new(clique_task_config, client);
+
+    let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/db");
+    let db = LevelDBClient::new(db_path);
+    /*
+    db.put("hello", "hello");
+    let r = db.get("hello").unwrap_or("not found".to_string());
+    println!("{}", r);
+     */
 
     let mut task_service = TaskService::new(Box::new(clique_task));
     task_service.run().await;

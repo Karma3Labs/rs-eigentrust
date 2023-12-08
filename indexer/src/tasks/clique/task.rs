@@ -1,5 +1,9 @@
-use tracing::{ info, Level };
+use tracing::{ info, debug, Level };
 use tokio::task;
+use std::time::Duration;
+use digest::Digest;
+use sha3::Sha3_256;
+use hex;
 
 pub use crate::clients::types::{ EVMLogsClient };
 // todo change to EVMLogsClient, make threadsafe
@@ -32,7 +36,7 @@ impl CliqueTask {
             range,
         };
 
-        info!("Clique task created");
+        debug!("Clique task created");
         CliqueTask {
             config,
             client,
@@ -40,13 +44,9 @@ impl CliqueTask {
         }
     }
 
-    async fn query(&self) {}
-
     fn update_state(&mut self, new_state: CliqueTaskState) {
         self.state = new_state;
     }
-
-    fn run_sync(&self) {}
 }
 
 #[tonic::async_trait]
@@ -61,18 +61,33 @@ impl TaskBase for CliqueTask {
         let logs = self.client.query(Some(self.state.from_block), Some(self.state.range)).await;
 
         if logs.len() > 0 {
-            info!("Found {:?} logs", logs.len());
+            info!("Found {:?} log records", logs.len());
         }
 
-        // todo
         let new_from_block = self.state.from_block + self.state.range;
         let new_state = CliqueTaskState {
             from_block: new_from_block,
-            range: self.state.range,
+            ..self.state
         };
 
+        // todo fix range
         self.update_state(new_state);
     }
 
     async fn normalize(&self) {}
+
+    fn get_sleep_interval(&self) -> Duration {
+        // todo interval if reaches actual block
+        let duration = Duration::from_secs(0);
+        duration
+    }
+
+    fn get_id(&self) -> String {
+        let id = format!("{}{}", self.config.rpc_url, self.config.master_registry_contract);
+        let mut hasher = Sha3_256::new();
+        hasher.update(id.as_bytes());
+        let byte_vector = hasher.finalize().to_vec();
+
+        hex::encode(&byte_vector)
+    }
 }

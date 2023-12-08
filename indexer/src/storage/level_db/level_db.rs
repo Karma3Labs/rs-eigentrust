@@ -2,39 +2,31 @@ use leveldb::database::Database;
 use leveldb::kv::KV;
 use leveldb::options::{ Options, WriteOptions, ReadOptions };
 use serde::{ Serialize, Deserialize };
+use std::path::Path;
 
-struct LevelDBClient {
-    db: Database<String>,
+pub struct LevelDBClient {
+    db: Database<i32>,
 }
 
+// todo implement generic interface
 impl LevelDBClient {
-    pub fn new(db_path: &str) -> Result<Self, leveldb::error::Error> {
+    pub fn new(db_path: &str) -> Self {
+        let path = Path::new(db_path);
         let mut options = Options::new();
         options.create_if_missing = true;
-        let db = Database::open(db_path, options)?;
 
-        Ok(Self { db })
+        let db = Database::open(path, options).unwrap();
+
+        LevelDBClient { db }
     }
 
-    pub fn save<T>(&self, key: &str, value: &T) -> Result<(), leveldb::error::Error>
-        where T: Serialize
-    {
-        let serialized_value = serde_json::to_string(value)?;
-        let write_options = WriteOptions::new();
-        self.db.put(write_options, key, serialized_value)?;
-
-        Ok(())
+    /*
+    pub fn put(&self, key_str: &str, value_str: &str) -> Result<(), leveldb::error::Error> {
+        
     }
 
-    pub fn load<T>(&self, key: &str) -> Result<Option<T>, leveldb::error::Error>
-        where T: Deserialize<'static>
-    {
-        let read_options = ReadOptions::new();
-        if let Some(serialized_value) = self.db.get(read_options, key)? {
-            let deserialized_value: T = serde_json::from_str(&serialized_value)?;
-            Ok(Some(deserialized_value))
-        } else {
-            Ok(None)
-        }
+    pub fn get(&self, key_str: &str) -> Option<String> {
+        
     }
+     */
 }
