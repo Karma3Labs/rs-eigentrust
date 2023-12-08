@@ -18,8 +18,12 @@ impl LinearCombiner for LinearCombinerService {
 	type SyncCoreComputerStream = ReceiverStream<Result<LtObject, Status>>;
 
 	async fn sync_transformer(
-		&self, terms: Request<Streaming<TermObject>>,
+		&self, request: Request<Streaming<TermObject>>,
 	) -> Result<Response<Void>, Status> {
+		let mut stream = request.into_inner();
+		while let Some(req) = stream.message().await? {
+			println!("{:?}", req.from);
+		}
 		Ok(Response::new(Void {}))
 	}
 
