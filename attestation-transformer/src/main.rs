@@ -82,6 +82,10 @@ impl TransformerService {
 			SchemaType::Follow => {
 				let parsed_att: FollowSchema =
 					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+				println!(
+					"Received: Follow({:?}, {:?}, {:?})",
+					parsed_att.id, parsed_att.is_trustworthy, parsed_att.scope
+				);
 				parsed_att.into_term()?
 			},
 			SchemaType::AuditApprove => {

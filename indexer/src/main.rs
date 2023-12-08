@@ -11,7 +11,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 
 const FOLLOW_MOCK: &str = "{
-    \"id\": \"0x0\",
+    \"id\": \"did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2\",
     \"is_trustworthy\": true,
     \"scope\": \"Reviewer\",
     \"sig\": [
