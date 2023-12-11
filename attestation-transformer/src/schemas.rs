@@ -1,5 +1,3 @@
-use std::path::Display;
-
 use super::term::Validation;
 use crate::{
 	did::Did,
