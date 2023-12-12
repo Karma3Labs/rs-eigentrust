@@ -35,6 +35,50 @@ impl LinearCombinerService {
 
 		Ok(Self { main_db: main_db_url.to_string(), updates_db: updates_db_url.to_string() })
 	}
+
+	fn read_checkpoint(db: &DB) -> Result<u32, LcError> {
+		let offset_bytes_opt = db.get(b"checkpoint").map_err(|x| LcError::DbError(x))?;
+		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
+			let mut bytes: [u8; 4] = [0; 4];
+			bytes.copy_from_slice(&x);
+			bytes
+		});
+		let offset = u32::from_be_bytes(offset_bytes);
+		Ok(offset)
+	}
+
+	fn write_checkpoint(db: &DB, count: u32) -> Result<(), LcError> {
+		db.put(b"checkpoint", count.to_be_bytes()).map_err(|x| LcError::DbError(x))?;
+		Ok(())
+	}
+
+	fn get_index(db: &DB, source: String, offset: &mut u32) -> Vec<u8> {
+		let source_did = Did::parse(source).unwrap();
+		let source_index = db.get(&source_did.key).unwrap();
+
+		let x = if let Some(from_i) = source_index {
+			from_i
+		} else {
+			let curr_offset = offset.to_be_bytes();
+			db.put(&source_did.key, curr_offset).unwrap();
+			*offset += 1;
+			curr_offset.to_vec()
+		};
+
+		x
+	}
+
+	fn update_value(main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: u32) {
+		let value_bytes = main_db.get(&key).unwrap().map_or([0; 4], |x| {
+			let mut bytes: [u8; 4] = [0; 4];
+			bytes.copy_from_slice(&x);
+			bytes
+		});
+		let value = u32::from_be_bytes(value_bytes);
+		let new_value = (value + weight).to_be_bytes();
+		main_db.put(key.clone(), new_value).unwrap();
+		updates_db.put(key, new_value).unwrap();
+	}
 }
 
 #[tonic::async_trait]
@@ -47,51 +91,27 @@ impl LinearCombiner for LinearCombinerService {
 		let main_db = DB::open_default(&self.main_db).unwrap();
 		let updates_db = DB::open_default(&self.updates_db).unwrap();
 
-		let checkpoint = main_db.get(b"checkpoint").unwrap();
-		let offset_bytes = checkpoint.map_or([0; 4], |x| {
-			let mut bytes: [u8; 4] = [0; 4];
-			bytes.copy_from_slice(&x);
-			bytes
-		});
-		let mut offset = u32::from_be_bytes(offset_bytes);
+		let mut offset = Self::read_checkpoint(&main_db).unwrap();
 
+		let mut terms = Vec::new();
 		let mut stream = request.into_inner();
 		while let Some(term) = stream.message().await? {
-			let from_did = Did::parse(term.from.clone()).unwrap();
-			let to_did = Did::parse(term.to.clone()).unwrap();
-			let from_index = main_db.get(&from_did.key).unwrap();
-			let to_index = main_db.get(&to_did.key).unwrap();
-			let x = if let Some(from_i) = from_index {
-				from_i
-			} else {
-				let curr_offset = offset.to_be_bytes();
-				main_db.put(&from_did.key, curr_offset).unwrap();
-				offset += 1;
-				curr_offset.to_vec()
-			};
-			let y = if let Some(to_i) = to_index {
-				to_i
-			} else {
-				let curr_offset = offset.to_be_bytes();
-				main_db.put(&to_did.key, curr_offset).unwrap();
-				offset += 1;
-				curr_offset.to_vec()
-			};
+			terms.push(term);
+		}
+
+		for term in terms {
+			let x = Self::get_index(&main_db, term.from.clone(), &mut offset);
+			let y = Self::get_index(&main_db, term.to.clone(), &mut offset);
 
 			let mut key = Vec::new();
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
 
-			let value_bytes = main_db.get(&to_did.key).unwrap().map_or([0; 4], |x| {
-				let mut bytes: [u8; 4] = [0; 4];
-				bytes.copy_from_slice(&x);
-				bytes
-			});
-			let value = u32::from_be_bytes(value_bytes);
-			let new_value = (value + term.weight).to_be_bytes();
-			main_db.put(key.clone(), new_value).unwrap();
-			updates_db.put(key, new_value).unwrap();
+			Self::update_value(&main_db, &updates_db, key, term.weight);
 		}
+
+		Self::write_checkpoint(&main_db, offset).unwrap();
+
 		Ok(Response::new(Void {}))
 	}
 
