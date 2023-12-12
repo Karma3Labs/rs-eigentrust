@@ -68,13 +68,17 @@ impl LinearCombinerService {
 		x
 	}
 
-	fn update_value(main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: u32) {
+	fn get_value(main_db: &DB, key: &Vec<u8>) -> u32 {
 		let value_bytes = main_db.get(&key).unwrap().map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
 			bytes.copy_from_slice(&x);
 			bytes
 		});
-		let value = u32::from_be_bytes(value_bytes);
+		u32::from_be_bytes(value_bytes)
+	}
+
+	fn update_value(main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: u32) {
+		let value = Self::get_value(main_db, &key);
 		let new_value = (value + weight).to_be_bytes();
 		main_db.put(key.clone(), new_value).unwrap();
 		updates_db.put(key, new_value).unwrap();
@@ -134,4 +138,47 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let service = LinearCombinerService::new("lc-storage", "lc-updates-storage")?;
 	Server::builder().add_service(LinearCombinerServer::new(service)).serve(addr).await?;
 	Ok(())
+}
+
+#[cfg(test)]
+mod test {
+	use rocksdb::DB;
+
+	use crate::LinearCombinerService;
+	#[test]
+	fn should_write_read_checkpoint() {
+		let db = DB::open_default("lc-checkpoint-test-storage").unwrap();
+		LinearCombinerService::write_checkpoint(&db, 15).unwrap();
+		let checkpoint = LinearCombinerService::read_checkpoint(&db).unwrap();
+		assert_eq!(checkpoint, 15);
+	}
+
+	#[test]
+	fn should_update_and_get_index() {
+		let main_db = DB::open_default("lc-index-test-storage").unwrap();
+		let source = "did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
+		let mut offset = 0;
+
+		let index = LinearCombinerService::get_index(&main_db, source, &mut offset);
+
+		let mut bytes = [0; 4];
+		bytes.copy_from_slice(&index);
+		let i = u32::from_be_bytes(bytes);
+
+		assert_eq!(i, 0);
+	}
+
+	#[test]
+	fn should_update_item() {
+		let main_db = DB::open_default("lc-items-test-storage").unwrap();
+		let updates_db = DB::open_default("lc-updates-test-storage").unwrap();
+		let key = vec![0; 8];
+		let weight = 50;
+
+		let prev_value = LinearCombinerService::get_value(&main_db, &key);
+		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight);
+		let value = LinearCombinerService::get_value(&main_db, &key);
+
+		assert_eq!(value, prev_value + weight);
+	}
 }
