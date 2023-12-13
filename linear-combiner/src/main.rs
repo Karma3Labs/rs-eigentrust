@@ -83,6 +83,28 @@ impl LinearCombinerService {
 		main_db.put(key.clone(), new_value).unwrap();
 		updates_db.put(key, new_value).unwrap();
 	}
+
+	fn read_batch(updates_db: &DB, n: u32) -> Vec<LtItem> {
+		let iter = updates_db.iterator(IteratorMode::Start);
+
+		let size = usize::try_from(n).unwrap();
+		let items = iter.take(size).fold(Vec::new(), |mut acc, item| {
+			let (key, value) = item.unwrap();
+			let item = LtItem::from_raw(key, value);
+			acc.push(item);
+			acc
+		});
+
+		items
+	}
+
+	fn delete_batch(updates_db: &DB, items: Vec<LtItem>) {
+		let mut batch = WriteBatch::default();
+		items.iter().for_each(|x| {
+			batch.delete(x.key_bytes());
+		});
+		updates_db.write(batch).unwrap();
+	}
 }
 
 #[tonic::async_trait]
@@ -125,15 +147,7 @@ impl LinearCombiner for LinearCombinerService {
 	) -> Result<Response<Self::GetNewDataStream>, Status> {
 		let batch = request.into_inner();
 		let updates_db = DB::open_default(&self.updates_db).unwrap();
-		let iter = updates_db.iterator(IteratorMode::Start);
-
-		let size = usize::try_from(batch.size).unwrap();
-		let items = iter.take(size).fold(Vec::new(), |mut acc, item| {
-			let (key, value) = item.unwrap();
-			let item = LtItem::from_raw(key, value);
-			acc.push(item);
-			acc
-		});
+		let items = Self::read_batch(&updates_db, batch.size);
 
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
@@ -141,11 +155,7 @@ impl LinearCombiner for LinearCombinerService {
 			tx.send(Ok(x_obj)).await.unwrap();
 		}
 
-		let mut batch = WriteBatch::default();
-		items.iter().for_each(|x| {
-			batch.delete(x.key_bytes());
-		});
-		updates_db.write(batch).unwrap();
+		Self::delete_batch(&updates_db, items);
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -206,4 +216,10 @@ mod test {
 
 		assert_eq!(value, prev_value + weight);
 	}
+
+	#[test]
+	fn should_read_batch() {}
+
+	#[test]
+	fn should_delete_batch() {}
 }
