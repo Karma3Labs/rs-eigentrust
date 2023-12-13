@@ -1,13 +1,15 @@
 use error::LcError;
+use item::LtItem;
 use proto_buf::{
 	combiner::{
 		linear_combiner_server::{LinearCombiner, LinearCombinerServer},
-		LtBatch, LtObject,
+		LtBatch, LtHistoryBatch, LtObject,
 	},
 	common::Void,
 	transformer::TermObject,
 };
 use rocksdb::DB;
+use rocksdb::{IteratorMode, WriteBatch};
 use std::error::Error;
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
@@ -85,7 +87,8 @@ impl LinearCombinerService {
 
 #[tonic::async_trait]
 impl LinearCombiner for LinearCombinerService {
-	type SyncCoreComputerStream = ReceiverStream<Result<LtObject, Status>>;
+	type GetNewDataStream = ReceiverStream<Result<LtObject, Status>>;
+	type GetHistoricDataStream = ReceiverStream<Result<LtObject, Status>>;
 
 	async fn sync_transformer(
 		&self, request: Request<Streaming<TermObject>>,
@@ -117,16 +120,40 @@ impl LinearCombiner for LinearCombinerService {
 		Ok(Response::new(Void {}))
 	}
 
-	async fn sync_core_computer(
+	async fn get_new_data(
 		&self, request: Request<LtBatch>,
-	) -> Result<Response<Self::SyncCoreComputerStream>, Status> {
-		let _req_obj = request.into_inner();
-		let num_buffers = 4;
-		let (tx, rx) = channel(num_buffers);
-		for _ in 0..num_buffers {
-			tx.send(Ok(LtObject { x: 0, y: 0, value: 0 })).await.unwrap();
+	) -> Result<Response<Self::GetNewDataStream>, Status> {
+		let batch = request.into_inner();
+		let updates_db = DB::open_default(&self.updates_db).unwrap();
+		let iter = updates_db.iterator(IteratorMode::Start);
+
+		let size = usize::try_from(batch.size).unwrap();
+		let items = iter.take(size).fold(Vec::new(), |mut acc, item| {
+			let (key, value) = item.unwrap();
+			let item = LtItem::from_raw(key, value);
+			acc.push(item);
+			acc
+		});
+
+		let (tx, rx) = channel(1);
+		for x in items.clone() {
+			let x_obj: LtObject = x.into();
+			tx.send(Ok(x_obj)).await.unwrap();
 		}
+
+		let mut batch = WriteBatch::default();
+		items.iter().for_each(|x| {
+			batch.delete(x.key_bytes());
+		});
+		updates_db.write(batch).unwrap();
+
 		Ok(Response::new(ReceiverStream::new(rx)))
+	}
+
+	async fn get_historic_data(
+		&self, _request: Request<LtHistoryBatch>,
+	) -> Result<Response<Self::GetHistoricDataStream>, Status> {
+		Err(Status::unimplemented("Historic data not implemented"))
 	}
 }
 
