@@ -1,3 +1,4 @@
 .env
 /target
 /db
+/cache

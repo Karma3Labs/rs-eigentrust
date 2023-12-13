@@ -8,5 +8,6 @@ pub trait TaskBase {
 
     fn get_sleep_interval(&self) -> Duration;
 
+    // get job id
     fn get_id(&self) -> String;
 }

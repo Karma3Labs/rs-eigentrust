@@ -27,7 +27,7 @@ pub struct CliqueTask {
 
 impl CliqueTask {
     pub fn new(config: EVMIndexerConfig, client: CliqueClient) -> Self {
-        // restore prev state
+        // todo restore prev state
         let from_block = config.from_block;
         let range = 100;
 
@@ -52,13 +52,8 @@ impl CliqueTask {
 #[tonic::async_trait]
 impl TaskBase for CliqueTask {
     async fn run(&mut self) {
-        info!(
-            "Indexing logs in [{}..{}] block range",
-            self.state.from_block,
-            self.state.from_block + self.state.range
-        );
-
-        self.client.query(Some(self.state.from_block), Some(self.state.range)).await;
+        // todo
+        let _ = self.client.query(Some(self.state.from_block), Some(self.state.range)).await;
 
         let mut logs = Vec::new();
         logs.push(String::from("Hello"));
@@ -73,7 +68,6 @@ impl TaskBase for CliqueTask {
             ..self.state
         };
 
-        // todo fix range
         self.update_state(new_state);
     }
 
@@ -85,12 +79,15 @@ impl TaskBase for CliqueTask {
         duration
     }
 
+    // todo use chain id instead of rpc url
     fn get_id(&self) -> String {
-        let id = format!("{}{}", self.config.rpc_url, self.config.master_registry_contract);
+        let data = format!("{}{}", self.config.rpc_url, self.config.master_registry_contract);
         let mut hasher = Sha3_256::new();
-        hasher.update(id.as_bytes());
+        hasher.update(data.as_bytes());
         let byte_vector = hasher.finalize().to_vec();
+        let hash = hex::encode(&byte_vector);
 
-        hex::encode(&byte_vector)
+        let id = format!("{}{}", "clique:", hash);
+        id
     }
 }

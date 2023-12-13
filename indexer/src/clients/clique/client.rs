@@ -1,7 +1,12 @@
 use ethers::{
     prelude::{ abigen, Abigen },
     core::types::{ Address, Filter, H160, H256, U256 },
-    providers::{ Http, Middleware, Provider, Ws },
+    providers::{
+        Http,
+        Middleware,
+        Provider,
+        // Ws
+    },
     abi::{ decode, RawLog },
     contract::{ decode_logs },
 };

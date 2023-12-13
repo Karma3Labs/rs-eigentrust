@@ -3,6 +3,7 @@ use web3::types::{ Block, FilterBuilder };
 use crate::config::EVMIndexerConfig;
 use tracing::{ info, Level };
 
+// todo redundant layer
 // todo higher level interface
 pub use crate::clients::clique::client::{ CliqueClient };
 

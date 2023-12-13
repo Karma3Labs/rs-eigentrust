@@ -1,6 +1,7 @@
 use dotenv::dotenv;
 use std::env;
 use tracing::{ Level };
+use crate::frontends::grpc_server::types::{ GRPCServerConfig };
 
 // types to components
 #[derive(Clone)]
@@ -18,6 +19,7 @@ pub struct LoggerConfig {
 pub struct Config {
     pub evm_indexer_config: EVMIndexerConfig,
     pub logger_config: LoggerConfig,
+    pub grpc_server_config: GRPCServerConfig,
 }
 
 fn parse_level_from_string(level: &str) -> Option<Level> {
@@ -42,7 +44,8 @@ impl Config {
         let from_block = env
             ::var("CLIQUE_EVM_INDEXER_FROM_BLOCK")
             .expect("CLIQUE_EVM_INDEXER_FROM_BLOCK not found in .env")
-            .parse::<u64>().unwrap_or_else(|_| 0);
+            .parse::<u64>()
+            .unwrap_or_else(|_| 0);
 
         let master_registry_contract = env
             ::var("CLIQUE_EVM_INDEXER_MASTER_REGISTRY_ADDRESS")
@@ -50,6 +53,12 @@ impl Config {
 
         let logger_level_str = env::var("LOGGER_LEVEL").unwrap_or_else(|_| "info".to_string());
         let logger_level = parse_level_from_string(&logger_level_str).unwrap();
+
+        let grpc_server_port: u16 = env
+            ::var("GRPC_SERVER_PORT")
+            .unwrap_or_else(|_| (50050).to_string())
+            .parse::<u16>()
+            .unwrap();
 
         let evm_indexer_config = EVMIndexerConfig {
             rpc_url,
@@ -61,9 +70,14 @@ impl Config {
             logger_level,
         };
 
+        let grpc_server_config = GRPCServerConfig {
+            port: grpc_server_port,
+        };
+
         Config {
             evm_indexer_config,
             logger_config,
+            grpc_server_config,
         }
     }
 }
