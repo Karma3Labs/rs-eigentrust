@@ -1,4 +1,3 @@
-use did::Did;
 use error::LcError;
 use proto_buf::{
 	combiner::{
@@ -14,7 +13,6 @@ use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
-mod did;
 mod error;
 mod item;
 
@@ -53,14 +51,14 @@ impl LinearCombinerService {
 	}
 
 	fn get_index(db: &DB, source: String, offset: &mut u32) -> Vec<u8> {
-		let source_did = Did::parse(source).unwrap();
-		let source_index = db.get(&source_did.key).unwrap();
+		let key = hex::decode(source).unwrap();
+		let source_index = db.get(&key).unwrap();
 
 		let x = if let Some(from_i) = source_index {
 			from_i
 		} else {
 			let curr_offset = offset.to_be_bytes();
-			db.put(&source_did.key, curr_offset).unwrap();
+			db.put(&key, curr_offset).unwrap();
 			*offset += 1;
 			curr_offset.to_vec()
 		};
@@ -156,7 +154,7 @@ mod test {
 	#[test]
 	fn should_update_and_get_index() {
 		let main_db = DB::open_default("lc-index-test-storage").unwrap();
-		let source = "did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
+		let source = "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
 		let mut offset = 0;
 
 		let index = LinearCombinerService::get_index(&main_db, source, &mut offset);
