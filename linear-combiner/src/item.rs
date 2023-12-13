@@ -1,6 +1,6 @@
 use proto_buf::combiner::LtObject;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LtItem {
 	x: u32,
 	y: u32,

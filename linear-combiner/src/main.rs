@@ -87,15 +87,19 @@ impl LinearCombinerService {
 	fn read_batch(updates_db: &DB, n: u32) -> Vec<LtItem> {
 		let iter = updates_db.iterator(IteratorMode::Start);
 
-		let size = usize::try_from(n).unwrap();
-		let items = iter.take(size).fold(Vec::new(), |mut acc, item| {
-			let (key, value) = item.unwrap();
-			let item = LtItem::from_raw(key, value);
-			acc.push(item);
-			acc
-		});
+		for item in iter {
+			println!("{:?}", item);
+		}
 
-		items
+		// let size = usize::try_from(n).unwrap();
+		// let items = iter.take(size).fold(Vec::new(), |mut acc, item| {
+		// 	let (key, value) = item.unwrap();
+		// 	let item = LtItem::from_raw(key, value);
+		// 	acc.push(item);
+		// 	acc
+		// });
+
+		Vec::new()
 	}
 
 	fn delete_batch(updates_db: &DB, items: Vec<LtItem>) {
@@ -179,7 +183,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 mod test {
 	use rocksdb::DB;
 
-	use crate::LinearCombinerService;
+	use crate::{item::LtItem, LinearCombinerService};
 	#[test]
 	fn should_write_read_checkpoint() {
 		let db = DB::open_default("lc-checkpoint-test-storage").unwrap();
@@ -218,8 +222,23 @@ mod test {
 	}
 
 	#[test]
-	fn should_read_batch() {}
+	fn should_read_delete_batch() {
+		let main_db = DB::open_default("lc-rd-items-test-storage").unwrap();
+		let updates_db = DB::open_default("lc-rd-updates-test-storage").unwrap();
+		let key = vec![0; 8];
+		let weight = 50u32;
+		let org_items = vec![LtItem::from_raw(key.clone(), weight.to_be_bytes().to_vec())];
 
-	#[test]
-	fn should_delete_batch() {}
+		let prev_value = LinearCombinerService::get_value(&main_db, &key);
+		if prev_value == weight {
+			LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight);
+		}
+
+		let items = LinearCombinerService::read_batch(&updates_db, 1);
+		assert_eq!(items, org_items);
+
+		LinearCombinerService::delete_batch(&updates_db, items);
+		let items = LinearCombinerService::read_batch(&updates_db, 1);
+		assert_eq!(items, Vec::new());
+	}
 }
