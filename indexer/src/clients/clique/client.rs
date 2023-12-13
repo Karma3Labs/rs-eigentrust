@@ -1,79 +1,84 @@
-use web3::transports::Http;
-use web3::types::{ Block, FilterBuilder, Log };
-use web3::api::Eth;
-use web3::Web3;
-use ethabi::{ Contract, RawLog, Token };
+use ethers::{
+    prelude::{ abigen, Abigen },
+    core::types::{ Address, Filter, H160, H256, U256 },
+    providers::{ Http, Middleware, Provider, Ws },
+    abi::{ decode, RawLog },
+    contract::{ decode_logs },
+};
+
 use tracing::{ info, debug, Level };
 use serde_json;
 use std::cmp;
+use std::sync::Arc;
+use eyre::Result;
+use std::error::Error;
 
 use crate::config::EVMIndexerConfig;
 pub use crate::clients::types::{ EVMLogsClient };
 
 pub struct CliqueClient {
     config: EVMIndexerConfig,
-    web3: Web3<Http>,
+    contract: CLIQUE<Provider<Http>>,
 }
-
-/*
-fn parse_log(log: &Log, contract_abi: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-    // Use your contract ABI to decode the log data
-    let ethabi = ethabi::Contract::load(contract_abi)?;
-    let decoded_log = ethabi::Log::parse(&ethabi, &log)?;
-
-    // Access decoded log parameters
-    let parameter1: H256 = decoded_log.param::<H256>("parameter1")?;
-    let parameter2: u64 = decoded_log.param::<u64>("parameter2")?;
-
-    // Do something with the parsed parameters
-    println!("Log parameters: {:?}, {:?}", parameter1, parameter2);
-
-    Ok(())
-}
-*/
 
 const DEFAULT_BLOCK_RANGE: u64 = 1024;
 
+abigen!(
+    CLIQUE,
+    "./assets/clique/clique_master_registry_abi.json",
+    event_derives (serde::Deserialize, serde::Serialize);
+);
+
 impl CliqueClient {
     pub fn new(config: EVMIndexerConfig) -> Self {
-        debug!("Clique client created");
-        let http = Http::new(&config.rpc_url).expect("Failed to create HTTP transport");
-        let web3 = Web3::new(http);
+        let provider = Provider::<Http>::try_from(config.rpc_url.clone()).unwrap();
+        let client = Arc::new(provider);
+        let address: Address = config.master_registry_contract.parse().unwrap();
+        let contract = CLIQUE::new(address, client.clone());
 
-        CliqueClient { config, web3 }
+        debug!("Clique client created");
+        CliqueClient { config, contract }
     }
 
-    pub async fn query(&self, from: Option<u64>, range: Option<u64>) -> Vec<Log> {
+    pub async fn query(&self, from: Option<u64>, range: Option<u64>) -> Result<(), Box<dyn Error>> {
         let config = &self.config;
         let contract_address = &config.master_registry_contract;
 
-        // todo to constructor
-        let contract_abi = include_str!(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/clique/clique_master_registry_abi.json")
-        );
-
-        let latest_onchain_block = self.web3.eth().block_number().await.unwrap().as_u64();
-
         let block_range = range.unwrap_or(DEFAULT_BLOCK_RANGE);
         let from_block = from.unwrap_or(config.from_block);
+        let latest_onchain_block = self.contract
+            .client_ref()
+            .get_block_number().await
+            .unwrap()
+            .as_u64();
+
         let to_block = cmp::min(from_block + block_range, latest_onchain_block);
 
-        let filter = FilterBuilder::default()
+        let filter = Filter::new()
             .address(vec![contract_address.parse().unwrap()])
-            .from_block(from_block.into())
-            .to_block(to_block.into())
-            .build();
+            .from_block(from_block)
+            .to_block(to_block);
 
-        let logs = self.web3.eth().logs(filter.clone()).await.expect("Failed to get logs");
+        let logs = self.contract.client_ref().get_logs(&filter).await.unwrap();
 
-        // todo parse
-        logs
+        let raw_logs: Vec<RawLog> = logs
+            .into_iter()
+            .map(move |log| RawLog {
+                topics: log.topics,
+                data: log.data.to_vec(),
+            })
+            .collect();
+
+        let attestations: Vec<Attestation> = decode_logs::<AttestationRecordedFilter>(&raw_logs)
+            .unwrap()
+            .into_iter()
+            .map(move |a| a.attestation)
+            .collect();
+
+        for a in attestations {
+            println!("{:?}", a);
+        }
+
+        Ok(())
     }
 }
-
-/*
-todo
-#[tonic::async_trait]
-impl EVMLogsClient for CliqueClient {  
-}
- */

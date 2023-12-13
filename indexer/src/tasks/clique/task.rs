@@ -53,12 +53,15 @@ impl CliqueTask {
 impl TaskBase for CliqueTask {
     async fn run(&mut self) {
         info!(
-            "Indexing logs in [{},{}] block range",
+            "Indexing logs in [{}..{}] block range",
             self.state.from_block,
             self.state.from_block + self.state.range
         );
 
-        let logs = self.client.query(Some(self.state.from_block), Some(self.state.range)).await;
+        self.client.query(Some(self.state.from_block), Some(self.state.range)).await;
+
+        let mut logs = Vec::new();
+        logs.push(String::from("Hello"));
 
         if logs.len() > 0 {
             info!("Found {:?} log records", logs.len());

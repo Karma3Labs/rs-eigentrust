@@ -13,7 +13,7 @@ impl TaskService {
     pub fn new(task: Box<dyn TaskBase>) -> Self {
         let id = task.get_id();
 
-        info!("Task service created id={}", id);
+        info!("Job created id={}", id);
         TaskService { task }
     }
 

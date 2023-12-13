@@ -2,6 +2,7 @@ use dotenv::dotenv;
 use std::env;
 use tracing::{ Level };
 
+// types to components
 #[derive(Clone)]
 pub struct EVMIndexerConfig {
     pub rpc_url: String,
