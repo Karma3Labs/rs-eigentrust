@@ -24,16 +24,15 @@ impl TaskService {
     }
 
     pub async fn index(&mut self) {
-        // tdodo catch inner errors
+        // todo catch inner level errors
         loop {
             self.task.run().await;
-
-            let duration = self.task.get_sleep_interval();
 
             let task_id = self.task.get_id();
             let task_state = self.task.get_state_dump();
             let _ = self.db.put(task_id.as_str(), task_state.as_str());
 
+            let duration = self.task.get_sleep_interval();
             self.sleep(duration).await;
         }
     }
@@ -41,6 +40,4 @@ impl TaskService {
     pub async fn sleep(&self, duration: Duration) {
         thread::sleep(duration);
     }
-
-    fn normalize(&self) {}
 }

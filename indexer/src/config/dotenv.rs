@@ -55,7 +55,7 @@ impl Config {
 
         let grpc_server_port: u16 = env
             ::var("GRPC_SERVER_PORT")
-            .unwrap_or_else(|_| (50050).to_string())
+            .unwrap_or(50050.to_string())
             .parse::<u16>()
             .unwrap();
 

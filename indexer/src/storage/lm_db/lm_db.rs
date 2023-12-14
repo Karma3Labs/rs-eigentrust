@@ -1,24 +1,24 @@
 use heed::{ EnvOpenOptions, Database, Result };
-
 use heed::types::*;
-use super::types::{ LMDBClientConfig };
 use std::fs;
+
+use super::types::{ LMDBClientConfig };
 use crate::storage::types::{ BaseKVStorage };
 
+// todo change string to bytes?
 pub struct LMDBClient {
     db: Database<Str, Str>,
     env: heed::Env,
 }
 
-// todo change string to bytes
 // https://github.com/meilisearch/heed/blob/main/heed/examples/all-types.rs
 impl LMDBClient {
     pub fn new(config: LMDBClientConfig) -> Self {
-        fs::create_dir_all(&config.path);
+        let _ = fs::create_dir_all(&config.path);
 
         let env = EnvOpenOptions::new()
-            .map_size(10 * 1024 * 1024) // 10 mb
-            .max_dbs(3000)
+            .map_size(config.map_size)
+            .max_dbs(config.max_dbs)
             .open(&config.path)
             .unwrap();
 

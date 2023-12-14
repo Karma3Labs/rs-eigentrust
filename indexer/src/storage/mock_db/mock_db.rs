@@ -4,6 +4,7 @@ use crate::storage::types::{ BaseKVStorage };
 
 pub struct MockDBClient;
 
+#[allow(unused)]
 impl MockDBClient {
     pub fn new() -> Self {
         MockDBClient {}

@@ -83,8 +83,6 @@ impl BaseTask for CliqueTask {
         self.update_state(new_state);
     }
 
-    async fn normalize(&self) {}
-
     fn get_sleep_interval(&self) -> Duration {
         // todo interval if reaches the latest onchain block
         let duration = Duration::from_secs(0);
