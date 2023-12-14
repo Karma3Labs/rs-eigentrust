@@ -1,5 +1,5 @@
-use heed::{ EnvOpenOptions, Database, RoTxn, RwTxn, Result };
-use heed::types::*;
+use heed::{ Result };
+
 use crate::storage::types::{ BaseKVStorage };
 
 pub struct MockDBClient;
@@ -11,11 +11,11 @@ impl MockDBClient {
 }
 
 impl BaseKVStorage for MockDBClient {
-    fn put(&self, key: &str, value: &str) -> Result<()> {
+    fn put(&self, _key: &str, _value: &str) -> Result<()> {
         Ok(())
     }
 
-    fn get(&self, key: &str) -> Option<String> {
+    fn get(&self, _key: &str) -> Option<String> {
         Some("Mock db response".to_string())
     }
 }

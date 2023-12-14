@@ -1,4 +1,4 @@
-use tracing::{ info, Level };
+use tracing::{ info };
 use std::thread;
 use std::time::Duration;
 

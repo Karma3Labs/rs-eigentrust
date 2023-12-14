@@ -1,6 +1,6 @@
 // todo generic Result
 use heed::{ Result };
-use heed::types::*;
+
 
 // #[tonic::async_trait]
 pub trait BaseKVStorage {

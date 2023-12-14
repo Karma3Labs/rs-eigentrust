@@ -1,18 +1,18 @@
 use ethers::{
-    prelude::{ abigen, Abigen },
-    core::types::{ Address, Filter, H160, H256, U256 },
+    prelude::{ abigen },
+    core::types::{ Address, Filter },
     providers::{
         Http,
         Middleware,
         Provider,
         // Ws
     },
-    abi::{ decode, RawLog },
+    abi::{ RawLog },
     contract::{ decode_logs },
 };
 
-use tracing::{ info, debug, Level };
-use serde_json;
+use tracing::{ debug };
+
 use std::cmp;
 use std::sync::Arc;
 use eyre::Result;

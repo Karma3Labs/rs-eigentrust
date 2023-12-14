@@ -5,11 +5,11 @@ mod tasks;
 mod storage;
 mod frontends;
 
-use tracing::{ info, Level };
+use tracing::{ info };
 
 use crate::tasks::service::TaskService;
 use crate::storage::lm_db::lm_db::LMDBClient;
-use crate::storage::types::BaseKVStorage;
+
 use crate::frontends::grpc_server::grpc_server::GRPCServer;
 
 #[tokio::main]

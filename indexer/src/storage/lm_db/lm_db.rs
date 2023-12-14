@@ -1,5 +1,5 @@
-use heed::{ EnvOpenOptions, Database, RoTxn, RwTxn, Result };
-use std::path::Path;
+use heed::{ EnvOpenOptions, Database, Result };
+
 use heed::types::*;
 use super::types::{ LMDBClientConfig };
 use std::fs;

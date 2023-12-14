@@ -1,4 +1,4 @@
-use tracing::{ info, Level, debug };
+use tracing::{ info };
 
 use proto_buf::indexer::{ indexer_server::{ Indexer, IndexerServer }, IndexerEvent, Query };
 use std::{ error::Error, time::{ SystemTime, UNIX_EPOCH } };
