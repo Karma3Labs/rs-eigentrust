@@ -16,10 +16,14 @@ use crate::frontends::grpc_server::grpc_server::GRPCServer;
 async fn main() {
     //-> Result<(), Box<dyn Error>> {
     let config = config::dotenv::Config::from_env();
+
     let logger_config = config.logger_config.clone();
 
     let logger: logger::factory::AppLogger = logger::factory::AppLogger::new(logger_config);
     logger.init_global_default();
+
+    // avoid sensitive data leak!
+    info!("{:?}", config);
 
     let client_config = config.evm_indexer_config.clone();
     let client = clients::clique::client::CliqueClient::new(client_config);

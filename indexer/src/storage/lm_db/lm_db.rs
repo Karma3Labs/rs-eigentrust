@@ -22,7 +22,7 @@ impl LMDBClient {
             .open(&config.path)
             .unwrap();
 
-        let db = env.create_database(Some("key_value_storage")).unwrap();
+        let db = env.create_database(Some(&config.db_name)).unwrap();
         LMDBClient { db, env }
     }
 }

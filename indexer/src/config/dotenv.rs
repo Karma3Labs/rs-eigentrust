@@ -6,11 +6,12 @@ use crate::clients::clique::types::{ EVMIndexerConfig };
 use crate::storage::lm_db::types::{ LMDBClientConfig };
 
 // types to components
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LoggerConfig {
     pub logger_level: Level,
 }
 
+#[derive(Debug)]
 pub struct Config {
     pub evm_indexer_config: EVMIndexerConfig,
     pub logger_config: LoggerConfig,
@@ -74,6 +75,7 @@ impl Config {
 
         let lm_db_config = LMDBClientConfig {
             path: lm_db_path,
+            db_name: "indexer".to_string(),
             max_dbs: 3000,
             map_size: 10 * 1024 * 1024,
         };
