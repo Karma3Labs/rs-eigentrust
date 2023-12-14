@@ -5,6 +5,8 @@ use std::process;
 use digest::Digest;
 use sha3::Sha3_256;
 use hex;
+use serde::{ Serialize, Deserialize };
+use serde_json;
 
 pub use crate::clients::types::{ EVMLogsClient };
 // todo change to EVMLogsClient, make threadsafe
@@ -13,7 +15,7 @@ pub use crate::clients::clique::types::{ EVMIndexerConfig };
 
 pub use crate::tasks::types::{ BaseTask };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CliqueTaskState {
     from_block: u64,
     range: u64,
@@ -103,5 +105,10 @@ impl BaseTask for CliqueTask {
 
     fn get_is_synced(&self) -> bool {
         self.state.is_synced
+    }
+
+    fn get_state_dump(&self) -> String {
+        let json_string = serde_json::to_string(&self.state).expect("Failed to serialize to JSON");
+        json_string
     }
 }

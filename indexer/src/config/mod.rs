@@ -3,6 +3,7 @@ use std::env;
 use tracing::{ Level };
 use crate::frontends::grpc_server::types::{ GRPCServerConfig };
 use crate::clients::clique::types::{ EVMIndexerConfig };
+use crate::storage::lm_db::types::{ LMDBClientConfig };
 
 // types to components
 #[derive(Clone)]
@@ -14,6 +15,7 @@ pub struct Config {
     pub evm_indexer_config: EVMIndexerConfig,
     pub logger_config: LoggerConfig,
     pub grpc_server_config: GRPCServerConfig,
+    pub lm_db_config: LMDBClientConfig,
 }
 
 fn parse_level_from_string(level: &str) -> Option<Level> {
@@ -45,8 +47,10 @@ impl Config {
             ::var("CLIQUE_EVM_INDEXER_MASTER_REGISTRY_ADDRESS")
             .expect("CLIQUE_EVM_INDEXER_MASTER_REGISTRY_ADDRESS not found in .env");
 
-        let logger_level_str = env::var("LOGGER_LEVEL").unwrap_or_else(|_| "info".to_string());
+        let logger_level_str = env::var("LOGGER_LEVEL").unwrap_or("info".to_string());
         let logger_level = parse_level_from_string(&logger_level_str).unwrap();
+
+        let lm_db_path = env::var("LMDB_PATH").unwrap_or("./db".to_string());
 
         let grpc_server_port: u16 = env
             ::var("GRPC_SERVER_PORT")
@@ -68,10 +72,17 @@ impl Config {
             port: grpc_server_port,
         };
 
+        let lm_db_config = LMDBClientConfig {
+            path: lm_db_path,
+            max_dbs: 3000,
+            map_size: 10 * 1024 * 1024,
+        };
+
         Config {
             evm_indexer_config,
             logger_config,
             grpc_server_config,
+            lm_db_config,
         }
     }
 }

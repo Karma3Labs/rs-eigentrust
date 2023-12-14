@@ -12,4 +12,7 @@ pub trait BaseTask {
 
     // get job id
     fn get_id(&self) -> String;
+
+    // get serialized state to store to a db
+    fn get_state_dump(&self) -> String;
 }
