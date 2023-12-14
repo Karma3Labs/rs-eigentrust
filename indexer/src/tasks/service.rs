@@ -1,16 +1,15 @@
-use crate::config::EVMIndexerConfig;
 use tracing::{ info, Level };
 use std::thread;
 use std::time::Duration;
 
-pub use crate::tasks::types::{ TaskBase };
+pub use crate::tasks::types::{ BaseTask };
 
 pub struct TaskService {
-    task: Box<dyn TaskBase>,
+    task: Box<dyn BaseTask>,
 }
 
 impl TaskService {
-    pub fn new(task: Box<dyn TaskBase>) -> Self {
+    pub fn new(task: Box<dyn BaseTask>) -> Self {
         let id = task.get_id();
 
         info!("Job created id={}", id);

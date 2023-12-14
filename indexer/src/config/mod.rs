@@ -2,15 +2,9 @@ use dotenv::dotenv;
 use std::env;
 use tracing::{ Level };
 use crate::frontends::grpc_server::types::{ GRPCServerConfig };
+use crate::clients::clique::types::{ EVMIndexerConfig };
 
 // types to components
-#[derive(Clone)]
-pub struct EVMIndexerConfig {
-    pub rpc_url: String,
-    pub master_registry_contract: String,
-    pub from_block: u64,
-}
-
 #[derive(Clone)]
 pub struct LoggerConfig {
     pub logger_level: Level,

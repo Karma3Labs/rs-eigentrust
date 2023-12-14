@@ -1,6 +1,7 @@
 use tracing::{ info, debug, Level };
 use tokio::task;
 use std::time::Duration;
+use std::process;
 use digest::Digest;
 use sha3::Sha3_256;
 use hex;
@@ -8,15 +9,15 @@ use hex;
 pub use crate::clients::types::{ EVMLogsClient };
 // todo change to EVMLogsClient, make threadsafe
 pub use crate::clients::clique::client::{ CliqueClient };
-use std::process;
+pub use crate::clients::clique::types::{ EVMIndexerConfig };
 
-pub use crate::tasks::types::{ TaskBase };
-use crate::config::EVMIndexerConfig;
+pub use crate::tasks::types::{ BaseTask };
 
 #[derive(Clone, Debug)]
 pub struct CliqueTaskState {
     from_block: u64,
     range: u64,
+    is_synced: bool,
 }
 
 pub struct CliqueTask {
@@ -30,10 +31,12 @@ impl CliqueTask {
         // todo restore prev state
         let from_block = config.from_block;
         let range = 100;
+        let is_synced = false;
 
         let state = CliqueTaskState {
             from_block,
             range,
+            is_synced,
         };
 
         debug!("Clique task created");
@@ -50,8 +53,14 @@ impl CliqueTask {
 }
 
 #[tonic::async_trait]
-impl TaskBase for CliqueTask {
+impl BaseTask for CliqueTask {
     async fn run(&mut self) {
+        info!(
+            "Indexing logs in [{}..{}] block range",
+            self.state.from_block,
+            self.state.from_block + self.state.range - 1
+        );
+
         // todo
         let _ = self.client.query(Some(self.state.from_block), Some(self.state.range)).await;
 
@@ -62,9 +71,10 @@ impl TaskBase for CliqueTask {
             info!("Found {:?} log records", logs.len());
         }
 
-        let new_from_block = self.state.from_block + self.state.range;
+        // todo set to actual last synced block
+        let from_block_new = self.state.from_block + self.state.range;
         let new_state = CliqueTaskState {
-            from_block: new_from_block,
+            from_block: from_block_new,
             ..self.state
         };
 
@@ -74,7 +84,7 @@ impl TaskBase for CliqueTask {
     async fn normalize(&self) {}
 
     fn get_sleep_interval(&self) -> Duration {
-        // todo interval if reaches actual block
+        // todo interval if reaches the latest onchain block
         let duration = Duration::from_secs(0);
         duration
     }
@@ -89,5 +99,9 @@ impl TaskBase for CliqueTask {
 
         let id = format!("{}{}", "clique:", hash);
         id
+    }
+
+    fn get_is_synced(&self) -> bool {
+        self.state.is_synced
     }
 }

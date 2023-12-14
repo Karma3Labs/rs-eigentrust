@@ -26,3 +26,4 @@ ethereum_abi = "0.4.0"
 ethers = "2.0.11"
 ethers-providers = { version = "2.0.11", features = ["ws"] }
 eyre = "0.6.9"
+heed = "0.11.0"

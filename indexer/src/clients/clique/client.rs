@@ -18,8 +18,8 @@ use std::sync::Arc;
 use eyre::Result;
 use std::error::Error;
 
-use crate::config::EVMIndexerConfig;
 pub use crate::clients::types::{ EVMLogsClient };
+use super::types::{ EVMIndexerConfig };
 
 pub struct CliqueClient {
     config: EVMIndexerConfig,
@@ -39,7 +39,7 @@ impl CliqueClient {
         let provider = Provider::<Http>::try_from(config.rpc_url.clone()).unwrap();
         let client = Arc::new(provider);
         let address: Address = config.master_registry_contract.parse().unwrap();
-        let contract = CLIQUE::new(address, client.clone());
+        let contract = CLIQUE::new(address, client);
 
         debug!("Clique client created");
         CliqueClient { config, contract }
@@ -68,7 +68,7 @@ impl CliqueClient {
 
         let raw_logs: Vec<RawLog> = logs
             .into_iter()
-            .map(move |log| RawLog {
+            .map(|log| RawLog {
                 topics: log.topics,
                 data: log.data.to_vec(),
             })
@@ -77,9 +77,10 @@ impl CliqueClient {
         let attestations: Vec<Attestation> = decode_logs::<AttestationRecordedFilter>(&raw_logs)
             .unwrap()
             .into_iter()
-            .map(move |a| a.attestation)
+            .map(|a| a.attestation)
             .collect();
-
+        
+        // todo broadcast the chunk
         for a in attestations {
             println!("{:?}", a);
         }

@@ -8,7 +8,7 @@ mod frontends;
 use tracing::{ info, Level };
 
 use crate::tasks::service::TaskService;
-use crate::storage::level_db::level_db::LevelDBClient;
+use crate::storage::lm_db::lm_db::LMDBClient;
 use crate::frontends::grpc_server::grpc_server::GRPCServer;
 
 #[tokio::main]
@@ -26,13 +26,12 @@ async fn main() {
     let clique_task_config = config.evm_indexer_config.clone();
     let clique_task = tasks::clique::task::CliqueTask::new(clique_task_config, client);
 
-    let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/db");
-    let db = LevelDBClient::new(db_path);
-    /*
-    db.put("hello", "hello");
-    let r = db.get("hello").unwrap_or("not found".to_string());
+    let db_path = "./db"; 
+    let db = LMDBClient::new(db_path);
+
+    // db.put("hello", "hello");
+    let r = db.get("hello").unwrap_or(None).unwrap_or("not found".to_string());
     println!("{}", r);
-     */
 
     let mut task_service = TaskService::new(Box::new(clique_task));
     task_service.run().await;

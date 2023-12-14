@@ -15,11 +15,3 @@ members = [
 version = "0.0.1"
 authors = ["Eugene Kim, Jenya Nepoimannykh, Filip Lazovic"]
 edition = "2021"
-
-
-[workspace.dependencies]
-tonic = "0.7"
-prost = "0.10"
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
-tokio-stream = "0.1"
-futures = "0.3"
