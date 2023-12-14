@@ -57,7 +57,7 @@ impl CliqueClient {
             .unwrap()
             .as_u64();
 
-        let to_block = cmp::min(from_block + block_range, latest_onchain_block);
+        let to_block = cmp::min(from_block + block_range - 1, latest_onchain_block);
 
         let filter = Filter::new()
             .address(vec![contract_address.parse().unwrap()])
@@ -79,7 +79,7 @@ impl CliqueClient {
             .into_iter()
             .map(|a| a.attestation)
             .collect();
-        
+
         // todo broadcast the chunk
         for a in attestations {
             println!("{:?}", a);

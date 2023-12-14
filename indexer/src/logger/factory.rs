@@ -1,7 +1,9 @@
 use tracing::{ info, Level };
 use tracing_subscriber::FmtSubscriber;
 use std::sync::Arc;
-use crate::config::LoggerConfig;
+
+// move logger config here
+use crate::config::dotenv::LoggerConfig;
 
 pub struct AppLogger {
     subscriber: Arc<FmtSubscriber>,

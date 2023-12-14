@@ -10,13 +10,12 @@ use tracing::{ info, Level };
 use crate::tasks::service::TaskService;
 use crate::storage::lm_db::lm_db::LMDBClient;
 use crate::storage::types::BaseKVStorage;
-
 use crate::frontends::grpc_server::grpc_server::GRPCServer;
 
 #[tokio::main]
 async fn main() {
     //-> Result<(), Box<dyn Error>> {
-    let config = config::Config::from_env();
+    let config = config::dotenv::Config::from_env();
     let logger_config = config.logger_config.clone();
 
     let logger: logger::factory::AppLogger = logger::factory::AppLogger::new(logger_config);
@@ -27,8 +26,6 @@ async fn main() {
 
     let clique_task_config = config.evm_indexer_config.clone();
     let clique_task = tasks::clique::task::CliqueTask::new(clique_task_config, client);
-
-    let db_path = "./db";
 
     let lm_db_config = config.lm_db_config.clone();
     let db = LMDBClient::new(lm_db_config);
