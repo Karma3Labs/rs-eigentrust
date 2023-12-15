@@ -134,7 +134,15 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
 
-			Self::update_value(&main_db, &updates_db, key, term.weight);
+			Self::update_value(&main_db, &updates_db, key.clone(), term.weight);
+
+			let value = Self::get_value(&main_db, &key);
+			println!(
+				"LtItem({:?}, {:?}, {:?})",
+				u32::from_be_bytes(x.try_into().unwrap()),
+				u32::from_be_bytes(y.try_into().unwrap()),
+				value
+			);
 		}
 
 		Self::write_checkpoint(&main_db, offset).unwrap();
