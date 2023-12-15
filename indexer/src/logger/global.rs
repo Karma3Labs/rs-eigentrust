@@ -1,9 +1,9 @@
 use tracing_subscriber::FmtSubscriber;
 use std::sync::Arc;
-use color_eyre::eyre::Result;
-use std::io;
-use tracing_subscriber::fmt::{ format::FmtSpan, FormatEvent, Formatter, format::Pretty };
-use tracing_subscriber::{ layer::Context, layer::Layer, Registry };
+
+
+use tracing_subscriber::fmt::{ format::FmtSpan };
+
 
 // move logger config here
 use crate::config::dotenv::LoggerConfig;

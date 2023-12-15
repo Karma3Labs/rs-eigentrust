@@ -4,8 +4,8 @@ use std::fs::File;
 
 use tracing::{ debug };
 
-use std::cmp;
-use std::sync::Arc;
+
+
 use eyre::Result;
 
 pub use crate::clients::types::{ EVMLogsClient };

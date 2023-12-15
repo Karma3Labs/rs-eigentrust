@@ -4,7 +4,7 @@ use std::time::Duration;
 
 pub use crate::tasks::types::{ BaseTask };
 use crate::storage::types::BaseKVStorage;
-use super::types::{ BaseTaskState };
+
 
 pub struct TaskService {
     task: Box<dyn BaseTask>,
