@@ -161,9 +161,35 @@ impl LinearCombiner for LinearCombinerService {
 	}
 
 	async fn get_historic_data(
-		&self, _request: Request<LtHistoryBatch>,
+		&self, request: Request<LtHistoryBatch>,
 	) -> Result<Response<Self::GetHistoricDataStream>, Status> {
-		Err(Status::unimplemented("Historic data not implemented"))
+		let batch = request.into_inner();
+		let main_db = DB::open_default(&self.main_db).unwrap();
+
+		let x_bytes = batch.x.to_be_bytes();
+
+		let y_start = batch.y.clone();
+		let y_end = batch.y + batch.size;
+
+		let mut items = Vec::new();
+		(y_start as usize..y_end as usize).into_iter().for_each(|x| {
+			let mut key = Vec::new();
+			key.extend_from_slice(&x_bytes);
+			key.extend_from_slice(&x.to_be_bytes());
+			let item_res = main_db.get(key.clone());
+			if let Ok(Some(value)) = item_res {
+				let let_item = LtItem::from_raw(key, value);
+				items.push(let_item);
+			}
+		});
+
+		let (tx, rx) = channel(1);
+		for x in items.clone() {
+			let x_obj: LtObject = x.into();
+			tx.send(Ok(x_obj)).await.unwrap();
+		}
+
+		Ok(Response::new(ReceiverStream::new(rx)))
 	}
 }
 
