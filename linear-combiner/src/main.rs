@@ -52,58 +52,66 @@ impl LinearCombinerService {
 		Ok(())
 	}
 
-	fn get_index(db: &DB, source: String, offset: &mut u32) -> [u8; 4] {
-		let key = hex::decode(source).unwrap();
-		let source_index = db.get(&key).unwrap();
+	fn get_index(db: &DB, source: String, offset: &mut u32) -> Result<[u8; 4], LcError> {
+		let key = hex::decode(source).map_err(|_| LcError::ParseError)?;
+		let source_index = db.get(&key).map_err(|e| LcError::DbError(e))?;
 
 		let x = if let Some(from_i) = source_index {
-			from_i.try_into().unwrap()
+			let from_bytes: [u8; 4] = from_i.try_into().map_err(|_| LcError::ParseError)?;
+			from_bytes
 		} else {
 			let curr_offset = offset.to_be_bytes();
-			db.put(&key, curr_offset).unwrap();
+			db.put(&key, curr_offset).map_err(|e| LcError::DbError(e))?;
 			*offset += 1;
 			curr_offset
 		};
 
-		x
+		Ok(x)
 	}
 
-	fn get_value(main_db: &DB, key: &Vec<u8>) -> u32 {
-		let value_bytes = main_db.get(&key).unwrap().map_or([0; 4], |x| {
+	fn get_value(main_db: &DB, key: &Vec<u8>) -> Result<u32, LcError> {
+		let value_opt = main_db.get(&key).map_err(|e| LcError::DbError(e))?;
+		let value_bytes = value_opt.map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
 			bytes.copy_from_slice(&x);
 			bytes
 		});
-		u32::from_be_bytes(value_bytes)
+		Ok(u32::from_be_bytes(value_bytes))
 	}
 
-	fn update_value(main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: u32) {
-		let value = Self::get_value(main_db, &key);
+	fn update_value(
+		main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: u32,
+	) -> Result<(), LcError> {
+		let value = Self::get_value(main_db, &key)?;
 		let new_value = (value + weight).to_be_bytes();
-		main_db.put(key.clone(), new_value).unwrap();
-		updates_db.put(key.clone(), new_value).unwrap();
+		main_db.put(key.clone(), new_value).map_err(|e| LcError::DbError(e))?;
+		updates_db.put(key.clone(), new_value).map_err(|e| LcError::DbError(e))?;
+		Ok(())
 	}
 
-	fn read_batch(updates_db: &DB, n: u32) -> Vec<LtItem> {
+	fn read_batch(updates_db: &DB, n: u32) -> Result<Vec<LtItem>, LcError> {
 		let iter = updates_db.iterator(IteratorMode::Start);
 
-		let size = usize::try_from(n).unwrap();
-		let items = iter.take(size).fold(Vec::new(), |mut acc, item| {
-			let (key, value) = item.unwrap();
-			let item = LtItem::from_raw(key, value);
-			acc.push(item);
-			acc
+		let size = usize::try_from(n).map_err(|_| LcError::ParseError)?;
+		let items = iter.take(size).try_fold(Vec::new(), |mut acc, item| {
+			item.map(|(key, value)| {
+				let lt_item = LtItem::from_raw(key, value);
+				acc.push(lt_item);
+				acc
+			})
+			.map_err(|e| LcError::DbError(e))
 		});
 
 		items
 	}
 
-	fn delete_batch(updates_db: &DB, items: Vec<LtItem>) {
+	fn delete_batch(updates_db: &DB, items: Vec<LtItem>) -> Result<(), LcError> {
 		let mut batch = WriteBatch::default();
 		items.iter().for_each(|x| {
 			batch.delete(x.key_bytes());
 		});
-		updates_db.write(batch).unwrap();
+		updates_db.write(batch).map_err(|e| LcError::DbError(e))?;
+		Ok(())
 	}
 }
 
@@ -127,8 +135,8 @@ impl LinearCombiner for LinearCombinerService {
 		}
 
 		for term in terms {
-			let x = Self::get_index(&main_db, term.from.clone(), &mut offset);
-			let y = Self::get_index(&main_db, term.to.clone(), &mut offset);
+			let x = Self::get_index(&main_db, term.from.clone(), &mut offset).unwrap();
+			let y = Self::get_index(&main_db, term.to.clone(), &mut offset).unwrap();
 			let domain = term.domain.to_be_bytes();
 			let form = term.form.to_be_bytes();
 
@@ -138,15 +146,7 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
 
-			Self::update_value(&main_db, &updates_db, key.clone(), term.weight);
-
-			let value = Self::get_value(&main_db, &key);
-			println!(
-				"LtItem({:?}, {:?}, {:?})",
-				u32::from_be_bytes(x.try_into().unwrap()),
-				u32::from_be_bytes(y.try_into().unwrap()),
-				value
-			);
+			Self::update_value(&main_db, &updates_db, key.clone(), term.weight).unwrap();
 		}
 
 		Self::write_checkpoint(&main_db, offset).unwrap();
@@ -159,7 +159,7 @@ impl LinearCombiner for LinearCombinerService {
 	) -> Result<Response<Self::GetNewDataStream>, Status> {
 		let batch = request.into_inner();
 		let updates_db = DB::open_default(&self.updates_db).unwrap();
-		let items = Self::read_batch(&updates_db, batch.size);
+		let items = Self::read_batch(&updates_db, batch.size).unwrap();
 
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
@@ -167,7 +167,7 @@ impl LinearCombiner for LinearCombinerService {
 			tx.send(Ok(x_obj)).await.unwrap();
 		}
 
-		Self::delete_batch(&updates_db, items);
+		Self::delete_batch(&updates_db, items).unwrap();
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -237,7 +237,7 @@ mod test {
 		let source = "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
 		let mut offset = 0;
 
-		let index = LinearCombinerService::get_index(&main_db, source, &mut offset);
+		let index = LinearCombinerService::get_index(&main_db, source, &mut offset).unwrap();
 
 		let mut bytes = [0; 4];
 		bytes.copy_from_slice(&index);
@@ -253,9 +253,9 @@ mod test {
 		let key = vec![0; 8];
 		let weight = 50;
 
-		let prev_value = LinearCombinerService::get_value(&main_db, &key);
-		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight);
-		let value = LinearCombinerService::get_value(&main_db, &key);
+		let prev_value = LinearCombinerService::get_value(&main_db, &key).unwrap();
+		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight).unwrap();
+		let value = LinearCombinerService::get_value(&main_db, &key).unwrap();
 
 		assert_eq!(value, prev_value + weight);
 	}
@@ -267,16 +267,16 @@ mod test {
 		let key = vec![0; 8];
 		let weight = 50u32;
 
-		let prev_value = LinearCombinerService::get_value(&main_db, &key);
-		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight);
+		let prev_value = LinearCombinerService::get_value(&main_db, &key).unwrap();
+		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight).unwrap();
 
 		let org_items =
 			vec![LtItem::from_raw(key.clone(), (weight + prev_value).to_be_bytes().to_vec())];
-		let items = LinearCombinerService::read_batch(&updates_db, 1);
+		let items = LinearCombinerService::read_batch(&updates_db, 1).unwrap();
 		assert_eq!(items, org_items);
 
-		LinearCombinerService::delete_batch(&updates_db, items);
-		let items = LinearCombinerService::read_batch(&updates_db, 1);
+		LinearCombinerService::delete_batch(&updates_db, items).unwrap();
+		let items = LinearCombinerService::read_batch(&updates_db, 1).unwrap();
 		assert_eq!(items, Vec::new());
 	}
 }
