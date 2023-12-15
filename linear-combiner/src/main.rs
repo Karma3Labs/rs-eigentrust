@@ -52,17 +52,17 @@ impl LinearCombinerService {
 		Ok(())
 	}
 
-	fn get_index(db: &DB, source: String, offset: &mut u32) -> Vec<u8> {
+	fn get_index(db: &DB, source: String, offset: &mut u32) -> [u8; 4] {
 		let key = hex::decode(source).unwrap();
 		let source_index = db.get(&key).unwrap();
 
 		let x = if let Some(from_i) = source_index {
-			from_i
+			from_i.try_into().unwrap()
 		} else {
 			let curr_offset = offset.to_be_bytes();
 			db.put(&key, curr_offset).unwrap();
 			*offset += 1;
-			curr_offset.to_vec()
+			curr_offset
 		};
 
 		x
@@ -129,8 +129,12 @@ impl LinearCombiner for LinearCombinerService {
 		for term in terms {
 			let x = Self::get_index(&main_db, term.from.clone(), &mut offset);
 			let y = Self::get_index(&main_db, term.to.clone(), &mut offset);
+			let domain = term.domain.to_be_bytes();
+			let form = term.form.to_be_bytes();
 
 			let mut key = Vec::new();
+			key.extend_from_slice(&domain);
+			key.extend_from_slice(&form);
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
 
@@ -174,16 +178,21 @@ impl LinearCombiner for LinearCombinerService {
 		let batch = request.into_inner();
 		let main_db = DB::open_default(&self.main_db).unwrap();
 
+		let domain_bytes = batch.domain.to_be_bytes();
+		let form_bytes = batch.form.to_be_bytes();
 		let x_bytes = batch.x.to_be_bytes();
 
 		let y_start = batch.y.clone();
 		let y_end = batch.y + batch.size;
 
 		let mut items = Vec::new();
-		(y_start as usize..y_end as usize).into_iter().for_each(|x| {
+		(y_start as usize..y_end as usize).into_iter().for_each(|y| {
 			let mut key = Vec::new();
+			key.extend_from_slice(&domain_bytes);
+			key.extend_from_slice(&form_bytes);
 			key.extend_from_slice(&x_bytes);
-			key.extend_from_slice(&x.to_be_bytes());
+			key.extend_from_slice(&y.to_be_bytes());
+
 			let item_res = main_db.get(key.clone());
 			if let Ok(Some(value)) = item_res {
 				let let_item = LtItem::from_raw(key, value);

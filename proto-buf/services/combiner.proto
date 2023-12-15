@@ -15,9 +15,11 @@ message LtBatch {
 }
 
 message LtHistoryBatch {
-    uint32 x = 1;
-    uint32 y = 2;
-    uint32 size = 3;
+    uint32 domain = 1;
+    transformer.Form form = 2;
+    uint32 x = 3;
+    uint32 y = 4;
+    uint32 size = 5;
 }
 
 message LtObject {
