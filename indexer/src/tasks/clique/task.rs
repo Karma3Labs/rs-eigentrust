@@ -13,13 +13,13 @@ pub use crate::clients::types::{ EVMLogsClient };
 pub use crate::clients::clique::client::{ CliqueClient };
 pub use crate::clients::clique::types::{ EVMIndexerConfig };
 
-pub use crate::tasks::types::{ BaseTask };
+pub use crate::tasks::types::{ BaseTask, BaseTaskState };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CliqueTaskState {
     from_block: u64,
     range: u64,
-    is_synced: bool,
+    global: BaseTaskState,
 }
 
 pub struct CliqueTask {
@@ -34,11 +34,17 @@ impl CliqueTask {
         let from_block = config.from_block;
         let range = 100;
         let is_synced = false;
+        let is_finished = false;
+
+        let global = BaseTaskState {
+            is_synced,
+            is_finished,
+        };
 
         let state = CliqueTaskState {
             from_block,
             range,
-            is_synced,
+            global,
         };
 
         debug!("Clique task created");
@@ -75,8 +81,10 @@ impl BaseTask for CliqueTask {
 
         // todo set to actual last synced block
         let from_block_new = self.state.from_block + self.state.range;
+        
         let new_state = CliqueTaskState {
             from_block: from_block_new,
+            global: self.state.global.clone(),
             ..self.state
         };
 
@@ -101,8 +109,8 @@ impl BaseTask for CliqueTask {
         id
     }
 
-    fn get_is_synced(&self) -> bool {
-        self.state.is_synced
+    fn get_state(&self) -> BaseTaskState {
+        self.state.global.clone()
     }
 
     fn get_state_dump(&self) -> String {

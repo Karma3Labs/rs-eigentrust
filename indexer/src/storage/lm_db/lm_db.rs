@@ -6,6 +6,7 @@ use super::types::{ LMDBClientConfig };
 use crate::storage::types::{ BaseKVStorage };
 
 // todo change string to bytes?
+#[derive(Clone)]
 pub struct LMDBClient {
     db: Database<Str, Str>,
     env: heed::Env,

@@ -1,7 +1,7 @@
 use dotenv::dotenv;
 use std::env;
 use tracing::{ Level };
-use crate::frontends::grpc_server::types::{ GRPCServerConfig };
+use crate::frontends::api::grpc_server::types::{ GRPCServerConfig };
 use crate::clients::clique::types::{ EVMIndexerConfig };
 use crate::storage::lm_db::types::{ LMDBClientConfig };
 
