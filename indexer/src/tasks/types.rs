@@ -12,6 +12,9 @@ pub trait BaseTask {
     // get job id
     fn get_id(&self) -> String;
 
+    // if job finished
+    fn get_is_finished(&self) -> bool;
+
     // get serialized state to store to a db
     fn get_state_dump(&self) -> String;
 }
@@ -20,4 +23,5 @@ pub trait BaseTask {
 pub struct BaseTaskState {
     pub is_finished: bool,
     pub is_synced: bool,
+    // last_update
 }

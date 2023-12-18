@@ -41,10 +41,10 @@ async fn main() {
     let csv_client = CSVClient::new(csv_client_config);
     let csv_poc_task = CSVPOCTask::new(csv_client);
 
-    let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
-    task_service.run().await;
+    // let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
+    // task_service.run().await;
 
-    /*
+    
     let client_config = config.evm_indexer_config.clone();
     let client = CliqueClient::new(client_config);
 
@@ -53,10 +53,11 @@ async fn main() {
 
 
     let mut task_service = TaskService::new(Box::new(clique_task), Box::new(db));
-    task_service.run().await;
+    // task_service.run().await;
 
     let grpc_server_config = config.grpc_server_config;
-    let server = GRPCServer::new(grpc_server_config, task_service);
+    let mut server = GRPCServer::new(grpc_server_config, task_service);
     server.serve().await;
-     */
+     
+    
 }

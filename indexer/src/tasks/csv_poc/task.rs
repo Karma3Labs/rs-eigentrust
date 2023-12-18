@@ -1,17 +1,12 @@
 use tracing::{ info, debug };
-
 use std::time::Duration;
-
 use digest::Digest;
 use sha3::Sha3_256;
 use hex;
 use serde::{ Serialize, Deserialize };
 use serde_json;
 
-pub use crate::clients::types::{ EVMLogsClient };
-// todo change to EVMLogsClient, make threadsafe
 pub use crate::clients::csv::client::{ CSVClient };
-
 pub use crate::tasks::types::{ BaseTask, BaseTaskState };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -91,8 +86,8 @@ impl BaseTask for CSVPOCTask {
         duration
     }
 
-    // todo filename
     fn get_id(&self) -> String {
+        // todo filename
         let data = format!("{}", "file");
         let mut hasher = Sha3_256::new();
         hasher.update(data.as_bytes());
@@ -105,6 +100,10 @@ impl BaseTask for CSVPOCTask {
 
     fn get_state(&self) -> BaseTaskState {
         self.state.global.clone()
+    }
+
+    fn get_is_finished(&self) -> bool {
+        self.state.global.is_finished
     }
 
     fn get_state_dump(&self) -> String {

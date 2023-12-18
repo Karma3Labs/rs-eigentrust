@@ -15,7 +15,7 @@ pub struct TaskService {
 impl TaskService {
     pub fn new(task: Box<dyn BaseTask>, db: Box<dyn BaseKVStorage>) -> Self {
         let task_id = task.get_id();
-
+        // todo pass to a task
         let restored_state = db.get(task_id.as_str()).unwrap_or("{}".to_string());
         info!("Job created id={}, state={}", task_id, restored_state);
         TaskService { task, db }

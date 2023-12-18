@@ -4,5 +4,6 @@ pub trait EVMLogsClient {
         &self,
         from: Option<u64>,
         range: Option<u64>
+        // todo add type
     ) -> Vec<String>;
 }

@@ -1,11 +1,7 @@
 use csv::{ ReaderBuilder, StringRecord };
 use std::error::Error;
 use std::fs::File;
-
 use tracing::{ debug };
-
-
-
 use eyre::Result;
 
 pub use crate::clients::types::{ EVMLogsClient };
@@ -32,7 +28,7 @@ impl CSVClient {
         let offset = from.unwrap_or(0);
         let limit = range.unwrap_or(DEFAULT_OFFSET);
         let mut csv_reader = ReaderBuilder::new()
-            .delimiter(b',') // Specify the delimiter (comma in this case)
+            .delimiter(b',') 
             .from_reader(file);
 
         // todo ? skip records

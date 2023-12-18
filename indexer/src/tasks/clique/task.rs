@@ -113,6 +113,10 @@ impl BaseTask for CliqueTask {
         self.state.global.clone()
     }
 
+    fn get_is_finished(&self) -> bool {
+        self.state.global.is_finished
+    }
+
     fn get_state_dump(&self) -> String {
         let json_string = serde_json::to_string(&self.state).expect("Failed to serialize to JSON");
         json_string

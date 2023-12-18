@@ -61,11 +61,12 @@ impl GRPCServer {
         GRPCServer { config, task_service }
     }
 
-    pub async fn serve(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn serve(&mut self) -> Result<(), Box<dyn Error>> {
         let address = format!("{}{}", "[::1]:", self.config.port.to_string()).parse()?;
+        info!("GRPC server is starting at {}", address);
+        self.task_service.run().await;
+
         Server::builder().add_service(IndexerServer::new(IndexerService {})).serve(address).await?;
-        
-        info!("GRPC server started at {}", address);
         Ok(())
     }
 }
