@@ -89,8 +89,9 @@ impl LinearCombinerService {
 		Ok(())
 	}
 
-	fn read_batch(updates_db: &DB, n: u32) -> Result<Vec<LtItem>, LcError> {
-		let iter = updates_db.iterator(IteratorMode::Start);
+	fn read_batch(updates_db: &DB, prefix: Vec<u8>, n: u32) -> Result<Vec<LtItem>, LcError> {
+		let mut iter = updates_db.prefix_iterator(prefix);
+		iter.set_mode(IteratorMode::Start);
 
 		let size = usize::try_from(n).map_err(|_| LcError::ParseError)?;
 		let items = iter.take(size).try_fold(Vec::new(), |mut acc, item| {
@@ -112,6 +113,23 @@ impl LinearCombinerService {
 		});
 		updates_db.write(batch).map_err(|e| LcError::DbError(e))?;
 		Ok(())
+	}
+
+	fn read_window(main_db: &DB, prefix: Vec<u8>, p0: (u32, u32), p1: (u32, u32)) -> Vec<LtItem> {
+		let mut items = Vec::new();
+		(p0.0..=p1.0).zip(p0.1..=p1.1).into_iter().for_each(|(x, y)| {
+			let mut key = Vec::new();
+			key.extend_from_slice(&prefix);
+			key.extend_from_slice(&x.to_be_bytes());
+			key.extend_from_slice(&y.to_be_bytes());
+
+			let item_res = main_db.get(key.clone());
+			if let Ok(Some(value)) = item_res {
+				let let_item = LtItem::from_raw(key, value);
+				items.push(let_item);
+			}
+		});
+		items
 	}
 }
 
@@ -165,7 +183,12 @@ impl LinearCombiner for LinearCombinerService {
 		let batch = request.into_inner();
 		let updates_db = DB::open_default(&self.updates_db)
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
-		let items = Self::read_batch(&updates_db, batch.size).map_err(|e| e.into_status())?;
+
+		let mut prefix = Vec::new();
+		prefix.extend_from_slice(&batch.domain.to_be_bytes());
+		prefix.extend_from_slice(&batch.form.to_be_bytes());
+		let items =
+			Self::read_batch(&updates_db, prefix, batch.size).map_err(|e| e.into_status())?;
 
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
@@ -187,27 +210,26 @@ impl LinearCombiner for LinearCombinerService {
 		let main_db = DB::open_default(&self.main_db)
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
+		let is_x_bigger = batch.x0 <= batch.x1;
+		let is_y_bigger = batch.y0 <= batch.y1;
+		if !is_x_bigger && !is_y_bigger {
+			return Err(Status::invalid_argument("Invalid points!"));
+		}
+
 		let domain_bytes = batch.domain.to_be_bytes();
 		let form_bytes = batch.form.to_be_bytes();
-		let x_bytes = batch.x.to_be_bytes();
 
-		let y_start = batch.y.clone();
-		let y_end = batch.y + batch.size;
+		let x_start = batch.x0;
+		let x_end = batch.x1;
 
-		let mut items = Vec::new();
-		(y_start as usize..y_end as usize).into_iter().for_each(|y| {
-			let mut key = Vec::new();
-			key.extend_from_slice(&domain_bytes);
-			key.extend_from_slice(&form_bytes);
-			key.extend_from_slice(&x_bytes);
-			key.extend_from_slice(&y.to_be_bytes());
+		let y_start = batch.y0;
+		let y_end = batch.y1;
 
-			let item_res = main_db.get(key.clone());
-			if let Ok(Some(value)) = item_res {
-				let let_item = LtItem::from_raw(key, value);
-				items.push(let_item);
-			}
-		});
+		let mut prefix = Vec::new();
+		prefix.extend_from_slice(&domain_bytes);
+		prefix.extend_from_slice(&form_bytes);
+
+		let items = Self::read_window(&main_db, prefix, (x_start, y_start), (x_end, y_end));
 
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
@@ -275,6 +297,7 @@ mod test {
 	fn should_read_delete_batch() {
 		let main_db = DB::open_default("lc-rd-items-test-storage").unwrap();
 		let updates_db = DB::open_default("lc-rd-updates-test-storage").unwrap();
+		let prefix = vec![0; 8];
 		let key = vec![0; 8];
 		let weight = 50u32;
 
@@ -283,11 +306,48 @@ mod test {
 
 		let org_items =
 			vec![LtItem::from_raw(key.clone(), (weight + prev_value).to_be_bytes().to_vec())];
-		let items = LinearCombinerService::read_batch(&updates_db, 1).unwrap();
+		let items = LinearCombinerService::read_batch(&updates_db, prefix.clone(), 1).unwrap();
 		assert_eq!(items, org_items);
 
 		LinearCombinerService::delete_batch(&updates_db, items).unwrap();
-		let items = LinearCombinerService::read_batch(&updates_db, 1).unwrap();
+		let items = LinearCombinerService::read_batch(&updates_db, prefix, 1).unwrap();
 		assert_eq!(items, Vec::new());
+	}
+
+	#[test]
+	fn should_read_window() {
+		let main_db = DB::open_default("lc-rdw-items-test-storage").unwrap();
+		let updates_db = DB::open_default("lc-rdw-updates-test-storage").unwrap();
+		let prefix = vec![0; 8];
+
+		let x1: u32 = 0;
+		let y1: u32 = 0;
+
+		let x2: u32 = 1;
+		let y2: u32 = 1;
+
+		let weight = 50u32;
+
+		let mut key1 = Vec::new();
+		key1.extend_from_slice(&prefix);
+		key1.extend_from_slice(&x1.to_be_bytes());
+		key1.extend_from_slice(&y1.to_be_bytes());
+
+		let mut key2 = Vec::new();
+		key2.extend_from_slice(&prefix);
+		key2.extend_from_slice(&x2.to_be_bytes());
+		key2.extend_from_slice(&y2.to_be_bytes());
+
+		let prev_value1 = LinearCombinerService::get_value(&main_db, &key1).unwrap();
+		let prev_value2 = LinearCombinerService::get_value(&main_db, &key2).unwrap();
+		LinearCombinerService::update_value(&main_db, &updates_db, key1.clone(), weight).unwrap();
+		LinearCombinerService::update_value(&main_db, &updates_db, key2.clone(), weight).unwrap();
+		let new_item1 = LtItem::new(x1, y1, prev_value1 + weight);
+		let new_item2 = LtItem::new(x2, y2, prev_value2 + weight);
+		let new_items = vec![new_item1, new_item2];
+
+		let items = LinearCombinerService::read_window(&main_db, prefix, (x1, y1), (x2, y2));
+
+		assert_eq!(new_items, items);
 	}
 }

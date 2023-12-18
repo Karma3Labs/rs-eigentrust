@@ -24,7 +24,7 @@ impl LtItem {
 	}
 
 	pub fn from_raw<I: AsRef<[u8]>>(key: I, value: I) -> Self {
-		let mut key_bytes = [0; 8];
+		let mut key_bytes = [0; 16];
 		key_bytes.copy_from_slice(key.as_ref());
 
 		let mut value_bytes = [0; 4];
@@ -32,8 +32,8 @@ impl LtItem {
 
 		let mut x_bytes = [0; 4];
 		let mut y_bytes = [0; 4];
-		x_bytes.copy_from_slice(&key_bytes[..4]);
-		y_bytes.copy_from_slice(&key_bytes[4..]);
+		x_bytes.copy_from_slice(&key_bytes[8..12]);
+		y_bytes.copy_from_slice(&key_bytes[12..]);
 
 		let x = u32::from_be_bytes(x_bytes);
 		let y = u32::from_be_bytes(y_bytes);
