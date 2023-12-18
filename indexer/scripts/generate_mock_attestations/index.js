@@ -30,10 +30,7 @@ const createEndorsementSchema = async ({
     const attestationDetails = type === 'DisputeCredential'
         ? {
             currentStatus: "Disputed",
-            statusReason: {
-                value: "Suspicious activities",
-                lang: "en"
-            }
+            statusReason: "None"
         }
         : { currentStatus: "Endorsed" }
 
@@ -46,9 +43,20 @@ const createEndorsementSchema = async ({
         },
     }
 
-    const schemaPayloadSerialized = JSON.stringify(schemaPayload)
-    const hash = ethers.hashMessage(schemaPayloadSerialized)
-    const signature = await wallet.signMessage(hash)
+    const issuerBytes = ethers.getBytes(wallet.address)
+    const currentStatusBytes = attestationDetails.currentStatus === 'Endorsed'
+        ? new Uint8Array([0x01])
+        : new Uint8Array([0x00])
+
+    const keccak256Hash = ethers.keccak256(
+        ethers.concat([
+            new Uint8Array([0x00]), // stands for pkh:eth
+            ethers.getBytes(issuerBytes),
+            ethers.getBytes(currentStatusBytes)
+        ])
+    )
+
+    const signature = await wallet.signMessage(keccak256Hash)
 
     const schema = {
         ...schemaPayload,
