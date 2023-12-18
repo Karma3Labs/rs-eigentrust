@@ -106,10 +106,13 @@ impl LinearCombinerService {
 		items
 	}
 
-	fn delete_batch(updates_db: &DB, items: Vec<LtItem>) -> Result<(), LcError> {
+	fn delete_batch(updates_db: &DB, prefix: Vec<u8>, items: Vec<LtItem>) -> Result<(), LcError> {
 		let mut batch = WriteBatch::default();
 		items.iter().for_each(|x| {
-			batch.delete(x.key_bytes());
+			let mut key = Vec::new();
+			key.extend_from_slice(&prefix);
+			key.extend_from_slice(&x.key_bytes());
+			batch.delete(key);
 		});
 		updates_db.write(batch).map_err(|e| LcError::DbError(e))?;
 		Ok(())
@@ -187,8 +190,8 @@ impl LinearCombiner for LinearCombinerService {
 		let mut prefix = Vec::new();
 		prefix.extend_from_slice(&batch.domain.to_be_bytes());
 		prefix.extend_from_slice(&batch.form.to_be_bytes());
-		let items =
-			Self::read_batch(&updates_db, prefix, batch.size).map_err(|e| e.into_status())?;
+		let items = Self::read_batch(&updates_db, prefix.clone(), batch.size)
+			.map_err(|e| e.into_status())?;
 
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
@@ -198,7 +201,7 @@ impl LinearCombiner for LinearCombinerService {
 			}
 		}
 
-		Self::delete_batch(&updates_db, items).map_err(|e| e.into_status())?;
+		Self::delete_batch(&updates_db, prefix, items).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -298,7 +301,7 @@ mod test {
 		let main_db = DB::open_default("lc-rd-items-test-storage").unwrap();
 		let updates_db = DB::open_default("lc-rd-updates-test-storage").unwrap();
 		let prefix = vec![0; 8];
-		let key = vec![0; 8];
+		let key = vec![0; 16];
 		let weight = 50u32;
 
 		let prev_value = LinearCombinerService::get_value(&main_db, &key).unwrap();
@@ -309,7 +312,7 @@ mod test {
 		let items = LinearCombinerService::read_batch(&updates_db, prefix.clone(), 1).unwrap();
 		assert_eq!(items, org_items);
 
-		LinearCombinerService::delete_batch(&updates_db, items).unwrap();
+		LinearCombinerService::delete_batch(&updates_db, prefix.clone(), items).unwrap();
 		let items = LinearCombinerService::read_batch(&updates_db, prefix, 1).unwrap();
 		assert_eq!(items, Vec::new());
 	}
