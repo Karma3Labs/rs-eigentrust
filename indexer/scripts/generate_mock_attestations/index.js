@@ -31,8 +31,8 @@ const createEndorsementSchema = async ({
         ? {
             currentStatus: "Disputed",
             statusReason: {
-                "value": "Suspicious activities",
-                "lang": "en"
+                value: "Suspicious activities",
+                lang: "en"
             }
         }
         : { currentStatus: "Endorsed" }
@@ -45,7 +45,6 @@ const createEndorsementSchema = async ({
             ...attestationDetails
         },
     }
-
 
     const schemaPayloadSerialized = JSON.stringify(schemaPayload)
     const hash = ethers.hashMessage(schemaPayloadSerialized)
@@ -62,9 +61,10 @@ const createEndorsementSchema = async ({
 const saveAttestationsToCSV = attestations => {
     const filename = 'output.csv'
 
-    const csvData = attestations
+    // https://github.com/Karma3Labs/rs-eigentrust/blob/indexer/proto-buf/services/indexer.proto#L15-L19
+    const CSVData = attestations
         .map((a, i) => {
-            const id = (i + 1).toString(16)
+            const id = '0x' + (i + 1).toString(16)
             const schema_id = '0x1'
             const schema_value = JSON.stringify(a)
             const timestamp = Date.now().toString()
@@ -73,14 +73,15 @@ const saveAttestationsToCSV = attestations => {
         })
         .map(row => row.join(',')).join('\n')
 
-    fs.writeFileSync(filename, csvData, 'utf8')
-    console.log(`${attestations.length} results saved to ${filename}`)
+    fs.writeFileSync(filename, CSVData, 'utf8')
+    console.log(`${attestations.length} attestations saved to ${filename}`)
 }
 
 (async () => {
     const wallets = Array.from({ length: walletsCount }).map(() => {
         const mnemonic = ethers.Mnemonic.fromEntropy(ethers.randomBytes(32))
         const wallet = ethers.Wallet.fromPhrase(mnemonic.phrase)
+
         return wallet
     })
 
