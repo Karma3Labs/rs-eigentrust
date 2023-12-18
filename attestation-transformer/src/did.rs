@@ -2,7 +2,7 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::error::AttTrError;
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub enum Schema {
 	Pkh,
 }
@@ -48,5 +48,27 @@ impl Into<String> for Did {
 		let did_string = format!("did:{}:{}", schema, pkh);
 
 		did_string
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use crate::did::Schema;
+
+	use super::Did;
+
+	#[test]
+	fn test_did_parsing() {
+		let did_string = "did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
+		let did = Did::parse(did_string.clone()).unwrap();
+		assert_eq!(did.schema, Schema::Pkh);
+		assert_eq!(
+			did.key,
+			hex::decode("90f8bf6a479f320ead074411a4b0e7944ea8c9c2").unwrap()
+		);
+
+		let did_new_string: String = did.into();
+
+		assert_eq!(did_string, did_new_string);
 	}
 }
