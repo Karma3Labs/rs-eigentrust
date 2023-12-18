@@ -123,10 +123,12 @@ impl LinearCombiner for LinearCombinerService {
 	async fn sync_transformer(
 		&self, request: Request<Streaming<TermObject>>,
 	) -> Result<Response<Void>, Status> {
-		let main_db = DB::open_default(&self.main_db).unwrap();
-		let updates_db = DB::open_default(&self.updates_db).unwrap();
+		let main_db = DB::open_default(&self.main_db)
+			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+		let updates_db = DB::open_default(&self.updates_db)
+			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let mut offset = Self::read_checkpoint(&main_db).unwrap();
+		let mut offset = Self::read_checkpoint(&main_db).map_err(|e| e.into_status())?;
 
 		let mut terms = Vec::new();
 		let mut stream = request.into_inner();
@@ -135,8 +137,10 @@ impl LinearCombiner for LinearCombinerService {
 		}
 
 		for term in terms {
-			let x = Self::get_index(&main_db, term.from.clone(), &mut offset).unwrap();
-			let y = Self::get_index(&main_db, term.to.clone(), &mut offset).unwrap();
+			let x = Self::get_index(&main_db, term.from.clone(), &mut offset)
+				.map_err(|e| e.into_status())?;
+			let y = Self::get_index(&main_db, term.to.clone(), &mut offset)
+				.map_err(|e| e.into_status())?;
 			let domain = term.domain.to_be_bytes();
 			let form = term.form.to_be_bytes();
 
@@ -146,10 +150,11 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
 
-			Self::update_value(&main_db, &updates_db, key.clone(), term.weight).unwrap();
+			Self::update_value(&main_db, &updates_db, key.clone(), term.weight)
+				.map_err(|e| e.into_status())?;
 		}
 
-		Self::write_checkpoint(&main_db, offset).unwrap();
+		Self::write_checkpoint(&main_db, offset).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(Void {}))
 	}
@@ -158,16 +163,19 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<LtBatch>,
 	) -> Result<Response<Self::GetNewDataStream>, Status> {
 		let batch = request.into_inner();
-		let updates_db = DB::open_default(&self.updates_db).unwrap();
-		let items = Self::read_batch(&updates_db, batch.size).unwrap();
+		let updates_db = DB::open_default(&self.updates_db)
+			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+		let items = Self::read_batch(&updates_db, batch.size).map_err(|e| e.into_status())?;
 
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
 			let x_obj: LtObject = x.into();
-			tx.send(Ok(x_obj)).await.unwrap();
+			if let Err(e) = tx.send(Ok(x_obj)).await {
+				e.0?;
+			}
 		}
 
-		Self::delete_batch(&updates_db, items).unwrap();
+		Self::delete_batch(&updates_db, items).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -176,7 +184,8 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<LtHistoryBatch>,
 	) -> Result<Response<Self::GetHistoricDataStream>, Status> {
 		let batch = request.into_inner();
-		let main_db = DB::open_default(&self.main_db).unwrap();
+		let main_db = DB::open_default(&self.main_db)
+			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let domain_bytes = batch.domain.to_be_bytes();
 		let form_bytes = batch.form.to_be_bytes();
@@ -203,7 +212,9 @@ impl LinearCombiner for LinearCombinerService {
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
 			let x_obj: LtObject = x.into();
-			tx.send(Ok(x_obj)).await.unwrap();
+			if let Err(e) = tx.send(Ok(x_obj)).await {
+				e.0?;
+			}
 		}
 
 		Ok(Response::new(ReceiverStream::new(rx)))
