@@ -11,13 +11,18 @@ service LinearCombiner {
 }
 
 message LtBatch {
-    uint32 size = 2;
+    uint32 domain = 1;
+    transformer.Form form = 2;
+    uint32 size = 3;
 }
 
 message LtHistoryBatch {
-    uint32 x = 1;
-    uint32 y = 2;
-    uint32 size = 3;
+    uint32 domain = 1;
+    transformer.Form form = 2;
+    uint32 x0 = 3;
+    uint32 y0 = 4;
+    uint32 x1 = 5;
+    uint32 y1 = 6;
 }
 
 message LtObject {
