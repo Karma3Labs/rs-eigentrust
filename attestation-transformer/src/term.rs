@@ -114,7 +114,7 @@ impl Into<TermObject> for Term {
 }
 
 pub trait Validation {
-	fn validate(&self) -> Result<(PublicKey, Did, bool), AttTrError>;
+	fn validate(&self) -> Result<(PublicKey, Did), AttTrError>;
 }
 
 pub trait IntoTerm: Validation {
