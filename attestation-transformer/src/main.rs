@@ -4,7 +4,7 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{TermBatch, TermObject};
-use rocksdb::DB;
+use rocksdb::{WriteBatch, DB};
 use schemas::{AuditApproveSchema, AuditDisapproveSchema, FollowSchema, SchemaType};
 use serde_json::from_str;
 use std::error::Error;
@@ -14,6 +14,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
 
+mod did;
 mod error;
 mod schemas;
 mod term;
@@ -71,7 +72,7 @@ impl TransformerService {
 		Ok(terms)
 	}
 
-	fn write_term(db: &DB, event: IndexerEvent) -> Result<(), AttTrError> {
+	fn parse_event(event: IndexerEvent) -> Result<(u32, Term), AttTrError> {
 		let schema_id = event.schema_id;
 		let schema_type = SchemaType::from(schema_id);
 		let term = match schema_type {
@@ -92,11 +93,17 @@ impl TransformerService {
 			},
 		};
 
-		println!("{:?}", term);
-		let term_bytes = term.into_bytes()?;
-		let id = event.id.to_be_bytes();
-		db.put(id, &term_bytes).map_err(|_| AttTrError::ParseError)?;
-		Ok(())
+		Ok((event.id, term))
+	}
+
+	fn write_terms(db: &DB, terms: Vec<(u32, Term)>) -> Result<(), AttTrError> {
+		let mut batch = WriteBatch::default();
+		for (id, term) in terms {
+			let term_bytes = term.into_bytes()?;
+			let id = id.to_be_bytes();
+			batch.put(id, term_bytes);
+		}
+		db.write(batch).map_err(|e| AttTrError::DbError(e))
 	}
 }
 
@@ -121,13 +128,17 @@ impl Transformer for TransformerService {
 		let mut client = IndexerClient::new(self.channel.clone());
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
 		let mut count = offset;
+		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
 			assert!(res.id == count);
-			Self::write_term(&db, res).map_err(|_| Status::internal("Failed to write term"))?;
+			let term =
+				Self::parse_event(res).map_err(|_| Status::internal("Failed to parse event"))?;
+			terms.push(term);
 			count += 1;
 		}
 
+		Self::write_terms(&db, terms).map_err(|_| Status::internal("Failed to write terms"))?;
 		Self::write_checkpoint(&db, count)
 			.map_err(|_| Status::internal("Failed to write checkpoint"))?;
 
@@ -198,7 +209,7 @@ mod test {
 		let db = DB::open_default("att-tr-terms-test-storage").unwrap();
 
 		let follow_schema = FollowSchema::new(
-			"90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
+			"did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
 			true,
 			Scope::Auditor,
 		);
@@ -208,7 +219,8 @@ mod test {
 			schema_value: to_string(&follow_schema).unwrap(),
 			timestamp: 2397848,
 		};
-		TransformerService::write_term(&db, indexed_event).unwrap();
+		let term = TransformerService::parse_event(indexed_event).unwrap();
+		TransformerService::write_terms(&db, vec![term]).unwrap();
 
 		let term_batch = TermBatch { start: 0, size: 1 };
 		let terms = TransformerService::read_terms(&db, term_batch).unwrap();
