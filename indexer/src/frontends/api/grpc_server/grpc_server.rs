@@ -12,18 +12,6 @@ use crate::tasks::types::{ TaskResponse };
 use std::sync::{ Arc, Mutex };
 use std::cmp;
 
-const FOLLOW_MOCK: &str =
-    "{
-    \"id\": \"0x0\",
-    \"is_trustworthy\": true,
-    \"scope\": \"Reviewer\",
-    \"sig\": [
-        0,
-        [165, 27, 231, 102, 0, 210, 165, 235, 176, 250, 84, 181, 240, 246, 182, 135, 85, 181, 106, 145, 41, 107, 207, 81, 49, 37, 133, 183, 171, 151, 67, 67],
-        [116, 33, 248, 224, 110, 187, 80, 139, 81, 22, 199, 37, 68, 255, 180, 55, 159, 59, 232, 70, 206, 232, 38, 165, 54, 233, 19, 31, 57, 139, 186, 54]
-    ]
-}";
-
 pub struct IndexerService {
     data: Vec<TaskResponse>,
 }
@@ -63,7 +51,7 @@ impl Indexer for IndexerService {
 
                 let event = IndexerEvent {
                     id: i + 1,
-                    schema_id: 1,
+                    schema_id: 4,
                     schema_value: record.data,
                     timestamp: current_secs,
                 };
