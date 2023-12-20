@@ -1,9 +1,11 @@
 use std::time::Duration;
 use serde::{ Serialize, Deserialize };
 
+// todo better layer separation
 #[tonic::async_trait]
 pub trait BaseTask { 
-    async fn run(&mut self);
+    // todo offset and limit are tmp args for POC, remove after
+    async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse>;
 
     fn get_sleep_interval(&self) -> Duration;
 
@@ -19,9 +21,20 @@ pub trait BaseTask {
     fn get_state_dump(&self) -> String;
 }
 
+// todo, dublicate for proto struct, remove once settled
+// todo rename TaskRecord
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TaskResponse {
+    pub id: usize,
+    pub timestamp: String,
+    pub job_id: String,
+    pub data: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BaseTaskState {
     pub is_finished: bool,
     pub is_synced: bool,
+    pub records_total: usize,
     // last_update
 }

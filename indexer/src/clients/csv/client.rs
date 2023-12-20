@@ -25,13 +25,16 @@ impl CSVClient {
         range: Option<u64>
     ) -> Result<Vec<Result<StringRecord, csv::Error>>, Box<dyn Error>> {
         let file = File::open(&self.config.path)?;
+
         let offset = from.unwrap_or(0);
         let limit = range.unwrap_or(DEFAULT_OFFSET);
+
+        // todo no header
         let mut csv_reader = ReaderBuilder::new()
-            .delimiter(b',') 
+            .delimiter(b';') 
             .from_reader(file);
 
-        // todo ? skip records
+        // todo ??? skip records
         for _ in 0..offset {
             csv_reader.records().next();
         }

@@ -2,9 +2,8 @@ use tracing::{ info };
 use std::thread;
 use std::time::Duration;
 
-pub use crate::tasks::types::{ BaseTask };
+pub use crate::tasks::types::{ BaseTask, TaskResponse };
 use crate::storage::types::BaseKVStorage;
-
 
 pub struct TaskService {
     task: Box<dyn BaseTask>,
@@ -18,6 +17,7 @@ impl TaskService {
         // todo pass to a task
         let restored_state = db.get(task_id.as_str()).unwrap_or("{}".to_string());
         info!("Job created id={}, state={}", task_id, restored_state);
+
         TaskService { task, db }
     }
 
@@ -28,12 +28,13 @@ impl TaskService {
     pub async fn index(&mut self) {
         // todo catch inner level errors
         loop {
-            self.task.run().await;
+            let n: Option<u64> = None;
+            self.task.run(n, n).await;
 
             let task_id = self.task.get_id();
             let task_state = self.task.get_state_dump();
             let _ = self.db.put(task_id.as_str(), task_state.as_str());
-            
+
             let state = self.task.get_state();
 
             if state.is_finished == true {
@@ -49,5 +50,17 @@ impl TaskService {
 
     pub async fn sleep(&self, duration: Duration) {
         thread::sleep(duration);
+    }
+
+    async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {
+        println!("{:?}", data);
+        data
+    }
+
+    // todo tmp shortcut for poc
+    pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskResponse> {
+        let n: Option<u64> = None;
+        let res = self.task.run(n, n).await;
+        res
     }
 }

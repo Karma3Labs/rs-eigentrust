@@ -7,7 +7,7 @@ use serde::{ Serialize, Deserialize };
 use serde_json;
 
 pub use crate::clients::csv::client::{ CSVClient };
-pub use crate::tasks::types::{ BaseTask, BaseTaskState };
+pub use crate::tasks::types::{ BaseTask, BaseTaskState, TaskResponse };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CSVPOCTaskState {
@@ -21,22 +21,21 @@ pub struct CSVPOCTask {
     state: CSVPOCTaskState,
 }
 
+const CSV_COLUMN_INDEX_DATA: usize = 3;
+const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
+
 impl CSVPOCTask {
     pub fn new(client: CSVClient) -> Self {
-        // todo restore prev state
-        let from = 0;
-        let range = 1000;
-        let is_synced = false;
-        let is_finished = false;
-
         let global = BaseTaskState {
-            is_synced,
-            is_finished
+            is_synced: false,
+            is_finished: false,
+            records_total: 0,
         };
 
+        // todo restore prev state
         let state = CSVPOCTaskState {
-            from,
-            range,
+            from: 0,
+            range: 1000,
             global,
         };
 
@@ -54,21 +53,41 @@ impl CSVPOCTask {
 
 #[tonic::async_trait]
 impl BaseTask for CSVPOCTask {
-    async fn run(&mut self) {
-        info!(
-            "Parsing CSV [{}..{}] lines",
-            self.state.from,
-            self.state.from + self.state.range - 1
-        );
+    async fn run(
+        &mut self,
+        offset: Option<u64>,
+        limit: Option<u64>
+    ) -> Vec<TaskResponse> {
+        let from = offset.unwrap_or(self.state.from);
+        let range = limit.unwrap_or(self.state.from + self.state.range);
 
-        let res = self.client.query(Some(self.state.from), Some(self.state.range)).await.unwrap();
+        info!("Parsing CSV [{}..{}] lines", from, range);
 
-        info!("Received {:?} records", res.len());
-        let is_finished = self.state.range > res.len().try_into().unwrap();
+        let records = self.client.query(Some(from), Some(range)).await.unwrap();
+
+        let records_total = records.len();
+        info!("Received {:?} records", records_total);
+
+        let is_finished = self.state.range > records_total.try_into().unwrap();
+
+        let results: Vec<TaskResponse> = records
+            .into_iter()
+            .map(|record| -> TaskResponse {
+                let r = record.unwrap();
+
+                TaskResponse {
+                    timestamp: r.get(CSV_COLUMN_INDEX_TIMESTAMP).unwrap().to_string(),
+                    id: 1,
+                    job_id: "0".to_string(),
+                    data: r.get(CSV_COLUMN_INDEX_DATA).unwrap().to_string(),
+                }
+            })
+            .collect();
 
         let global = BaseTaskState {
             is_synced: is_finished,
-            is_finished
+            is_finished,
+            records_total,
         };
 
         let from_new = self.state.from + self.state.range;
@@ -79,6 +98,8 @@ impl BaseTask for CSVPOCTask {
         };
 
         self.update_state(new_state);
+        
+        results
     }
 
     fn get_sleep_interval(&self) -> Duration {

@@ -8,6 +8,8 @@ use tonic::{ transport::Server, Request, Response, Status };
 
 use super::types::{ GRPCServerConfig };
 use crate::tasks::service::{ TaskService };
+use std::sync::{Arc, Mutex};
+use std::cmp;
 
 const FOLLOW_MOCK: &str =
     "{
@@ -21,15 +23,29 @@ const FOLLOW_MOCK: &str =
     ]
 }";
 
-pub struct IndexerService {}
+pub struct IndexerService {
+    data: Vec<TaskResponse>,
+}
 pub struct GRPCServer {
     config: GRPCServerConfig,
     task_service: TaskService,
 }
 
+/* 
+impl IndexerService {
+    fn new(data: Vec<TaskResponse>) -> Self {
+        IndexerService { data }
+    }
+}
+*/
+
 #[tonic::async_trait]
 impl Indexer for IndexerService {
     type SubscribeStream = ReceiverStream<Result<IndexerEvent, Status>>;
+    fn new(data: Vec<TaskResponse>) -> Self {
+        IndexerService { data }
+    }
+    
     async fn subscribe(
         &self,
         request: Request<Query>
@@ -41,9 +57,14 @@ impl Indexer for IndexerService {
 
         let (tx, rx) = channel(1);
         tokio::spawn(async move {
-            for i in inner.offset..inner.offset + inner.count {
+            let limit = cmp::min(inner.offset + inner.count, self.data.len());
+
+            for i in inner.offset..limit {
+                let record = self.data[i];
+                println!("{:?}", record);
+
                 let event = IndexerEvent {
-                    id: i,
+                    id: 1,
                     schema_id: 1,
                     schema_value: FOLLOW_MOCK.to_string(),
                     timestamp: current_secs,
@@ -66,7 +87,8 @@ impl GRPCServer {
         info!("GRPC server is starting at {}", address);
         self.task_service.run().await;
 
-        Server::builder().add_service(IndexerServer::new(IndexerService {})).serve(address).await?;
+        let data = self.task_service.get_chunk(0, 10000).await;
+        Server::builder().add_service(IndexerServer::new(data)).serve(address).await?;
         Ok(())
     }
 }

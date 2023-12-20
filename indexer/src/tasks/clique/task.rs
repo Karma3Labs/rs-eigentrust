@@ -13,7 +13,7 @@ pub use crate::clients::types::{ EVMLogsClient };
 pub use crate::clients::clique::client::{ CliqueClient };
 pub use crate::clients::clique::types::{ EVMIndexerConfig };
 
-pub use crate::tasks::types::{ BaseTask, BaseTaskState };
+pub use crate::tasks::types::{ BaseTask, BaseTaskState, TaskResponse };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CliqueTaskState {
@@ -24,7 +24,8 @@ pub struct CliqueTaskState {
 
 pub struct CliqueTask {
     config: EVMIndexerConfig,
-    client: CliqueClient,
+    // todo tmp, remove pub
+    pub client: CliqueClient,
     state: CliqueTaskState,
 }
 
@@ -33,12 +34,11 @@ impl CliqueTask {
         // todo restore prev state
         let from_block = config.from_block;
         let range = 100;
-        let is_synced = false;
-        let is_finished = false;
 
         let global = BaseTaskState {
-            is_synced,
-            is_finished,
+            is_synced: false,
+            is_finished: false,
+            records_total: 0,
         };
 
         let state = CliqueTaskState {
@@ -62,7 +62,7 @@ impl CliqueTask {
 
 #[tonic::async_trait]
 impl BaseTask for CliqueTask {
-    async fn run(&mut self) {
+    async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse> {
         info!(
             "Indexing logs in [{}..{}] block range",
             self.state.from_block,
@@ -81,7 +81,7 @@ impl BaseTask for CliqueTask {
 
         // todo set to actual last synced block
         let from_block_new = self.state.from_block + self.state.range;
-        
+
         let new_state = CliqueTaskState {
             from_block: from_block_new,
             global: self.state.global.clone(),
@@ -89,6 +89,9 @@ impl BaseTask for CliqueTask {
         };
 
         self.update_state(new_state);
+
+        let res: Vec<TaskResponse> = Vec::new();
+        res
     }
 
     fn get_sleep_interval(&self) -> Duration {

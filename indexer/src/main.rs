@@ -36,28 +36,26 @@ async fn main() {
     let db = LMDBClient::new(lm_db_config);
 
     let csv_client_config = CSVClientConfig {
-        path: "./assets/csv/mock.csv".to_string(),
+        // path: "./assets/csv/mock.csv".to_string(),
+        path: "./scripts/generate_mock_attestations/output.csv".to_string(),
     };
     let csv_client = CSVClient::new(csv_client_config);
     let csv_poc_task = CSVPOCTask::new(csv_client);
 
-    // let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
-    // task_service.run().await;
+    let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
 
-    
+    task_service.get_chunk(0, 10).await;
+
     let client_config = config.evm_indexer_config.clone();
     let client = CliqueClient::new(client_config);
 
     let clique_task_config = config.evm_indexer_config;
     let clique_task = CliqueTask::new(clique_task_config, client);
 
-
-    let mut task_service = TaskService::new(Box::new(clique_task), Box::new(db));
+    // let mut task_service = TaskService::new(Box::new(clique_task), Box::new(db));
     // task_service.run().await;
 
     let grpc_server_config = config.grpc_server_config;
     let mut server = GRPCServer::new(grpc_server_config, task_service);
     server.serve().await;
-     
-    
 }
