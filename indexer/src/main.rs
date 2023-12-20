@@ -44,8 +44,6 @@ async fn main() {
 
     let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
 
-    task_service.get_chunk(0, 10).await;
-
     let client_config = config.evm_indexer_config.clone();
     let client = CliqueClient::new(client_config);
 

@@ -35,7 +35,7 @@ impl CSVPOCTask {
         // todo restore prev state
         let state = CSVPOCTaskState {
             from: 0,
-            range: 1000,
+            range: 2000,
             global,
         };
 
