@@ -1,5 +1,4 @@
 use proto_buf::transformer::{Form, TermObject};
-use secp256k1::PublicKey;
 
 use crate::error::AttTrError;
 
@@ -111,16 +110,6 @@ impl Into<TermObject> for Term {
 			form: form.into(),
 		}
 	}
-}
-
-pub trait Validation {
-	fn validate(&self) -> Result<(PublicKey, bool), AttTrError>;
-}
-
-pub trait IntoTerm: Validation {
-	const DOMAIN: u32;
-
-	fn into_term(self) -> Result<Term, AttTrError>;
 }
 
 #[cfg(test)]
