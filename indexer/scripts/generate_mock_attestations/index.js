@@ -74,7 +74,7 @@ const saveAttestationsToCSV = (filename, attestations) => {
     const CSVData = attestations
         .map((a, i) => {
             const id = (i + 1).toString(16)
-            const schema_id = '1'
+            const schema_id = '4'
             const schema_value = JSON.stringify(a)
             const timestamp = Date.now().toString()
 
