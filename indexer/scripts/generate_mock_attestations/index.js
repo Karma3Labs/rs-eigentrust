@@ -5,7 +5,7 @@ const {
     EndorsementTypes,
     AuditReportTypes,
 } = require('./constants')
-const { createEndorsementSchema } = require('./endorsmentSchema')
+const { createEndorsementSchema } = require('./endorsementSchema')
 const { createAuditReportSchema } = require('./auditReportSchema')
 
 const walletsCount = 4
@@ -55,7 +55,7 @@ const saveAttestationsToCSV = (attestations) => {
         }))
 
     const snaps = Array.from({ length: snapsCount }).map(() => {
-        const snapId = ethers.keccak256(ethers.randomBytes(32)).substring(2, 10)
+        const snapId = ethers.keccak256(ethers.randomBytes(32)).substring(0, 12)
         return snapId
     })
 
