@@ -108,5 +108,7 @@ db*
 .env
 *.env
 *.csv
+package-lock.json
+
 
 
