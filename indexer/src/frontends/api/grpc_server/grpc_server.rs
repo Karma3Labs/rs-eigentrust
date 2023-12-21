@@ -59,7 +59,7 @@ impl Indexer for IndexerService {
 
 			let event = IndexerEvent {
 				id: i + 1,
-				schema_id: 4,
+				schema_id: record.schema_id as u32,
 				schema_value: record.data,
 				timestamp: current_secs,
 			};
