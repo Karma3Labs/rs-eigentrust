@@ -1,10 +1,12 @@
 const ethers = require('ethers')
 const fs = require('fs')
 
-const walletsCount = 1000
-const attestationsCount = 1000
+const walletsCount = 4
+const attestationsCount = 10
+const snapsCount = 4
 
 const createDID = (address) => `did:pkh:eth:${address}`
+const createSnapDID = (snapId) => `snap://${snapId}`
 
 /*
 const trustworthinessTypes = ['Quality', 'Ability', 'Flaw']
@@ -16,9 +18,65 @@ const trustworthinessScopes = {
 const trustworthinessLevels = ['Very low', 'Low', 'Moderate', 'High', 'Very High']
 */
 
-const credentialTypes = ['EndorsementCredential', 'DisputeCredential']
+const EndorsementTypes = ['EndorsementCredential', 'DisputeCredential']
+const AuditReportTypes = ['AuditReportApproveCredential', 'AuditReportDisapproveCredential']
+const AuditReportStatusReasons = ['Unreliable', 'Scam', 'Incomplete']
+const AuditReportStatusReasonsBytes = {
+    Unreliable: new Uint8Array([0x0]),
+    Scam: new Uint8Array([0x1]),
+    Incomplete: new Uint8Array([0x2]),
+}
 
 // https://hackmd.io/@VT6Lc8FNQL2AllbBc32ERg/H1akxxBrT
+const createAuditReportSchema = async ({
+    wallet,
+    to,
+    type,
+}) => {
+    const issuer = createDID(wallet.address)
+    const toDID = createSnapDID(to)
+
+    const statusReason = AuditReportStatusReasons[Math.floor(Math.random() * AuditReportStatusReasons.length)]
+
+    const attestationDetails = type === 'AuditReportDisapproveCredential'
+        ? {
+            statusReason
+        }
+        : {}
+
+    const schemaPayload = {
+        type,
+        issuer,
+        credentialSubject: {
+            id: toDID,
+            ...attestationDetails
+        },
+    }
+
+    const utf8Buffer = Buffer.from(to, 'utf-8');
+    const snapIdBytes = new Uint8Array(utf8Buffer)
+
+    const currentStatusBytes = attestationDetails.currentStatus === 'AuditReportDisapproveCredential'
+        ? AuditReportStatusReasonsBytes[currentStatus]
+        : new Uint8Array([])
+
+    const keccak256Hash = ethers.keccak256(
+        ethers.concat([
+            snapIdBytes,
+            currentStatusBytes
+        ])
+    )
+
+    const signature = await wallet.signMessage(keccak256Hash)
+
+    const schema = {
+        ...schemaPayload,
+        proof: { signature }
+    }
+
+    return schema
+}
+
 const createEndorsementSchema = async ({
     wallet,
     to,
@@ -67,14 +125,21 @@ const createEndorsementSchema = async ({
     return schema
 }
 
-const saveAttestationsToCSV = (filename, attestations) => {
+const schemaIds = {
+    'EndorsementCredential': 4,
+    'DisputeCredential': 4,
+    'AuditReportApproveCredential': 5,
+    'AuditReportDisapproveCredential': 5
+}
+
+const saveAttestationsToCSV = (attestations) => {
     const delimiter = ';'
 
     // https://github.com/Karma3Labs/rs-eigentrust/blob/indexer/proto-buf/services/indexer.proto#L15-L19
     const CSVData = attestations
         .map((a, i) => {
             const id = (i + 1).toString(16)
-            const schema_id = '4'
+            const schema_id = schemaIds[a.type] || -1
             const schema_value = JSON.stringify(a)
             const timestamp = Date.now().toString()
 
@@ -82,7 +147,11 @@ const saveAttestationsToCSV = (filename, attestations) => {
         })
         .map(row => row.join(delimiter)).join('\n')
 
+    const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '')
+    const filename = `output-${timestamp}.csv`
     fs.writeFileSync(filename, CSVData, 'utf8')
+
+    console.log(`${attestations.length} attestations saved to ${filename}`)
 }
 
 (async () => {
@@ -95,18 +164,30 @@ const saveAttestationsToCSV = (filename, attestations) => {
         return wallet
     })
 
-    const attestations = await Promise.all(
+    const endorsmentAttestations = await Promise.all(
         Array.from({ length: attestationsCount }).map(async () => {
             const wallet = wallets[Math.floor(Math.random() * wallets.length)]
             const to = wallets[Math.floor(Math.random() * wallets.length)].address
-            const type = credentialTypes[Math.floor(Math.random() * credentialTypes.length)]
+            const type = EndorsementTypes[Math.floor(Math.random() * EndorsementTypes.length)]
             const attestation = await createEndorsementSchema({ wallet, to, type })
 
             return attestation
         }))
 
-    const filename = 'output.csv'
-    saveAttestationsToCSV(filename, attestations)
+    const snaps = Array.from({ length: snapsCount }).map(() => {
+        const snapId = ethers.keccak256(ethers.randomBytes(32)).substring(2, 10)
+        return snapId
+    })
 
-    console.log(`${attestations.length} attestations saved to ${filename}`)
+    const auditReportAttestations = await Promise.all(
+        Array.from({ length: attestationsCount }).map(async () => {
+            const wallet = wallets[Math.floor(Math.random() * wallets.length)]
+            const to = snaps[Math.floor(Math.random() * snaps.length)]
+            const type = AuditReportTypes[Math.floor(Math.random() * AuditReportTypes.length)]
+            const attestation = await createAuditReportSchema({ wallet, to, type })
+
+            return attestation
+        }))
+
+    saveAttestationsToCSV([...endorsmentAttestations, ...auditReportAttestations])
 })()
