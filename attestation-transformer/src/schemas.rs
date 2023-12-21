@@ -108,8 +108,7 @@ impl Validation for FollowSchema {
 		let pk = signature.recover(&message).map_err(|e| AttTrError::VerificationError(e))?;
 
 		let secp = Secp256k1::verification_only();
-		let res = secp
-			.verify_ecdsa(&message, &signature.to_standard(), &pk)
+		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
 			.map_err(|e| AttTrError::VerificationError(e))?;
 		Ok((pk, did))
 	}
