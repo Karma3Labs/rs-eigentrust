@@ -1,47 +1,54 @@
 use proto_buf::{
-	combiner::linear_combiner_server::{LinearCombiner, LinearCombinerServer},
+	combiner::{
+		linear_combiner_server::{LinearCombiner, LinearCombinerServer},
+		LtBatch, LtObject,
+	},
 	common::Void,
-	transformer::{transformer_client::TransformerClient, TermBatch},
+	transformer::TermObject,
 };
 use std::error::Error;
-use tonic::{
-	transport::{Channel, Server},
-	Request, Response, Status,
-};
+use tokio::sync::mpsc::channel;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{transport::Server, Request, Response, Status, Streaming};
 
-struct LinearCombinerService {
-	tranformer_channel: Channel,
-}
-
-impl LinearCombinerService {
-	fn new(channel: Channel) -> Self {
-		Self { tranformer_channel: channel }
-	}
-}
+struct LinearCombinerService;
 
 #[tonic::async_trait]
 impl LinearCombiner for LinearCombinerService {
-	async fn sync_transformer(&self, _: Request<Void>) -> Result<Response<Void>, Status> {
-		let mut client = TransformerClient::new(self.tranformer_channel.clone());
-		let term_batch = TermBatch { start: 0, size: 1000 };
-		let mut response = client.term_stream(term_batch).await?.into_inner();
+	type SyncCoreComputerStream = ReceiverStream<Result<LtObject, Status>>;
 
-		tokio::spawn(async move {
-			while let Some(res) = response.message().await.unwrap() {
-				println!("{:?}", res);
-			}
-		});
-
+	async fn sync_transformer(
+		&self, request: Request<Streaming<TermObject>>,
+	) -> Result<Response<Void>, Status> {
+		let mut stream = request.into_inner();
+		while let Some(term) = stream.message().await? {
+			println!(
+				"Received: Term({:?}, {:?}, {:?})",
+				term.from, term.to, term.weight
+			);
+		}
 		Ok(Response::new(Void {}))
+	}
+
+	async fn sync_core_computer(
+		&self, request: Request<LtBatch>,
+	) -> Result<Response<Self::SyncCoreComputerStream>, Status> {
+		let _req_obj = request.into_inner();
+		let num_buffers = 4;
+		let (tx, rx) = channel(num_buffers);
+		for _ in 0..num_buffers {
+			tx.send(Ok(LtObject { x: 0, y: 0, value: 0 })).await.unwrap();
+		}
+		Ok(Response::new(ReceiverStream::new(rx)))
 	}
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let channel = Channel::from_static("http://localhost:50051").connect().await?;
-	let lc_service = LinearCombinerService::new(channel);
-
 	let addr = "[::1]:50052".parse()?;
-	Server::builder().add_service(LinearCombinerServer::new(lc_service)).serve(addr).await?;
+	Server::builder()
+		.add_service(LinearCombinerServer::new(LinearCombinerService))
+		.serve(addr)
+		.await?;
 	Ok(())
 }

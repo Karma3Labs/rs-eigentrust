@@ -2,7 +2,20 @@ syntax = "proto3";
 package combiner;
 
 import "common.proto";
+import "transformer.proto";
 
 service LinearCombiner {
-    rpc SyncTransformer (common.Void) returns (common.Void);
+    rpc SyncTransformer (stream transformer.TermObject) returns (common.Void);
+    rpc SyncCoreComputer (LtBatch) returns (stream LtObject);
+}
+
+message LtBatch {
+    uint32 start = 1;
+    uint32 size = 2;
+}
+
+message LtObject {
+    uint32 x = 1;
+    uint32 y = 2;
+    uint32 value = 3;
 }
