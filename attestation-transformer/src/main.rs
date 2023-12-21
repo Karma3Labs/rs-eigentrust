@@ -30,7 +30,9 @@ mod utils;
 const MAX_TERM_BATCH_SIZE: u32 = 1000;
 const MAX_ATT_BATCH_SIZE: u32 = 1000;
 const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";
-const FOLLOW_SCHEMA_ID: &str = "0x2";
+const AUDIT_APPROVE_SCHEMA_ID: &str = "0x2";
+const AUDIT_DISAPPROVE_SCHEMA_ID: &str = "0x3";
+const ENDORSE_SCHEMA_ID: &str = "0x4";
 
 #[derive(Debug)]
 struct TransformerService {
@@ -107,6 +109,7 @@ impl TransformerService {
 				parsed_att.into_term()?
 			},
 		};
+		println!("{:?}", term);
 
 		Ok((event.id, term))
 	}
@@ -133,7 +136,11 @@ impl Transformer for TransformerService {
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
-			schema_id: vec![FOLLOW_SCHEMA_ID.to_owned()],
+			schema_id: vec![
+				AUDIT_APPROVE_SCHEMA_ID.to_owned(),
+				AUDIT_DISAPPROVE_SCHEMA_ID.to_owned(),
+				ENDORSE_SCHEMA_ID.to_owned(),
+			],
 			offset,
 			count: MAX_ATT_BATCH_SIZE,
 		};
@@ -150,6 +157,7 @@ impl Transformer for TransformerService {
 			terms.push(term);
 			count += 1;
 		}
+		println!("{:?}", terms);
 
 		Self::write_terms(&db, terms).map_err(|_| Status::internal("Failed to write terms"))?;
 		Self::write_checkpoint(&db, count)

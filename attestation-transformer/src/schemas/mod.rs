@@ -1,13 +1,25 @@
-use crate::{error::AttTrError, term::Term};
+use crate::{did::Did, error::AttTrError, term::Term};
 use secp256k1::PublicKey;
+use serde_derive::{Deserialize, Serialize};
 
 pub mod approve;
 pub mod disapprove;
 pub mod follow;
 pub mod status;
 
+#[derive(Deserialize, Serialize, Clone)]
+pub struct Proof {
+	signature: String,
+}
+
+impl Proof {
+	pub fn get_signature(&self) -> String {
+		self.signature.clone()
+	}
+}
+
 pub trait Validation {
-	fn validate(&self) -> Result<(PublicKey, bool), AttTrError>;
+	fn validate(&self) -> Result<(PublicKey, Did), AttTrError>;
 }
 
 pub trait IntoTerm: Validation {

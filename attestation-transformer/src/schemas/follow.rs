@@ -28,16 +28,16 @@ impl Into<u8> for Scope {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct FollowSchema {
-	id: Did,
+	id: String,
 	is_trustworthy: bool,
 	scope: Scope,
-	sig: (i32, [u8; 32], [u8; 32]),
+	sig: String,
 }
 
 #[cfg(test)]
 impl FollowSchema {
 	pub fn new(id: String, is_trustworthy: bool, scope: Scope) -> Self {
-		let did = Did::parse(id).unwrap();
+		let did = Did::parse(id.clone()).unwrap();
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[is_trustworthy.into()]);
@@ -50,43 +50,45 @@ impl FollowSchema {
 		let (sk, _) = generate_keypair(rng);
 		let secp = Secp256k1::new();
 		let res = secp.sign_ecdsa_recoverable(&message, &sk);
-		let (rec_id, bytes) = res.serialize_compact();
+		let (rec_id, sig_bytes) = res.serialize_compact();
 		let rec_id_i32 = rec_id.to_i32();
 
-		let mut r_bytes = [0u8; 32];
-		let mut s_bytes = [0u8; 32];
-		r_bytes.copy_from_slice(&bytes[..32]);
-		s_bytes.copy_from_slice(&bytes[32..]);
+		let mut bytes = Vec::new();
+		bytes.extend_from_slice(&sig_bytes);
+		bytes.extend_from_slice(&rec_id_i32.to_be_bytes());
+		let encoded_sig = hex::encode(bytes);
 
-		FollowSchema { id: did, is_trustworthy, scope, sig: (rec_id_i32, r_bytes, s_bytes) }
+		FollowSchema { id, is_trustworthy, scope, sig: encoded_sig }
 	}
 }
 
 impl Validation for FollowSchema {
-	fn validate(&self) -> Result<(PublicKey, bool), AttTrError> {
+	fn validate(&self) -> Result<(PublicKey, Did), AttTrError> {
+		let did = Did::parse(self.id.clone())?;
 		let mut keccak = Keccak256::default();
-		keccak.update(&self.id.key);
+		keccak.update(&did.key);
 		keccak.update(&[self.is_trustworthy.into()]);
 		keccak.update(&[self.scope.clone().into()]);
 		let digest = keccak.finalize();
 		let message = Message::from_digest_slice(digest.as_ref())
 			.map_err(|x| AttTrError::VerificationError(x))?;
 
+		let sig_bytes =
+			hex::decode(self.sig.clone()).map_err(|_| AttTrError::SerialisationError)?;
 		let mut rs_bytes = [0; 64];
-		rs_bytes[..32].copy_from_slice(&self.sig.1);
-		rs_bytes[32..].copy_from_slice(&self.sig.2);
+		rs_bytes[..64].copy_from_slice(&sig_bytes[..64]);
+		let rec_id: i32 = i32::from_be_bytes(sig_bytes[64..].try_into().unwrap());
 		let signature = RecoverableSignature::from_compact(
 			&rs_bytes,
-			RecoveryId::from_i32(self.sig.0).map_err(|x| AttTrError::VerificationError(x))?,
+			RecoveryId::from_i32(rec_id).map_err(|x| AttTrError::VerificationError(x))?,
 		)
 		.map_err(|x| AttTrError::VerificationError(x))?;
 		let pk = signature.recover(&message).map_err(|x| AttTrError::VerificationError(x))?;
 
 		let secp = Secp256k1::verification_only();
-		Ok((
-			pk,
-			secp.verify_ecdsa(&message, &signature.to_standard(), &pk).is_ok(),
-		))
+		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
+			.map_err(|x| AttTrError::VerificationError(x))?;
+		Ok((pk, did))
 	}
 }
 
@@ -94,11 +96,10 @@ impl IntoTerm for FollowSchema {
 	const DOMAIN: u32 = 1;
 
 	fn into_term(self) -> Result<Term, AttTrError> {
-		let (pk, valid) = self.validate()?;
-		assert!(valid);
+		let (pk, did) = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
-		let to_address = hex::encode(&self.id.key);
+		let to_address = hex::encode(&did.key);
 		let weight = 50;
 
 		Ok(Term::new(
@@ -124,7 +125,7 @@ mod test {
 	#[test]
 	fn should_validate_follow_schema() {
 		let did_string = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let did = Did::parse(did_string).unwrap();
+		let did = Did::parse(did_string.clone()).unwrap();
 		let is_trustworthy = true;
 		let scope = Scope::Auditor;
 
@@ -140,20 +141,18 @@ mod test {
 		let (sk, pk) = generate_keypair(rng);
 		let secp = Secp256k1::new();
 		let res = secp.sign_ecdsa_recoverable(&message, &sk);
-		let (rec_id, bytes) = res.serialize_compact();
+		let (rec_id, sig_bytes) = res.serialize_compact();
 		let rec_id_i32 = rec_id.to_i32();
 
-		let mut r_bytes = [0u8; 32];
-		let mut s_bytes = [0u8; 32];
-		r_bytes.copy_from_slice(&bytes[..32]);
-		s_bytes.copy_from_slice(&bytes[32..]);
+		let mut bytes = Vec::new();
+		bytes.extend_from_slice(&sig_bytes);
+		bytes.extend_from_slice(&rec_id_i32.to_be_bytes());
+		let sig_string = hex::encode(bytes);
 
-		let follow_schema =
-			FollowSchema { id: did, is_trustworthy, scope, sig: (rec_id_i32, r_bytes, s_bytes) };
+		let follow_schema = FollowSchema { id: did_string, is_trustworthy, scope, sig: sig_string };
 
-		let (rec_pk, valid) = follow_schema.validate().unwrap();
+		let (rec_pk, _) = follow_schema.validate().unwrap();
 
 		assert_eq!(rec_pk, pk);
-		assert!(valid);
 	}
 }
