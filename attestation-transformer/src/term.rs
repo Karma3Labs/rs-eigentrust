@@ -1,6 +1,5 @@
-use proto_buf::transformer::{Form, TermObject};
-
 use crate::error::AttTrError;
+use proto_buf::transformer::{Form, TermObject};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TermForm {

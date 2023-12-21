@@ -5,7 +5,7 @@ import "common.proto";
 
 service Transformer {
     rpc SyncIndexer (common.Void) returns (common.Void);
-    rpc TermStream (TermBatch) returns (stream TermObject);
+    rpc TermStream (TermBatch) returns (common.Void);
 }
 
 message TermBatch {

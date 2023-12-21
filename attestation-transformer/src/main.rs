@@ -1,4 +1,6 @@
 use error::AttTrError;
+use futures::stream::iter;
+use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::common::Void;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
@@ -10,8 +12,7 @@ use schemas::SchemaType;
 use serde_json::from_str;
 use std::error::Error;
 use term::Term;
-use tokio::sync::mpsc::channel;
-use tokio_stream::wrappers::ReceiverStream;
+
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -33,24 +34,27 @@ const FOLLOW_SCHEMA_ID: &str = "0x2";
 
 #[derive(Debug)]
 struct TransformerService {
-	channel: Channel,
+	indexer_channel: Channel,
+	lt_channel: Channel,
 	db: String,
 }
 
 impl TransformerService {
-	fn new(channel: Channel, db_url: &str) -> Result<Self, AttTrError> {
-		let db = DB::open_default(db_url).map_err(|x| AttTrError::DbError(x))?;
-		let checkpoint = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
+	fn new(
+		indexer_channel: Channel, lt_channel: Channel, db_url: &str,
+	) -> Result<Self, AttTrError> {
+		let db = DB::open_default(db_url).map_err(|e| AttTrError::DbError(e))?;
+		let checkpoint = db.get(b"checkpoint").map_err(|e| AttTrError::DbError(e))?;
 		if let None = checkpoint {
 			let count = 0u32.to_be_bytes();
-			db.put(b"checkpoint", count).map_err(|x| AttTrError::DbError(x))?;
+			db.put(b"checkpoint", count).map_err(|e| AttTrError::DbError(e))?;
 		}
 
-		Ok(Self { channel, db: db_url.to_string() })
+		Ok(Self { indexer_channel, lt_channel, db: db_url.to_string() })
 	}
 
 	fn read_checkpoint(db: &DB) -> Result<u32, AttTrError> {
-		let offset_bytes_opt = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
+		let offset_bytes_opt = db.get(b"checkpoint").map_err(|e| AttTrError::DbError(e))?;
 		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
 			bytes.copy_from_slice(&x);
@@ -61,7 +65,7 @@ impl TransformerService {
 	}
 
 	fn write_checkpoint(db: &DB, count: u32) -> Result<(), AttTrError> {
-		db.put(b"checkpoint", count.to_be_bytes()).map_err(|x| AttTrError::DbError(x))?;
+		db.put(b"checkpoint", count.to_be_bytes()).map_err(|e| AttTrError::DbError(e))?;
 		Ok(())
 	}
 
@@ -69,7 +73,7 @@ impl TransformerService {
 		let mut terms = Vec::new();
 		for i in batch.start..batch.size {
 			let id_bytes = i.to_be_bytes();
-			let res_opt = db.get(id_bytes).map_err(|x| AttTrError::DbError(x))?;
+			let res_opt = db.get(id_bytes).map_err(|e| AttTrError::DbError(e))?;
 			let res = res_opt.ok_or_else(|| AttTrError::NotFoundError)?;
 			let term = Term::from_bytes(res)?;
 			let term_obj: TermObject = term.into();
@@ -120,8 +124,6 @@ impl TransformerService {
 
 #[tonic::async_trait]
 impl Transformer for TransformerService {
-	type TermStreamStream = ReceiverStream<Result<TermObject, Status>>;
-
 	async fn sync_indexer(&self, _: Request<Void>) -> Result<Response<Void>, Status> {
 		let db = DB::open_default(self.db.clone())
 			.map_err(|_| Status::internal("Failed to connect to DB"))?;
@@ -136,7 +138,7 @@ impl Transformer for TransformerService {
 			count: MAX_ATT_BATCH_SIZE,
 		};
 
-		let mut client = IndexerClient::new(self.channel.clone());
+		let mut client = IndexerClient::new(self.indexer_channel.clone());
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
 		let mut count = offset;
 		let mut terms = Vec::new();
@@ -156,9 +158,7 @@ impl Transformer for TransformerService {
 		Ok(Response::new(Void::default()))
 	}
 
-	async fn term_stream(
-		&self, request: Request<TermBatch>,
-	) -> Result<Response<Self::TermStreamStream>, Status> {
+	async fn term_stream(&self, request: Request<TermBatch>) -> Result<Response<Void>, Status> {
 		let inner = request.into_inner();
 		if inner.size > MAX_TERM_BATCH_SIZE {
 			return Result::Err(Status::invalid_argument(format!(
@@ -173,23 +173,19 @@ impl Transformer for TransformerService {
 		let terms =
 			Self::read_terms(&db, inner).map_err(|_| Status::internal("Failed to read terms"))?;
 
-		let (tx, rx) = channel(1);
-		for term in terms {
-			let res = tx.send(Ok(term)).await.map_err(|x| x.0);
-			if let Err(err) = res {
-				err?;
-			};
-		}
+		let mut client = LinearCombinerClient::new(self.lt_channel.clone());
+		let res = client.sync_transformer(Request::new(iter(terms))).await?;
 
-		Ok(Response::new(ReceiverStream::new(rx)))
+		Ok(res)
 	}
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let channel = Channel::from_static("http://localhost:50050").connect().await?;
+	let indexer_channel = Channel::from_static("http://localhost:50050").connect().await?;
+	let lt_channel = Channel::from_static("http://localhost:50052").connect().await?;
 	let db_url = "att-tr-storage";
-	let tr_service = TransformerService::new(channel, db_url)?;
+	let tr_service = TransformerService::new(indexer_channel, lt_channel, db_url)?;
 
 	let addr = "[::1]:50051".parse()?;
 	Server::builder().add_service(TransformerServer::new(tr_service)).serve(addr).await?;
