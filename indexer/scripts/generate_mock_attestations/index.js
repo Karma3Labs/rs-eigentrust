@@ -1,136 +1,16 @@
 const ethers = require('ethers')
 const fs = require('fs')
+const {
+    schemaIds,
+    EndorsementTypes,
+    AuditReportTypes,
+} = require('./constants')
+const { createEndorsementSchema } = require('./endorsmentSchema')
+const { createAuditReportSchema } = require('./auditReportSchema')
 
 const walletsCount = 4
 const attestationsCount = 10
 const snapsCount = 4
-
-const createDID = (address) => `did:pkh:eth:${address}`
-const createSnapDID = (snapId) => `snap://${snapId}`
-
-/*
-const trustworthinessTypes = ['Quality', 'Ability', 'Flaw']
-const trustworthinessScopes = {
-    Quality: ['Honesty', 'Reliability'],
-    Flaw: ['Dishonesty', 'Unlawful'],
-    Ability: ['Software enginerring']
-}
-const trustworthinessLevels = ['Very low', 'Low', 'Moderate', 'High', 'Very High']
-*/
-
-const EndorsementTypes = ['EndorsementCredential', 'DisputeCredential']
-const AuditReportTypes = ['AuditReportApproveCredential', 'AuditReportDisapproveCredential']
-const AuditReportStatusReasons = ['Unreliable', 'Scam', 'Incomplete']
-const AuditReportStatusReasonsBytes = {
-    Unreliable: new Uint8Array([0x0]),
-    Scam: new Uint8Array([0x1]),
-    Incomplete: new Uint8Array([0x2]),
-}
-
-// https://hackmd.io/@VT6Lc8FNQL2AllbBc32ERg/H1akxxBrT
-const createAuditReportSchema = async ({
-    wallet,
-    to,
-    type,
-}) => {
-    const issuer = createDID(wallet.address)
-    const toDID = createSnapDID(to)
-
-    const statusReason = AuditReportStatusReasons[Math.floor(Math.random() * AuditReportStatusReasons.length)]
-
-    const attestationDetails = type === 'AuditReportDisapproveCredential'
-        ? {
-            statusReason
-        }
-        : {}
-
-    const schemaPayload = {
-        type,
-        issuer,
-        credentialSubject: {
-            id: toDID,
-            ...attestationDetails
-        },
-    }
-
-    const utf8Buffer = Buffer.from(to, 'utf-8');
-    const snapIdBytes = new Uint8Array(utf8Buffer)
-
-    const currentStatusBytes = attestationDetails.currentStatus === 'AuditReportDisapproveCredential'
-        ? AuditReportStatusReasonsBytes[currentStatus]
-        : new Uint8Array([])
-
-    const keccak256Hash = ethers.keccak256(
-        ethers.concat([
-            snapIdBytes,
-            currentStatusBytes
-        ])
-    )
-
-    const signature = await wallet.signMessage(keccak256Hash)
-
-    const schema = {
-        ...schemaPayload,
-        proof: { signature }
-    }
-
-    return schema
-}
-
-const createEndorsementSchema = async ({
-    wallet,
-    to,
-    type,
-}) => {
-    const issuer = createDID(wallet.address)
-    const toDID = createDID(to)
-
-    const attestationDetails = type === 'DisputeCredential'
-        ? {
-            currentStatus: "Disputed",
-            statusReason: "None"
-        }
-        : { currentStatus: "Endorsed" }
-
-    const schemaPayload = {
-        type,
-        issuer,
-        credentialSubject: {
-            id: toDID,
-            ...attestationDetails
-        },
-    }
-
-    const DIDPrefixBytes = new Uint8Array([0x00]) // stands for pkh:eth
-    const issuerBytes = ethers.getBytes(wallet.address)
-    const currentStatusBytes = attestationDetails.currentStatus === 'Endorsed'
-        ? new Uint8Array([0x01])
-        : new Uint8Array([0x00])
-
-    const keccak256Hash = ethers.keccak256(
-        ethers.concat([
-            DIDPrefixBytes,
-            issuerBytes,
-            currentStatusBytes
-        ])
-    )
-
-    const signature = await wallet.signMessage(keccak256Hash)
-
-    const schema = {
-        ...schemaPayload,
-        proof: { signature }
-    }
-
-    return schema
-}
-
-const schemaIds = {
-    'EndorsementCredential': 4,
-    'DisputeCredential': 4,
-    'AuditReportApproveCredential': 5,
-    'AuditReportDisapproveCredential': 5
-}
 
 const saveAttestationsToCSV = (attestations) => {
     const delimiter = ';'
