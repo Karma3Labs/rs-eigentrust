@@ -29,6 +29,7 @@ pub struct TaskResponse {
     pub timestamp: String,
     pub job_id: String,
     pub data: String,
+    pub schema_id: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
