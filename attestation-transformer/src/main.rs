@@ -40,14 +40,14 @@ impl TransformerService {
 		let checkpoint = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
 		if let None = checkpoint {
 			let count = 0u32.to_be_bytes();
-			db.put(b"checkpoint", count).map_err(|x| AttTrError::DbError(x))?;
+			db.put(b"checkpoint", count).map_err(|e| AttTrError::DbError(e))?;
 		}
 
 		Ok(Self { indexer_channel, lt_channel, db: db_url.to_string() })
 	}
 
 	fn read_checkpoint(db: &DB) -> Result<u32, AttTrError> {
-		let offset_bytes_opt = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
+		let offset_bytes_opt = db.get(b"checkpoint").map_err(|e| AttTrError::DbError(e))?;
 		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
 			bytes.copy_from_slice(&x);
@@ -58,7 +58,7 @@ impl TransformerService {
 	}
 
 	fn write_checkpoint(db: &DB, count: u32) -> Result<(), AttTrError> {
-		db.put(b"checkpoint", count.to_be_bytes()).map_err(|x| AttTrError::DbError(x))?;
+		db.put(b"checkpoint", count.to_be_bytes()).map_err(|e| AttTrError::DbError(e))?;
 		Ok(())
 	}
 
@@ -66,7 +66,7 @@ impl TransformerService {
 		let mut terms = Vec::new();
 		for i in batch.start..batch.size {
 			let id_bytes = i.to_be_bytes();
-			let res_opt = db.get(id_bytes).map_err(|x| AttTrError::DbError(x))?;
+			let res_opt = db.get(id_bytes).map_err(|e| AttTrError::DbError(e))?;
 			let res = res_opt.ok_or_else(|| AttTrError::NotFoundError)?;
 			let term = Term::from_bytes(res)?;
 			let term_obj: TermObject = term.into();

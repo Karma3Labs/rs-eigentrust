@@ -86,7 +86,7 @@ impl FollowSchema {
 }
 
 impl Validation for FollowSchema {
-	fn validate(&self) -> Result<(PublicKey, Did, bool), AttTrError> {
+	fn validate(&self) -> Result<(PublicKey, Did), AttTrError> {
 		let did = Did::parse(self.id.clone())?;
 
 		let mut keccak = Keccak256::default();
@@ -95,24 +95,22 @@ impl Validation for FollowSchema {
 		keccak.update(&[self.scope.clone().into()]);
 		let digest = keccak.finalize();
 		let message = Message::from_digest_slice(digest.as_ref())
-			.map_err(|x| AttTrError::VerificationError(x))?;
+			.map_err(|e| AttTrError::VerificationError(e))?;
 
 		let mut rs_bytes = [0; 64];
 		rs_bytes[..32].copy_from_slice(&self.sig.1);
 		rs_bytes[32..].copy_from_slice(&self.sig.2);
 		let signature = RecoverableSignature::from_compact(
 			&rs_bytes,
-			RecoveryId::from_i32(self.sig.0).map_err(|x| AttTrError::VerificationError(x))?,
+			RecoveryId::from_i32(self.sig.0).map_err(|e| AttTrError::VerificationError(e))?,
 		)
-		.map_err(|x| AttTrError::VerificationError(x))?;
-		let pk = signature.recover(&message).map_err(|x| AttTrError::VerificationError(x))?;
+		.map_err(|e| AttTrError::VerificationError(e))?;
+		let pk = signature.recover(&message).map_err(|e| AttTrError::VerificationError(e))?;
 
 		let secp = Secp256k1::verification_only();
-		Ok((
-			pk,
-			did,
-			secp.verify_ecdsa(&message, &signature.to_standard(), &pk).is_ok(),
-		))
+		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
+			.map_err(|e| AttTrError::VerificationError(e))?;
+		Ok((pk, did))
 	}
 }
 
@@ -120,9 +118,7 @@ impl IntoTerm for FollowSchema {
 	const DOMAIN: u32 = 1;
 
 	fn into_term(self) -> Result<Term, AttTrError> {
-		let (pk, did, valid) = self.validate()?;
-		assert!(valid);
-
+		let (pk, did) = self.validate()?;
 		let from_address = address_from_ecdsa_key(&pk);
 		let to_address = hex::encode(&did.key);
 
@@ -171,31 +167,29 @@ impl AuditApproveSchema {
 }
 
 impl Validation for AuditApproveSchema {
-	fn validate(&self) -> Result<(PublicKey, Did, bool), AttTrError> {
+	fn validate(&self) -> Result<(PublicKey, Did), AttTrError> {
 		let did = Did::parse(self.id.clone())?;
 
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		let digest = keccak.finalize();
 		let message = Message::from_digest_slice(digest.as_ref())
-			.map_err(|x| AttTrError::VerificationError(x))?;
+			.map_err(|e| AttTrError::VerificationError(e))?;
 
 		let mut rs_bytes = [0; 64];
 		rs_bytes[..32].copy_from_slice(&self.sig.1);
 		rs_bytes[32..].copy_from_slice(&self.sig.2);
 		let signature = RecoverableSignature::from_compact(
 			&rs_bytes,
-			RecoveryId::from_i32(self.sig.0).map_err(|x| AttTrError::VerificationError(x))?,
+			RecoveryId::from_i32(self.sig.0).map_err(|e| AttTrError::VerificationError(e))?,
 		)
-		.map_err(|x| AttTrError::VerificationError(x))?;
-		let pk = signature.recover(&message).map_err(|x| AttTrError::VerificationError(x))?;
+		.map_err(|e| AttTrError::VerificationError(e))?;
+		let pk = signature.recover(&message).map_err(|e| AttTrError::VerificationError(e))?;
 
 		let secp = Secp256k1::verification_only();
-		Ok((
-			pk,
-			did,
-			secp.verify_ecdsa(&message, &signature.to_standard(), &pk).is_ok(),
-		))
+		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
+			.map_err(|e| AttTrError::VerificationError(e))?;
+		Ok((pk, did))
 	}
 }
 
@@ -203,9 +197,7 @@ impl IntoTerm for AuditApproveSchema {
 	const DOMAIN: u32 = 1;
 
 	fn into_term(self) -> Result<Term, AttTrError> {
-		let (pk, did, valid) = self.validate()?;
-		assert!(valid);
-
+		let (pk, did) = self.validate()?;
 		let from_address = address_from_ecdsa_key(&pk);
 		let to_address = hex::encode(did.key);
 
@@ -273,31 +265,29 @@ impl AuditDisapproveSchema {
 }
 
 impl Validation for AuditDisapproveSchema {
-	fn validate(&self) -> Result<(PublicKey, Did, bool), AttTrError> {
+	fn validate(&self) -> Result<(PublicKey, Did), AttTrError> {
 		let did = Did::parse(self.id.clone())?;
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[self.status_reason.clone().into()]);
 		let digest = keccak.finalize();
 		let message = Message::from_digest_slice(digest.as_ref())
-			.map_err(|x| AttTrError::VerificationError(x))?;
+			.map_err(|e| AttTrError::VerificationError(e))?;
 
 		let mut rs_bytes = [0; 64];
 		rs_bytes[..32].copy_from_slice(&self.sig.1);
 		rs_bytes[32..].copy_from_slice(&self.sig.2);
 		let signature = RecoverableSignature::from_compact(
 			&rs_bytes,
-			RecoveryId::from_i32(self.sig.0).map_err(|x| AttTrError::VerificationError(x))?,
+			RecoveryId::from_i32(self.sig.0).map_err(|e| AttTrError::VerificationError(e))?,
 		)
-		.map_err(|x| AttTrError::VerificationError(x))?;
-		let pk = signature.recover(&message).map_err(|x| AttTrError::VerificationError(x))?;
+		.map_err(|e| AttTrError::VerificationError(e))?;
+		let pk = signature.recover(&message).map_err(|e| AttTrError::VerificationError(e))?;
 
 		let secp = Secp256k1::verification_only();
-		Ok((
-			pk,
-			did,
-			secp.verify_ecdsa(&message, &signature.to_standard(), &pk).is_ok(),
-		))
+		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
+			.map_err(|e| AttTrError::VerificationError(e))?;
+		Ok((pk, did))
 	}
 }
 
@@ -305,9 +295,7 @@ impl IntoTerm for AuditDisapproveSchema {
 	const DOMAIN: u32 = 1;
 
 	fn into_term(self) -> Result<Term, AttTrError> {
-		let (pk, did, valid) = self.validate()?;
-		assert!(valid);
-
+		let (pk, did) = self.validate()?;
 		let from_address = address_from_ecdsa_key(&pk);
 		let to_address = hex::encode(did.key);
 
@@ -329,16 +317,14 @@ impl IntoTerm for AuditDisapproveSchema {
 
 #[cfg(test)]
 mod test {
-	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
-	use sha3::{Digest, Keccak256};
-
+	use super::{FollowSchema, Scope};
 	use crate::{
 		did::Did,
 		schemas::{AuditApproveSchema, AuditDisapproveSchema, StatusReason},
 		term::Validation,
 	};
-
-	use super::{FollowSchema, Scope};
+	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
+	use sha3::{Digest, Keccak256};
 
 	#[test]
 	fn should_validate_follow_schema() {
@@ -373,11 +359,11 @@ mod test {
 			scope,
 			sig: (rec_id_i32, r_bytes, s_bytes),
 		};
-		let (rec_pk, _, valid) = follow_schema.validate().unwrap();
+		let (rec_pk, _) = follow_schema.validate().unwrap();
 
 		assert_eq!(rec_pk, pk);
-		assert!(valid);
 	}
+
 	#[test]
 	fn should_validate_audit_approve_schema() {
 		let did_string = "did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
@@ -403,11 +389,11 @@ mod test {
 
 		let aa_schema = AuditApproveSchema { id: did_string, sig: (rec_id_i32, r_bytes, s_bytes) };
 
-		let (rec_pk, _, valid) = aa_schema.validate().unwrap();
+		let (rec_pk, _) = aa_schema.validate().unwrap();
 
 		assert_eq!(rec_pk, pk);
-		assert!(valid);
 	}
+
 	#[test]
 	fn should_validate_audit_disapprove_schema() {
 		let did_string = "did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
@@ -439,9 +425,8 @@ mod test {
 			sig: (rec_id_i32, r_bytes, s_bytes),
 		};
 
-		let (rec_pk, _, valid) = aa_schema.validate().unwrap();
+		let (rec_pk, _) = aa_schema.validate().unwrap();
 
 		assert_eq!(rec_pk, pk);
-		assert!(valid);
 	}
 }
