@@ -131,8 +131,7 @@ impl Transformer for TransformerService {
 		let db = DB::open_default(self.db.clone())
 			.map_err(|_| Status::internal("Failed to connect to DB"))?;
 
-		let offset = Self::read_checkpoint(&db)
-			.map_err(|_| Status::internal("Failed to read checkpoint"))?;
+		let offset = 0;
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
@@ -141,7 +140,7 @@ impl Transformer for TransformerService {
 				AUDIT_DISAPPROVE_SCHEMA_ID.to_owned(),
 				ENDORSE_SCHEMA_ID.to_owned(),
 			],
-			offset,
+			offset: 0,
 			count: MAX_ATT_BATCH_SIZE,
 		};
 
@@ -151,13 +150,13 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
+			println!("{:?}", res);
 			assert!(res.id == count);
 			let term =
 				Self::parse_event(res).map_err(|_| Status::internal("Failed to parse event"))?;
 			terms.push(term);
 			count += 1;
 		}
-		println!("{:?}", terms);
 
 		Self::write_terms(&db, terms).map_err(|_| Status::internal("Failed to write terms"))?;
 		Self::write_checkpoint(&db, count)
