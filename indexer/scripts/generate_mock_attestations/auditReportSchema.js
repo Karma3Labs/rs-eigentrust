@@ -9,7 +9,6 @@ const {
     AuditReportStatusReasonsBytes
 } = require('./constants')
 
-
 // https://hackmd.io/@VT6Lc8FNQL2AllbBc32ERg/H1akxxBrT
 const createAuditReportSchema = async ({
     wallet,
@@ -39,14 +38,14 @@ const createAuditReportSchema = async ({
     const utf8Buffer = Buffer.from(to, 'utf-8');
     const snapIdBytes = new Uint8Array(utf8Buffer)
 
-    const currentStatusBytes = attestationDetails.currentStatus === 'AuditReportDisapproveCredential'
-        ? AuditReportStatusReasonsBytes[currentStatus]
+    const statusReasonBytes = type === 'AuditReportDisapproveCredential'
+        ? AuditReportStatusReasonsBytes[attestationDetails.statusReason]
         : new Uint8Array([])
 
     const keccak256Hash = ethers.keccak256(
         ethers.concat([
             snapIdBytes,
-            currentStatusBytes
+            statusReasonBytes
         ])
     )
 

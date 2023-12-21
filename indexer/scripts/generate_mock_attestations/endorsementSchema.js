@@ -6,17 +6,6 @@ const {
     EndorsementTypes,
 } = require('./constants')
 
-/*
-const trustworthinessTypes = ['Quality', 'Ability', 'Flaw']
-const trustworthinessScopes = {
-    Quality: ['Honesty', 'Reliability'],
-    Flaw: ['Dishonesty', 'Unlawful'],
-    Ability: ['Software enginerring']
-}
-const trustworthinessLevels = ['Very low', 'Low', 'Moderate', 'High', 'Very High']
-*/
-
-
 const createEndorsementSchema = async ({
     wallet,
     to,

@@ -17,6 +17,16 @@ const AuditReportStatusReasonsBytes = {
     Incomplete: new Uint8Array([0x2]),
 }
 
+/*
+const trustworthinessTypes = ['Quality', 'Ability', 'Flaw']
+const trustworthinessScopes = {
+    Quality: ['Honesty', 'Reliability'],
+    Flaw: ['Dishonesty', 'Unlawful'],
+    Ability: ['Software enginerring']
+}
+const trustworthinessLevels = ['Very low', 'Low', 'Moderate', 'High', 'Very High']
+*/
+
 module.exports = {
     schemaIds,
     EndorsementTypes,
