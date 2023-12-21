@@ -47,7 +47,6 @@ impl Indexer for IndexerService {
             let index: usize = i as usize;
 
             let record = self.data[index].clone();
-            println!("{:?}", record);
 
             let event = IndexerEvent {
                 id: i + 1,

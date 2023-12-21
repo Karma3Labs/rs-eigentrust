@@ -1,8 +1,8 @@
 const schemaIds = {
+    'AuditReportApproveCredential': 2,
+    'AuditReportDisapproveCredential': 3,
     'EndorsementCredential': 4,
     'DisputeCredential': 4,
-    'AuditReportApproveCredential': 5,
-    'AuditReportDisapproveCredential': 5
 }
 
 const EndorsementTypes = ['EndorsementCredential', 'DisputeCredential']
