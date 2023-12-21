@@ -95,7 +95,7 @@ impl BaseTask for CSVPOCTask {
 
         let from_new = self.state.from + self.state.range;
         let new_state = CSVPOCTaskState {
-            from: from_new,
+            // from: from_new,
             global,
             ..self.state
         };

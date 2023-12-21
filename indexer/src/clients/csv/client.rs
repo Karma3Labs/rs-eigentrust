@@ -43,7 +43,7 @@ impl CSVClient {
             .into_records()
             .take(limit.try_into().unwrap())
             .collect();
-
+        
         Ok(records)
     }
 }

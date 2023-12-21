@@ -5,5 +5,5 @@ https://hackmd.io/@VT6Lc8FNQL2AllbBc32ERg/H1akxxBrT#Abstract
 
 ```
 npm i 
-node index.js
+npm start
 ```
