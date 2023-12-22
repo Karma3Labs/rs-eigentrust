@@ -17,9 +17,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	println!("basic response {:?}", response);
 
 	// BasicRequest
-	// let void_request = Request::new(TermBatch { start: 0, size: 1000 });
-	// let response = tr_client.term_stream(void_request).await?.into_inner();
-	// println!("basic response {:?}", response);
+	let void_request = Request::new(TermBatch { start: 0, size: 1000 });
+	let response = tr_client.term_stream(void_request).await?.into_inner();
+	println!("basic response {:?}", response);
 
 	Ok(())
 }

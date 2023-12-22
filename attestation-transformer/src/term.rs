@@ -74,6 +74,9 @@ impl Term {
 	}
 
 	pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, AttTrError> {
+		if bytes.len() != 49 {
+			return Err(AttTrError::SerialisationError);
+		}
 		let from_bytes: Vec<u8> = bytes.drain(..20).collect();
 		let to_bytes: Vec<u8> = bytes.drain(..20).collect();
 		let weight_bytes: [u8; 4] = bytes

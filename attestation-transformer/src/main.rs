@@ -76,10 +76,12 @@ impl TransformerService {
 		for i in batch.start..batch.size {
 			let id_bytes = i.to_be_bytes();
 			let res_opt = db.get(id_bytes).map_err(|e| AttTrError::DbError(e))?;
-			let res = res_opt.ok_or_else(|| AttTrError::NotFoundError)?;
-			let term = Term::from_bytes(res)?;
-			let term_obj: TermObject = term.into();
-			terms.push(term_obj);
+			if let Some(res) = res_opt {
+				if let Ok(term) = Term::from_bytes(res) {
+					let term_obj: TermObject = term.into();
+					terms.push(term_obj);
+				}
+			}
 		}
 		Ok(terms)
 	}
