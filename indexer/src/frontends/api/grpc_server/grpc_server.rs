@@ -39,24 +39,26 @@ impl Indexer for IndexerService {
         let start = SystemTime::now();
         let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
 
+        let data = self.data.clone();
+
         let (tx, rx) = channel(1);
-        // tokio::spawn(async move {
-        let limit = cmp::min(inner.offset + inner.count, self.data.len().try_into().unwrap());
+        tokio::spawn(async move {
+            let limit = cmp::min(inner.offset + inner.count, data.len().try_into().unwrap());
 
-        for i in inner.offset..limit {
-            let index: usize = i as usize;
+            for i in inner.offset..limit {
+                let index: usize = i as usize;
 
-            let record = self.data[index].clone();
+                let record = data[index].clone();
 
-            let event = IndexerEvent {
-                id: i + 1,
-                schema_id: record.schema_id as u32,
-                schema_value: record.data,
-                timestamp: current_secs,
-            };
-            tx.send(Ok(event)).await.unwrap();
-        }
-        //});
+                let event = IndexerEvent {
+                    id: i + 1,
+                    schema_id: record.schema_id as u32,
+                    schema_value: record.data,
+                    timestamp: current_secs,
+                };
+                tx.send(Ok(event)).await.unwrap();
+            }
+        });
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }
@@ -73,7 +75,7 @@ impl GRPCServer {
         self.task_service.run().await;
 
         let data = self.task_service.get_chunk(0, 10000).await;
-        
+
         let indexer_server = IndexerServer::new(IndexerService::new(data));
         Server::builder().add_service(indexer_server).serve(address).await?;
 
