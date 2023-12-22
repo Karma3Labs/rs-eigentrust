@@ -43,28 +43,29 @@ impl Indexer for IndexerService {
 
 		let start = SystemTime::now();
 		let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
-
-		let (tx, rx) = channel(1);
-		// tokio::spawn(async move {
 		let limit = cmp::min(
 			inner.offset + inner.count,
 			self.data.len().try_into().unwrap(),
 		);
 
-		for i in inner.offset..limit {
-			let index: usize = i as usize;
+		let data = self.data.clone();
 
-			let record = self.data[index].clone();
+		let (tx, rx) = channel(4);
+		tokio::spawn(async move {
+			for i in inner.offset..limit {
+				let index: usize = i as usize;
 
-			let event = IndexerEvent {
-				id: i + 1,
-				schema_id: record.schema_id as u32,
-				schema_value: record.data,
-				timestamp: current_secs,
-			};
-			tx.send(Ok(event)).await.unwrap();
-		}
-		//});
+				let record = data[index].clone();
+
+				let event = IndexerEvent {
+					id: i + 1,
+					schema_id: record.schema_id as u32,
+					schema_value: record.data,
+					timestamp: current_secs,
+				};
+				tx.send(Ok(event)).await.unwrap();
+			}
+		});
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
