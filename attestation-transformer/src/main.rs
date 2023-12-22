@@ -45,8 +45,8 @@ impl TransformerService {
 	fn new(
 		indexer_channel: Channel, lt_channel: Channel, db_url: &str,
 	) -> Result<Self, AttTrError> {
-		let db = DB::open_default(db_url).map_err(|e| AttTrError::DbError(e))?;
-		let checkpoint = db.get(b"checkpoint").map_err(|e| AttTrError::DbError(e))?;
+		let db = DB::open_default(db_url).map_err(|x| AttTrError::DbError(x))?;
+		let checkpoint = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
 		if let None = checkpoint {
 			let count = 0u32.to_be_bytes();
 			db.put(b"checkpoint", count).map_err(|e| AttTrError::DbError(e))?;

@@ -82,6 +82,7 @@ impl GRPCServer {
 		self.task_service.run().await;
 
 		let data = self.task_service.get_chunk(0, 10000).await;
+
 		let indexer_server = IndexerServer::new(IndexerService::new(data));
 		Server::builder().add_service(indexer_server).serve(address).await?;
 

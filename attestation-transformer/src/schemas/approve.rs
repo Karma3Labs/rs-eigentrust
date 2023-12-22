@@ -141,11 +141,11 @@ mod test {
 		let secp = Secp256k1::new();
 		let res = secp.sign_ecdsa_recoverable(&message, &sk);
 		let (rec_id, sig_bytes) = res.serialize_compact();
-		let rec_id_i32 = rec_id.to_i32();
+		let rec_id = rec_id.to_i32().to_le_bytes()[0];
 
 		let mut bytes = Vec::new();
 		bytes.extend_from_slice(&sig_bytes);
-		bytes.extend_from_slice(&rec_id_i32.to_be_bytes());
+		bytes.push(rec_id);
 		let sig_string = hex::encode(bytes);
 
 		let kind = "AuditReportApproveCredential".to_string();

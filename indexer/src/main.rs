@@ -44,11 +44,11 @@ async fn main() {
 
 	let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
 
-	let client_config = config.evm_indexer_config.clone();
-	let client = CliqueClient::new(client_config);
+	// let client_config = config.evm_indexer_config.clone();
+	// let client = CliqueClient::new(client_config);
 
-	let clique_task_config = config.evm_indexer_config;
-	let clique_task = CliqueTask::new(clique_task_config, client);
+	// let clique_task_config = config.evm_indexer_config;
+	// let clique_task = CliqueTask::new(clique_task_config, client);
 
 	// let mut task_service = TaskService::new(Box::new(clique_task), Box::new(db));
 	// task_service.run().await;
