@@ -95,21 +95,20 @@ impl TransformerService {
 			},
 			SchemaType::AuditApprove => {
 				let parsed_att: AuditApproveSchema =
-					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
 			SchemaType::AuditDisapprove => {
 				let parsed_att: AuditDisapproveSchema =
-					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
 			SchemaType::EndorseCredential => {
 				let parsed_att: EndorseCredential =
-					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
 		};
-		println!("{:?}", term);
 
 		Ok((event.id, term))
 	}
@@ -150,13 +149,14 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			println!("{:?}", res);
-			assert!(res.id == count);
+			assert!(res.id == count + 1);
 			let term =
 				Self::parse_event(res).map_err(|_| Status::internal("Failed to parse event"))?;
 			terms.push(term);
 			count += 1;
 		}
+
+		println!("Received and saved terms: {:#?}", terms);
 
 		Self::write_terms(&db, terms).map_err(|_| Status::internal("Failed to write terms"))?;
 		Self::write_checkpoint(&db, count)

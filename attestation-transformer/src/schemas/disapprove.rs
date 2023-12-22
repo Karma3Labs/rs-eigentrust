@@ -27,14 +27,16 @@ impl Into<u8> for StatusReason {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct CredentialSubject {
 	id: String,
 	status_reason: StatusReason,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct AuditDisapproveSchema {
-	#[serde(rename(serialize = "type"))]
+	#[serde(alias = "type")]
 	kind: String,
 	issuer: String,
 	credential_subject: CredentialSubject,
@@ -44,7 +46,7 @@ pub struct AuditDisapproveSchema {
 #[cfg(test)]
 impl AuditDisapproveSchema {
 	fn new(id: String, status_reason: StatusReason) -> Self {
-		let did = Did::parse(id.clone()).unwrap();
+		let did = Did::parse_snap(id.clone()).unwrap();
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[status_reason.clone().into()]);
@@ -61,12 +63,11 @@ impl AuditDisapproveSchema {
 
 		let mut bytes = Vec::new();
 		bytes.extend_from_slice(&sig_bytes);
-		bytes.extend_from_slice(&rec_id_i32.to_be_bytes());
+		bytes.push(rec_id_i32.to_le_bytes()[0]);
 		let encoded_sig = hex::encode(bytes);
 
 		let kind = "AuditReportDisapproveCredential".to_string();
-		let address = address_from_ecdsa_key(&pk);
-		let issuer = format!("did:pkh:eth:{}", address);
+		let issuer = format!("did:pkh:eth:{}", address_from_ecdsa_key(&pk));
 		let status_reason = StatusReason::Incomplete;
 		let cs = CredentialSubject { id, status_reason };
 		let proof = Proof { signature: encoded_sig };
@@ -77,7 +78,7 @@ impl AuditDisapproveSchema {
 
 impl Validation for AuditDisapproveSchema {
 	fn validate(&self) -> Result<(PublicKey, Did), AttTrError> {
-		let did = Did::parse(self.credential_subject.id.clone())?;
+		let did = Did::parse_snap(self.credential_subject.id.clone())?;
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[self.credential_subject.status_reason.clone().into()]);
@@ -85,16 +86,29 @@ impl Validation for AuditDisapproveSchema {
 		let message = Message::from_digest_slice(digest.as_ref())
 			.map_err(|x| AttTrError::VerificationError(x))?;
 
-		let sig_bytes = hex::decode(self.proof.signature.clone())
+		let sig_bytes = hex::decode(self.proof.signature.trim_start_matches("0x"))
 			.map_err(|_| AttTrError::SerialisationError)?;
+
+		if sig_bytes.len() != 65 {
+			return Err(AttTrError::SerialisationError);
+		}
+
 		let mut rs_bytes = [0; 64];
-		rs_bytes[..64].copy_from_slice(&sig_bytes[..64]);
-		let rec_id: i32 = i32::from_be_bytes(sig_bytes[64..].try_into().unwrap());
-		let signature = RecoverableSignature::from_compact(
-			&rs_bytes,
-			RecoveryId::from_i32(rec_id).map_err(|x| AttTrError::VerificationError(x))?,
-		)
-		.map_err(|x| AttTrError::VerificationError(x))?;
+		rs_bytes.copy_from_slice(&sig_bytes[..64]);
+		let rec_id: i32 = match i32::from(sig_bytes[64]) {
+			0 => 0,
+			1 => 1,
+			27 => 0,
+			28 => 1,
+			_ => return Err(AttTrError::ParseError),
+		};
+
+		let rec_id_p =
+			RecoveryId::from_i32(rec_id).map_err(|x| AttTrError::VerificationError(x))?;
+
+		let signature = RecoverableSignature::from_compact(&rs_bytes, rec_id_p)
+			.map_err(|x| AttTrError::VerificationError(x))?;
+
 		let pk = signature.recover(&message).map_err(|x| AttTrError::VerificationError(x))?;
 
 		let secp = Secp256k1::verification_only();
@@ -142,8 +156,8 @@ mod test {
 
 	#[test]
 	fn should_validate_audit_disapprove_schema() {
-		let did_string = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let did = Did::parse(did_string.clone()).unwrap();
+		let did_string = "snap://90f8bf6a47".to_owned();
+		let did = Did::parse_snap(did_string.clone()).unwrap();
 		let status_reason = StatusReason::Scam;
 
 		let mut keccak = Keccak256::default();
@@ -158,17 +172,16 @@ mod test {
 		let secp = Secp256k1::new();
 		let res = secp.sign_ecdsa_recoverable(&message, &sk);
 		let (rec_id, sig_bytes) = res.serialize_compact();
-		let rec_id_i32 = rec_id.to_i32();
+		let rec_id = rec_id.to_i32().to_le_bytes()[0];
 
 		let mut bytes = Vec::new();
 		bytes.extend_from_slice(&sig_bytes);
-		bytes.extend_from_slice(&rec_id_i32.to_be_bytes());
+		bytes.push(rec_id);
 		let sig_string = hex::encode(bytes);
 
 		let kind = "AuditReportDisapproveCredential".to_string();
 		let address = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:{}", address);
-		let status_reason = StatusReason::Incomplete;
 		let cs = CredentialSubject { id: did_string, status_reason };
 		let proof = Proof { signature: sig_string };
 

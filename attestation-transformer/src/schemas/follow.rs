@@ -37,7 +37,7 @@ pub struct FollowSchema {
 #[cfg(test)]
 impl FollowSchema {
 	pub fn new(id: String, is_trustworthy: bool, scope: Scope) -> Self {
-		let did = Did::parse(id.clone()).unwrap();
+		let did = Did::parse_pkh_eth(id.clone()).unwrap();
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[is_trustworthy.into()]);
@@ -64,7 +64,7 @@ impl FollowSchema {
 
 impl Validation for FollowSchema {
 	fn validate(&self) -> Result<(PublicKey, Did), AttTrError> {
-		let did = Did::parse(self.id.clone())?;
+		let did = Did::parse_pkh_eth(self.id.clone())?;
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[self.is_trustworthy.into()]);
@@ -125,7 +125,7 @@ mod test {
 	#[test]
 	fn should_validate_follow_schema() {
 		let did_string = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let did = Did::parse(did_string.clone()).unwrap();
+		let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 		let is_trustworthy = true;
 		let scope = Scope::Auditor;
 
