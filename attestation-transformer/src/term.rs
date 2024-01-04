@@ -1,7 +1,5 @@
+use crate::error::AttTrError;
 use proto_buf::transformer::{Form, TermObject};
-use secp256k1::PublicKey;
-
-use crate::{did::Did, error::AttTrError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TermForm {
@@ -76,6 +74,9 @@ impl Term {
 	}
 
 	pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, AttTrError> {
+		if bytes.len() != 49 {
+			return Err(AttTrError::SerialisationError);
+		}
 		let from_bytes: Vec<u8> = bytes.drain(..20).collect();
 		let to_bytes: Vec<u8> = bytes.drain(..20).collect();
 		let weight_bytes: [u8; 4] = bytes
@@ -111,16 +112,6 @@ impl Into<TermObject> for Term {
 			form: form.into(),
 		}
 	}
-}
-
-pub trait Validation {
-	fn validate(&self) -> Result<(PublicKey, Did), AttTrError>;
-}
-
-pub trait IntoTerm: Validation {
-	const DOMAIN: u32;
-
-	fn into_term(self) -> Result<Term, AttTrError>;
 }
 
 #[cfg(test)]
