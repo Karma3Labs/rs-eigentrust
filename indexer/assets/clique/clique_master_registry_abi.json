@@ -1,0 +1,791 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "schemaId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "parentId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "attester",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestee",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestor",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "attestedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "updatedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "isPrivate",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "revoked",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct Attestation",
+        "name": "attestation",
+        "type": "tuple"
+      }
+    ],
+    "name": "AttestationRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "attestationId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "AttestationRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct UpdateRequest",
+        "name": "updateRequest",
+        "type": "tuple"
+      }
+    ],
+    "name": "AttestationUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "attestorsRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "AttestorsRegistrySet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "schemaId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "parentId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "attester",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestee",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestor",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "attestedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "updatedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "isPrivate",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "revoked",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct Attestation[]",
+        "name": "attestations",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "BatchAttestationRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32[]",
+        "name": "attestationIds",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "BatchAttestationRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct UpdateRequest[]",
+        "name": "updateRequests",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "BatchAttestationUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "modulesRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "ModulesRegistrySet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "schemasRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "SchemasRegistrySet",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_attestorsRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "setAttestorsRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_schemasRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "setSchemasRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_modulesRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "setModulesRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "schemaId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "parentId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "attester",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestee",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestor",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "attestedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "updatedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "isPrivate",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "revoked",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "internalType": "struct Attestation",
+        "name": "_attestation",
+        "type": "tuple"
+      }
+    ],
+    "name": "attest",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "schemaId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "parentId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "attester",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestee",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestor",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "attestedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "updatedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "isPrivate",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "revoked",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "internalType": "struct Attestation[]",
+        "name": "_attestations",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "attestBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "internalType": "struct UpdateRequest",
+        "name": "_updateRequest",
+        "type": "tuple"
+      }
+    ],
+    "name": "update",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "internalType": "struct UpdateRequest[]",
+        "name": "_updateRequests",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "updateBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "attestationId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revoke",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "attestationIds",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "revokeBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getSchemasRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getModulesRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getAttestorsRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "attestationId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getAttestation",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "attestationId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "schemaId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "parentId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "attester",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestee",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "attestor",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "attestedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "updatedDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "expirationDate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "isPrivate",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "revoked",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "attestationData",
+            "type": "bytes[]"
+          }
+        ],
+        "internalType": "struct Attestation",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "attestee",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "schema",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getAttestationIdsBySchema",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "attestee",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "schema",
+        "type": "bytes32"
+      }
+    ],
+    "name": "hasAttestation",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "attestationId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getAttestationSchemaId",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

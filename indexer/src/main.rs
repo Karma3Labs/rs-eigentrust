@@ -1,59 +1,59 @@
-use proto_buf::indexer::{
-	indexer_server::{Indexer, IndexerServer},
-	IndexerEvent, Query,
-};
-use std::{
-	error::Error,
-	time::{SystemTime, UNIX_EPOCH},
-};
-use tokio::sync::mpsc::channel;
-use tokio_stream::wrappers::ReceiverStream;
-use tonic::{transport::Server, Request, Response, Status};
+mod clients;
+mod config;
+mod frontends;
+mod logger;
+mod storage;
+mod tasks;
 
-const FOLLOW_MOCK: &str = "{
-    \"id\": \"did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2\",
-    \"is_trustworthy\": true,
-    \"scope\": \"Reviewer\",
-    \"sig\": [
-        0,
-        [165, 27, 231, 102, 0, 210, 165, 235, 176, 250, 84, 181, 240, 246, 182, 135, 85, 181, 106, 145, 41, 107, 207, 81, 49, 37, 133, 183, 171, 151, 67, 67],
-        [116, 33, 248, 224, 110, 187, 80, 139, 81, 22, 199, 37, 68, 255, 180, 55, 159, 59, 232, 70, 206, 232, 38, 165, 54, 233, 19, 31, 57, 139, 186, 54]
-    ]
-}";
+use tracing::info;
 
-struct IndexerService;
+use crate::frontends::api::grpc_server::grpc_server::GRPCServer;
+use crate::logger::global::AppLogger;
+use crate::storage::lm_db::lm_db::LMDBClient;
+use crate::tasks::service::TaskService;
 
-#[tonic::async_trait]
-impl Indexer for IndexerService {
-	type SubscribeStream = ReceiverStream<Result<IndexerEvent, Status>>;
-	async fn subscribe(
-		&self, request: Request<Query>,
-	) -> Result<Response<Self::SubscribeStream>, Status> {
-		let inner = request.into_inner();
+use crate::clients::clique::client::CliqueClient;
+use crate::clients::csv::{client::CSVClient, types::CSVClientConfig};
 
-		let start = SystemTime::now();
-		let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
+use crate::tasks::clique::task::CliqueTask;
+use crate::tasks::csv_poc::task::CSVPOCTask;
 
-		let (tx, rx) = channel(1);
-		tokio::spawn(async move {
-			for i in inner.offset..inner.offset + inner.count {
-				let event = IndexerEvent {
-					id: i,
-					schema_id: 1,
-					schema_value: FOLLOW_MOCK.to_string(),
-					timestamp: current_secs,
-				};
-				tx.send(Ok(event)).await.unwrap();
-			}
-		});
-
-		Ok(Response::new(ReceiverStream::new(rx)))
-	}
-}
+use crate::config::dotenv::Config;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-	let addr = "[::1]:50050".parse()?;
-	Server::builder().add_service(IndexerServer::new(IndexerService)).serve(addr).await?;
-	Ok(())
+async fn main() {
+	//-> Result<(), Box<dyn Error>> {
+	let config = Config::from_env();
+
+	let logger_config = config.logger_config.clone();
+	let logger: AppLogger = AppLogger::new(logger_config);
+	logger.init_global_default();
+
+	// avoid sensitive data leak!
+	info!("\n{:#?}", config);
+
+	let lm_db_config = config.lm_db_config;
+	let db = LMDBClient::new(lm_db_config);
+
+	let csv_client_config = CSVClientConfig {
+		// path: "./assets/csv/mock.csv".to_string(),
+		path: "./scripts/generate_mock_attestations/output.csv".to_string(),
+	};
+	let csv_client = CSVClient::new(csv_client_config);
+	let csv_poc_task = CSVPOCTask::new(csv_client);
+
+	let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
+
+	// let client_config = config.evm_indexer_config.clone();
+	// let client = CliqueClient::new(client_config);
+
+	// let clique_task_config = config.evm_indexer_config;
+	// let clique_task = CliqueTask::new(clique_task_config, client);
+
+	// let mut task_service = TaskService::new(Box::new(clique_task), Box::new(db));
+	// task_service.run().await;
+
+	let grpc_server_config = config.grpc_server_config;
+	let mut server = GRPCServer::new(grpc_server_config, task_service);
+	server.serve().await;
 }
