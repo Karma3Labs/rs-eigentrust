@@ -1,14 +1,14 @@
 use error::LcError;
-use item::LtItem;
+use item::{LtItem, MappingItem};
 use proto_buf::{
 	combiner::{
 		linear_combiner_server::{LinearCombiner, LinearCombinerServer},
-		LtBatch, LtHistoryBatch, LtObject,
+		LtBatch, LtHistoryBatch, LtObject, Mapping, MappingQuery,
 	},
 	common::Void,
 	transformer::TermObject,
 };
-use rocksdb::DB;
+use rocksdb::{Direction, DB};
 use rocksdb::{IteratorMode, WriteBatch};
 use std::error::Error;
 use tokio::sync::mpsc::channel;
@@ -22,10 +22,11 @@ mod item;
 struct LinearCombinerService {
 	main_db: String,
 	updates_db: String,
+	mapping_db: String,
 }
 
 impl LinearCombinerService {
-	pub fn new(main_db_url: &str, updates_db_url: &str) -> Result<Self, LcError> {
+	pub fn new(main_db_url: &str, updates_db_url: &str, mapping_db: &str) -> Result<Self, LcError> {
 		let main_db = DB::open_default(main_db_url).map_err(|x| LcError::DbError(x))?;
 		let checkpoint = main_db.get(b"checkpoint").map_err(|x| LcError::DbError(x))?;
 		if let None = checkpoint {
@@ -33,7 +34,11 @@ impl LinearCombinerService {
 			main_db.put(b"checkpoint", count).map_err(|x| LcError::DbError(x))?;
 		}
 
-		Ok(Self { main_db: main_db_url.to_string(), updates_db: updates_db_url.to_string() })
+		Ok(Self {
+			main_db: main_db_url.to_string(),
+			updates_db: updates_db_url.to_string(),
+			mapping_db: mapping_db.to_string(),
+		})
 	}
 
 	fn read_checkpoint(db: &DB) -> Result<u32, LcError> {
@@ -52,7 +57,9 @@ impl LinearCombinerService {
 		Ok(())
 	}
 
-	fn get_index(db: &DB, source: String, offset: &mut u32) -> Result<[u8; 4], LcError> {
+	fn get_index(
+		db: &DB, mapping_db: &DB, source: String, offset: &mut u32,
+	) -> Result<[u8; 4], LcError> {
 		let key = hex::decode(source).map_err(|_| LcError::ParseError)?;
 		let source_index = db.get(&key).map_err(|e| LcError::DbError(e))?;
 
@@ -62,11 +69,28 @@ impl LinearCombinerService {
 		} else {
 			let curr_offset = offset.to_be_bytes();
 			db.put(&key, curr_offset).map_err(|e| LcError::DbError(e))?;
+			mapping_db.put(curr_offset, key).map_err(|e| LcError::DbError(e))?;
 			*offset += 1;
 			curr_offset
 		};
 
 		Ok(x)
+	}
+
+	fn read_mappings(mapping_db: &DB, start: u32, n: u32) -> Result<Vec<MappingItem>, LcError> {
+		let iter =
+			mapping_db.iterator(IteratorMode::From(&start.to_be_bytes(), Direction::Forward));
+
+		let size = usize::try_from(n).map_err(|_| LcError::ParseError)?;
+		let mappings = iter.take(size).try_fold(Vec::new(), |mut acc, item| {
+			item.map(|(key, value)| {
+				let mapping = MappingItem::from_raw(key, value);
+				acc.push(mapping);
+				acc
+			})
+			.map_err(|e| LcError::DbError(e))
+		});
+		mappings
 	}
 
 	fn get_value(main_db: &DB, key: &Vec<u8>) -> Result<u32, LcError> {
@@ -140,6 +164,7 @@ impl LinearCombinerService {
 impl LinearCombiner for LinearCombinerService {
 	type GetNewDataStream = ReceiverStream<Result<LtObject, Status>>;
 	type GetHistoricDataStream = ReceiverStream<Result<LtObject, Status>>;
+	type GetDidMappingStream = ReceiverStream<Result<Mapping, Status>>;
 
 	async fn sync_transformer(
 		&self, request: Request<Streaming<TermObject>>,
@@ -147,6 +172,8 @@ impl LinearCombiner for LinearCombinerService {
 		let main_db = DB::open_default(&self.main_db)
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 		let updates_db = DB::open_default(&self.updates_db)
+			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+		let mapping_db = DB::open_default(&self.mapping_db)
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let mut offset = Self::read_checkpoint(&main_db).map_err(|e| e.into_status())?;
@@ -158,12 +185,13 @@ impl LinearCombiner for LinearCombinerService {
 		}
 
 		for term in terms {
-			let x = Self::get_index(&main_db, term.from.clone(), &mut offset)
-				.map_err(|e| e.into_status())?;
-			let y = Self::get_index(&main_db, term.to.clone(), &mut offset)
-				.map_err(|e| e.into_status())?;
 			let domain = term.domain.to_be_bytes();
 			let form = term.form.to_be_bytes();
+
+			let x = Self::get_index(&main_db, &mapping_db, term.from.clone(), &mut offset)
+				.map_err(|e| e.into_status())?;
+			let y = Self::get_index(&main_db, &mapping_db, term.to.clone(), &mut offset)
+				.map_err(|e| e.into_status())?;
 
 			let mut key = Vec::new();
 			key.extend_from_slice(&domain);
@@ -178,6 +206,26 @@ impl LinearCombiner for LinearCombinerService {
 		Self::write_checkpoint(&main_db, offset).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(Void {}))
+	}
+
+	async fn get_did_mapping(
+		&self, request: Request<MappingQuery>,
+	) -> Result<Response<Self::GetDidMappingStream>, Status> {
+		let mapping_query = request.into_inner();
+		let mapping_db = DB::open_default(&self.mapping_db)
+			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+
+		let mappings = Self::read_mappings(&mapping_db, mapping_query.start, mapping_query.size)
+			.map_err(|e| e.into_status())?;
+
+		let (tx, rx) = channel(1);
+		for x in mappings.clone() {
+			let x_obj: Mapping = x.into();
+			if let Err(e) = tx.send(Ok(x_obj)).await {
+				e.0?;
+			}
+		}
+		Ok(Response::new(ReceiverStream::new(rx)))
 	}
 
 	async fn get_new_data(
@@ -249,7 +297,8 @@ impl LinearCombiner for LinearCombinerService {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let addr = "[::1]:50052".parse()?;
-	let service = LinearCombinerService::new("lc-storage", "lc-updates-storage")?;
+	let service =
+		LinearCombinerService::new("lc-storage", "lc-updates-storage", "lc-mapping-storage")?;
 	Server::builder().add_service(LinearCombinerServer::new(service)).serve(addr).await?;
 	Ok(())
 }
@@ -270,10 +319,12 @@ mod test {
 	#[test]
 	fn should_update_and_get_index() {
 		let main_db = DB::open_default("lc-index-test-storage").unwrap();
+		let mapping_db = DB::open_default("lc-mapping-test-storage").unwrap();
 		let source = "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
 		let mut offset = 0;
 
-		let index = LinearCombinerService::get_index(&main_db, source, &mut offset).unwrap();
+		let index =
+			LinearCombinerService::get_index(&main_db, &mapping_db, source, &mut offset).unwrap();
 
 		let mut bytes = [0; 4];
 		bytes.copy_from_slice(&index);

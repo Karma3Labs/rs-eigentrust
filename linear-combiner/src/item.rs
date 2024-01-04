@@ -1,4 +1,4 @@
-use proto_buf::combiner::LtObject;
+use proto_buf::combiner::{LtObject, Mapping};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LtItem {
@@ -46,5 +46,33 @@ impl LtItem {
 impl Into<LtObject> for LtItem {
 	fn into(self) -> LtObject {
 		LtObject { x: self.x, y: self.y, value: self.value }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MappingItem {
+	id: u32,
+	did: String,
+}
+
+impl MappingItem {
+	pub fn new(id: u32, did: String) -> Self {
+		Self { id, did }
+	}
+
+	pub fn from_raw<I: AsRef<[u8]>>(id: I, did: I) -> Self {
+		let mut id_bytes = [0; 4];
+		id_bytes.copy_from_slice(id.as_ref());
+
+		let id = u32::from_be_bytes(id_bytes);
+		let did = hex::encode(did);
+
+		Self { id, did }
+	}
+}
+
+impl Into<Mapping> for MappingItem {
+	fn into(self) -> Mapping {
+		Mapping { id: self.id, did: self.did }
 	}
 }
