@@ -6,8 +6,19 @@ import "transformer.proto";
 
 service LinearCombiner {
     rpc SyncTransformer (stream transformer.TermObject) returns (common.Void);
+    rpc GetDidMapping (MappingQuery) returns (stream Mapping);
     rpc GetNewData (LtBatch) returns (stream LtObject);
     rpc GetHistoricData (LtHistoryBatch) returns (stream LtObject);
+}
+
+message MappingQuery {
+    uint32 start = 1;
+    uint32 size = 2;
+}
+
+message Mapping {
+    uint32 id = 1;
+    string did = 2;
 }
 
 message LtBatch {
