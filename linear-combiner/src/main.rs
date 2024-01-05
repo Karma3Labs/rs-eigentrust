@@ -199,6 +199,13 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
 
+			println!(
+				"Received Item({}, {}, {})",
+				u32::from_be_bytes(x),
+				u32::from_be_bytes(y),
+				term.weight
+			);
+
 			Self::update_value(&main_db, &updates_db, key.clone(), term.weight)
 				.map_err(|e| e.into_status())?;
 		}

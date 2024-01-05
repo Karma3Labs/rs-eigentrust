@@ -7,12 +7,19 @@ use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{TermBatch, TermObject};
 use rocksdb::{WriteBatch, DB};
-use schemas::{AuditApproveSchema, AuditDisapproveSchema, FollowSchema, SchemaType};
+use schemas::status::EndorseCredential;
+use schemas::SchemaType;
 use serde_json::from_str;
 use std::error::Error;
-use term::{IntoTerm, Term};
+use term::Term;
+
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
+
+use crate::schemas::approve::AuditApproveSchema;
+use crate::schemas::disapprove::AuditDisapproveSchema;
+use crate::schemas::follow::FollowSchema;
+use crate::schemas::IntoTerm;
 
 mod did;
 mod error;
@@ -23,7 +30,9 @@ mod utils;
 const MAX_TERM_BATCH_SIZE: u32 = 1000;
 const MAX_ATT_BATCH_SIZE: u32 = 1000;
 const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";
-const FOLLOW_SCHEMA_ID: &str = "0x2";
+const AUDIT_APPROVE_SCHEMA_ID: &str = "0x2";
+const AUDIT_DISAPPROVE_SCHEMA_ID: &str = "0x3";
+const ENDORSE_SCHEMA_ID: &str = "0x4";
 
 #[derive(Debug)]
 struct TransformerService {
@@ -67,10 +76,12 @@ impl TransformerService {
 		for i in batch.start..batch.size {
 			let id_bytes = i.to_be_bytes();
 			let res_opt = db.get(id_bytes).map_err(|e| AttTrError::DbError(e))?;
-			let res = res_opt.ok_or_else(|| AttTrError::NotFoundError)?;
-			let term = Term::from_bytes(res)?;
-			let term_obj: TermObject = term.into();
-			terms.push(term_obj);
+			if let Some(res) = res_opt {
+				if let Ok(term) = Term::from_bytes(res) {
+					let term_obj: TermObject = term.into();
+					terms.push(term_obj);
+				}
+			}
 		}
 		Ok(terms)
 	}
@@ -82,20 +93,21 @@ impl TransformerService {
 			SchemaType::Follow => {
 				let parsed_att: FollowSchema =
 					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
-				println!(
-					"Received: Follow({:?}, {:?}, {:?})",
-					parsed_att.id, parsed_att.is_trustworthy, parsed_att.scope
-				);
 				parsed_att.into_term()?
 			},
 			SchemaType::AuditApprove => {
 				let parsed_att: AuditApproveSchema =
-					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
 			SchemaType::AuditDisapprove => {
 				let parsed_att: AuditDisapproveSchema =
-					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
+				parsed_att.into_term()?
+			},
+			SchemaType::EndorseCredential => {
+				let parsed_att: EndorseCredential =
+					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
 		};
@@ -120,13 +132,16 @@ impl Transformer for TransformerService {
 		let db = DB::open_default(self.db.clone())
 			.map_err(|_| Status::internal("Failed to connect to DB"))?;
 
-		let offset = Self::read_checkpoint(&db)
-			.map_err(|_| Status::internal("Failed to read checkpoint"))?;
+		let offset = 0;
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
-			schema_id: vec![FOLLOW_SCHEMA_ID.to_owned()],
-			offset,
+			schema_id: vec![
+				AUDIT_APPROVE_SCHEMA_ID.to_owned(),
+				AUDIT_DISAPPROVE_SCHEMA_ID.to_owned(),
+				ENDORSE_SCHEMA_ID.to_owned(),
+			],
+			offset: 0,
 			count: MAX_ATT_BATCH_SIZE,
 		};
 
@@ -136,12 +151,14 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			assert!(res.id == count);
+			assert!(res.id == count + 1);
 			let term =
 				Self::parse_event(res).map_err(|_| Status::internal("Failed to parse event"))?;
 			terms.push(term);
 			count += 1;
 		}
+
+		println!("Received and saved terms: {:#?}", terms);
 
 		Self::write_terms(&db, terms).map_err(|_| Status::internal("Failed to write terms"))?;
 		Self::write_checkpoint(&db, count)
@@ -186,14 +203,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
+	use crate::schemas::follow::{FollowSchema, Scope};
+	use crate::schemas::IntoTerm;
+	use crate::TransformerService;
 	use proto_buf::indexer::IndexerEvent;
 	use proto_buf::transformer::{TermBatch, TermObject};
 	use rocksdb::DB;
 	use serde_json::to_string;
-
-	use crate::schemas::Scope;
-	use crate::term::IntoTerm;
-	use crate::{schemas::FollowSchema, TransformerService};
 
 	#[test]
 	fn should_write_read_checkpoint() {
@@ -208,7 +224,7 @@ mod test {
 		let db = DB::open_default("att-tr-terms-test-storage").unwrap();
 
 		let follow_schema = FollowSchema::new(
-			"did:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
+			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
 			true,
 			Scope::Auditor,
 		);
