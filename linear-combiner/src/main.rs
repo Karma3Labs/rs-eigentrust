@@ -321,16 +321,21 @@ mod test {
 		let main_db = DB::open_default("lc-index-test-storage").unwrap();
 		let mapping_db = DB::open_default("lc-mapping-test-storage").unwrap();
 		let source = "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
-		let mut offset = 0;
+		let mut offset = 15;
 
 		let index =
-			LinearCombinerService::get_index(&main_db, &mapping_db, source, &mut offset).unwrap();
+			LinearCombinerService::get_index(&main_db, &mapping_db, source.clone(), &mut offset)
+				.unwrap();
 
 		let mut bytes = [0; 4];
 		bytes.copy_from_slice(&index);
 		let i = u32::from_be_bytes(bytes);
 
-		assert_eq!(i, 0);
+		let id = mapping_db.get(index).unwrap().unwrap();
+		let encoded_id = hex::encode(id);
+
+		assert_eq!(source, encoded_id);
+		assert_eq!(i, 15);
 	}
 
 	#[test]
