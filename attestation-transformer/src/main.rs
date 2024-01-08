@@ -18,7 +18,6 @@ use tonic::{transport::Server, Request, Response, Status};
 
 use crate::schemas::approve::AuditApproveSchema;
 use crate::schemas::disapprove::AuditDisapproveSchema;
-use crate::schemas::follow::FollowSchema;
 use crate::schemas::IntoTerm;
 
 mod did;
@@ -90,11 +89,6 @@ impl TransformerService {
 		let schema_id = event.schema_id;
 		let schema_type = SchemaType::from(schema_id);
 		let term = match schema_type {
-			SchemaType::Follow => {
-				let parsed_att: FollowSchema =
-					from_str(&event.schema_value).map_err(|_| AttTrError::ParseError)?;
-				parsed_att.into_term()?
-			},
 			SchemaType::AuditApprove => {
 				let parsed_att: AuditApproveSchema =
 					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
@@ -203,7 +197,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-	use crate::schemas::follow::{FollowSchema, Scope};
+	use crate::schemas::status::{CurrentStatus, EndorseCredential};
 	use crate::schemas::IntoTerm;
 	use crate::TransformerService;
 	use proto_buf::indexer::IndexerEvent;
@@ -223,14 +217,13 @@ mod test {
 	fn should_write_read_term() {
 		let db = DB::open_default("att-tr-terms-test-storage").unwrap();
 
-		let follow_schema = FollowSchema::new(
+		let follow_schema = EndorseCredential::new(
 			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
-			true,
-			Scope::Auditor,
+			CurrentStatus::Endorsed,
 		);
 		let indexed_event = IndexerEvent {
 			id: 0,
-			schema_id: 1,
+			schema_id: 4,
 			schema_value: to_string(&follow_schema).unwrap(),
 			timestamp: 2397848,
 		};
