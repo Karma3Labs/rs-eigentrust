@@ -21,7 +21,7 @@ enum Form {
 message TermObject {
     string from = 1;
     string to = 2;
-    uint32 weight = 3;
+    float weight = 3;
     uint32 domain = 4;
     Form form = 5;
 }
