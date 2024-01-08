@@ -93,8 +93,8 @@ impl IntoTerm for StatusSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		let weight = 50.;
-		let domain = 1;
+		let weight = 25.;
+		let domain = 2;
 		let form = match self.credential_subject.current_status {
 			CurrentStatus::Endorsed => true,
 			CurrentStatus::Disputed => false,

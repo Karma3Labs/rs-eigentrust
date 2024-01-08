@@ -101,11 +101,16 @@ impl IntoTerm for TrustSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		let weight = 50.;
-		let domain = 1;
+		let trust_arc = self.credential_subject.trustworthiness[0].clone();
+		let form = trust_arc.level >= 0.;
+		let (domain, weight) = match trust_arc.scope {
+			Domain::SoftwareDevelopment => (1, trust_arc.level.abs() * 10.),
+			Domain::SoftwareSecurity => (2, trust_arc.level.abs() * 10.),
+			Domain::Honesty => return Err(AttTrError::NotImplemented),
+		};
 
 		Ok(Term::new(
-			from_did, self.credential_subject.id, weight, domain, true,
+			from_did, self.credential_subject.id, weight, domain, form,
 		))
 	}
 }
