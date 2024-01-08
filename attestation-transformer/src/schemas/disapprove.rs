@@ -1,5 +1,10 @@
 use super::{IntoTerm, Proof, Validation};
-use crate::{did::Did, error::AttTrError, term::Term, utils::address_from_ecdsa_key};
+use crate::{
+	did::{Did, Schema},
+	error::AttTrError,
+	term::Term,
+	utils::address_from_ecdsa_key,
+};
 use secp256k1::{
 	ecdsa::{RecoverableSignature, RecoveryId},
 	generate_keypair,
@@ -67,7 +72,8 @@ impl AuditDisapproveSchema {
 		let encoded_sig = hex::encode(bytes);
 
 		let kind = "AuditReportDisapproveCredential".to_string();
-		let issuer = format!("did:pkh:eth:{}", address_from_ecdsa_key(&pk));
+		let addr = address_from_ecdsa_key(&pk);
+		let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
 		let status_reason = StatusReason::Incomplete;
 		let cs = CredentialSubject { id, status_reason };
 		let proof = Proof { signature: encoded_sig };
@@ -77,44 +83,17 @@ impl AuditDisapproveSchema {
 }
 
 impl Validation for AuditDisapproveSchema {
-	fn validate(&self) -> Result<(PublicKey, Did), AttTrError> {
+	fn get_trimmed_signature(&self) -> String {
+		self.proof.get_signature().trim_start_matches("0x").to_owned()
+	}
+
+	fn get_message(&self) -> Result<Vec<u8>, AttTrError> {
 		let did = Did::parse_snap(self.credential_subject.id.clone())?;
-		let mut keccak = Keccak256::default();
-		keccak.update(&did.key);
-		keccak.update(&[self.credential_subject.status_reason.clone().into()]);
-		let digest = keccak.finalize();
-		let message = Message::from_digest_slice(digest.as_ref())
-			.map_err(|x| AttTrError::VerificationError(x))?;
+		let mut bytes = Vec::new();
+		bytes.extend_from_slice(&did.key);
+		bytes.push(self.credential_subject.status_reason.clone().into());
 
-		let sig_bytes = hex::decode(self.proof.signature.trim_start_matches("0x"))
-			.map_err(|_| AttTrError::SerialisationError)?;
-
-		if sig_bytes.len() != 65 {
-			return Err(AttTrError::SerialisationError);
-		}
-
-		let mut rs_bytes = [0; 64];
-		rs_bytes.copy_from_slice(&sig_bytes[..64]);
-		let rec_id: i32 = match i32::from(sig_bytes[64]) {
-			0 => 0,
-			1 => 1,
-			27 => 0,
-			28 => 1,
-			_ => return Err(AttTrError::ParseError),
-		};
-
-		let rec_id_p =
-			RecoveryId::from_i32(rec_id).map_err(|x| AttTrError::VerificationError(x))?;
-
-		let signature = RecoverableSignature::from_compact(&rs_bytes, rec_id_p)
-			.map_err(|x| AttTrError::VerificationError(x))?;
-
-		let pk = signature.recover(&message).map_err(|x| AttTrError::VerificationError(x))?;
-
-		let secp = Secp256k1::verification_only();
-		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
-			.map_err(|x| AttTrError::VerificationError(x))?;
-		Ok((pk, did))
+		Ok(bytes)
 	}
 }
 
@@ -122,10 +101,10 @@ impl IntoTerm for AuditDisapproveSchema {
 	const DOMAIN: u32 = 1;
 
 	fn into_term(self) -> Result<Term, AttTrError> {
-		let (pk, did) = self.validate()?;
+		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
-		let to_address = hex::encode(&did.key);
+		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
 		let weight = match self.credential_subject.status_reason {
 			StatusReason::Unreliable => 10,
 			StatusReason::Scam => 50,
@@ -133,8 +112,8 @@ impl IntoTerm for AuditDisapproveSchema {
 		};
 
 		Ok(Term::new(
-			from_address,
-			to_address,
+			from_did,
+			self.credential_subject.id,
 			weight,
 			Self::DOMAIN,
 			false,
@@ -181,13 +160,13 @@ mod test {
 
 		let kind = "AuditReportDisapproveCredential".to_string();
 		let address = address_from_ecdsa_key(&pk);
-		let issuer = format!("did:pkh:eth:{}", address);
+		let issuer = format!("did:pkh:eth:{}", hex::encode(address));
 		let cs = CredentialSubject { id: did_string, status_reason };
 		let proof = Proof { signature: sig_string };
 
 		let aa_schema = AuditDisapproveSchema { kind, issuer, credential_subject: cs, proof };
 
-		let (rec_pk, _) = aa_schema.validate().unwrap();
+		let rec_pk = aa_schema.validate().unwrap();
 
 		assert_eq!(rec_pk, pk);
 	}
