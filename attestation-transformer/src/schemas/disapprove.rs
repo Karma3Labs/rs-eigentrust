@@ -104,9 +104,9 @@ impl IntoTerm for AuditDisapproveSchema {
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
 		let weight = match self.credential_subject.status_reason {
-			StatusReason::Unreliable => 10,
-			StatusReason::Scam => 50,
-			StatusReason::Incomplete => 100,
+			StatusReason::Unreliable => 10.,
+			StatusReason::Scam => 50.,
+			StatusReason::Incomplete => 100.,
 		};
 		let domain = 1;
 
