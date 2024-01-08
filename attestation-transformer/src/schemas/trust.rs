@@ -21,6 +21,12 @@ struct DomainTrust {
 	reason: Vec<String>,
 }
 
+impl DomainTrust {
+	fn new(scope: Domain, level: f32, reason: Vec<String>) -> Self {
+		Self { scope, level, reason }
+	}
+}
+
 #[derive(Deserialize, Serialize, Clone)]
 struct CredentialSubject {
 	id: String,
@@ -95,7 +101,7 @@ impl IntoTerm for TrustSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		let weight = 50;
+		let weight = 50.;
 		let domain = 1;
 
 		Ok(Term::new(
@@ -104,51 +110,58 @@ impl IntoTerm for TrustSchema {
 	}
 }
 
-// #[cfg(test)]
-// mod test {
-// 	use crate::{
-// 		did::Did,
-// 		schemas::{approve::CredentialSubject, Proof, Validation},
-// 		utils::address_from_ecdsa_key,
-// 	};
+#[cfg(test)]
+mod test {
+	use crate::{
+		did::Did,
+		schemas::{
+			trust::{CredentialSubject, DomainTrust},
+			Domain, Proof, Validation,
+		},
+		utils::address_from_ecdsa_key,
+	};
 
-// 	use super::AuditApproveSchema;
-// 	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
-// 	use sha3::{Digest, Keccak256};
+	use super::TrustSchema;
+	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
+	use sha3::{Digest, Keccak256};
 
-// 	#[test]
-// 	fn should_validate_audit_approve_schema() {
-// 		let did_string = "snap://90f8bf6a47".to_owned();
-// 		let did = Did::parse_snap(did_string.clone()).unwrap();
+	#[test]
+	fn should_validate_trust_schema() {
+		let did_string = "snap://90f8bf6a47".to_owned();
+		let did = Did::parse_snap(did_string.clone()).unwrap();
+		let trust_arc = DomainTrust::new(Domain::SoftwareSecurity, 0.5, Vec::new());
 
-// 		let mut keccak = Keccak256::default();
-// 		keccak.update(&did.key);
-// 		let digest = keccak.finalize();
+		let mut keccak = Keccak256::default();
+		keccak.update(&did.key);
+		keccak.update(&[trust_arc.scope.clone().into()]);
+		keccak.update(&trust_arc.level.to_be_bytes());
 
-// 		let message = Message::from_digest_slice(digest.as_ref()).unwrap();
+		let digest = keccak.finalize();
 
-// 		let rng = &mut thread_rng();
-// 		let (sk, pk) = generate_keypair(rng);
-// 		let secp = Secp256k1::new();
-// 		let res = secp.sign_ecdsa_recoverable(&message, &sk);
-// 		let (rec_id, sig_bytes) = res.serialize_compact();
-// 		let rec_id = rec_id.to_i32().to_le_bytes()[0];
+		let message = Message::from_digest_slice(digest.as_ref()).unwrap();
 
-// 		let mut bytes = Vec::new();
-// 		bytes.extend_from_slice(&sig_bytes);
-// 		bytes.push(rec_id);
-// 		let sig_string = hex::encode(bytes);
+		let rng = &mut thread_rng();
+		let (sk, pk) = generate_keypair(rng);
+		let secp = Secp256k1::new();
+		let res = secp.sign_ecdsa_recoverable(&message, &sk);
+		let (rec_id, sig_bytes) = res.serialize_compact();
+		let rec_id = rec_id.to_i32().to_le_bytes()[0];
 
-// 		let kind = "AuditReportApproveCredential".to_string();
-// 		let addr = address_from_ecdsa_key(&pk);
-// 		let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
-// 		let cs = CredentialSubject { id: did_string };
-// 		let proof = Proof { signature: sig_string };
+		let mut bytes = Vec::new();
+		bytes.extend_from_slice(&sig_bytes);
+		bytes.push(rec_id);
+		let sig_string = hex::encode(bytes);
 
-// 		let aa_schema = AuditApproveSchema { kind, issuer, credential_subject: cs, proof };
+		let kind = "AuditReportApproveCredential".to_string();
+		let addr = address_from_ecdsa_key(&pk);
+		let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
+		let cs = CredentialSubject { id: did_string, trustworthiness: vec![trust_arc] };
+		let proof = Proof { signature: sig_string };
 
-// 		let rec_pk = aa_schema.validate().unwrap();
+		let aa_schema = TrustSchema { kind, issuer, credential_subject: cs, proof };
 
-// 		assert_eq!(rec_pk, pk);
-// 	}
-// }
+		let rec_pk = aa_schema.validate().unwrap();
+
+		assert_eq!(rec_pk, pk);
+	}
+}
