@@ -73,21 +73,16 @@ impl Validation for AuditApproveSchema {
 }
 
 impl IntoTerm for AuditApproveSchema {
-	const DOMAIN: u32 = 1;
-
 	fn into_term(self) -> Result<Term, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
 		let weight = 50;
+		let domain = 1;
 
 		Ok(Term::new(
-			from_did,
-			self.credential_subject.id,
-			weight,
-			Self::DOMAIN,
-			true,
+			from_did, self.credential_subject.id, weight, domain, true,
 		))
 	}
 }

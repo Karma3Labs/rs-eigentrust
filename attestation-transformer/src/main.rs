@@ -7,7 +7,8 @@ use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{TermBatch, TermObject};
 use rocksdb::{WriteBatch, DB};
-use schemas::status::EndorseCredential;
+use schemas::status::StatusSchema;
+use schemas::trust::TrustSchema;
 use schemas::SchemaType;
 use serde_json::from_str;
 use std::error::Error;
@@ -31,7 +32,7 @@ const MAX_ATT_BATCH_SIZE: u32 = 1000;
 const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";
 const AUDIT_APPROVE_SCHEMA_ID: &str = "0x2";
 const AUDIT_DISAPPROVE_SCHEMA_ID: &str = "0x3";
-const ENDORSE_SCHEMA_ID: &str = "0x4";
+const STATUS_SCHEMA_ID: &str = "0x4";
 
 #[derive(Debug)]
 struct TransformerService {
@@ -99,8 +100,13 @@ impl TransformerService {
 					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
-			SchemaType::EndorseCredential => {
-				let parsed_att: EndorseCredential =
+			SchemaType::StatusCredential => {
+				let parsed_att: StatusSchema =
+					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
+				parsed_att.into_term()?
+			},
+			SchemaType::TrustCredential => {
+				let parsed_att: TrustSchema =
 					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
@@ -133,7 +139,7 @@ impl Transformer for TransformerService {
 			schema_id: vec![
 				AUDIT_APPROVE_SCHEMA_ID.to_owned(),
 				AUDIT_DISAPPROVE_SCHEMA_ID.to_owned(),
-				ENDORSE_SCHEMA_ID.to_owned(),
+				STATUS_SCHEMA_ID.to_owned(),
 			],
 			offset: 0,
 			count: MAX_ATT_BATCH_SIZE,
@@ -197,7 +203,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-	use crate::schemas::status::{CurrentStatus, EndorseCredential};
+	use crate::schemas::status::{CurrentStatus, StatusSchema};
 	use crate::schemas::IntoTerm;
 	use crate::TransformerService;
 	use proto_buf::indexer::IndexerEvent;
@@ -217,7 +223,7 @@ mod test {
 	fn should_write_read_term() {
 		let db = DB::open_default("att-tr-terms-test-storage").unwrap();
 
-		let follow_schema = EndorseCredential::new(
+		let follow_schema = StatusSchema::new(
 			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
 			CurrentStatus::Endorsed,
 		);

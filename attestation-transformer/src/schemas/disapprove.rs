@@ -98,8 +98,6 @@ impl Validation for AuditDisapproveSchema {
 }
 
 impl IntoTerm for AuditDisapproveSchema {
-	const DOMAIN: u32 = 1;
-
 	fn into_term(self) -> Result<Term, AttTrError> {
 		let pk = self.validate()?;
 
@@ -110,13 +108,10 @@ impl IntoTerm for AuditDisapproveSchema {
 			StatusReason::Scam => 50,
 			StatusReason::Incomplete => 100,
 		};
+		let domain = 1;
 
 		Ok(Term::new(
-			from_did,
-			self.credential_subject.id,
-			weight,
-			Self::DOMAIN,
-			false,
+			from_did, self.credential_subject.id, weight, domain, false,
 		))
 	}
 }
