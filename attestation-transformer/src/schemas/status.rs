@@ -31,7 +31,7 @@ struct CredentialSubject {
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct EndorseCredential {
+pub struct StatusSchema {
 	#[serde(alias = "type")]
 	kind: String,
 	issuer: String,
@@ -40,7 +40,7 @@ pub struct EndorseCredential {
 }
 
 #[cfg(test)]
-impl EndorseCredential {
+impl StatusSchema {
 	pub fn new(id: String, current_status: CurrentStatus) -> Self {
 		let did = Did::parse_pkh_eth(id.clone()).unwrap();
 		let mut keccak = Keccak256::default();
@@ -62,17 +62,17 @@ impl EndorseCredential {
 		bytes.push(rec_id_i32.to_le_bytes()[0]);
 		let encoded_sig = hex::encode(bytes);
 
-		let kind = "EndorsementCredential".to_string();
+		let kind = "StatusCredential".to_string();
 		let addr = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
 		let cs = CredentialSubject { id, current_status };
 		let proof = Proof { signature: encoded_sig };
 
-		EndorseCredential { kind, issuer, credential_subject: cs, proof }
+		StatusSchema { kind, issuer, credential_subject: cs, proof }
 	}
 }
 
-impl Validation for EndorseCredential {
+impl Validation for StatusSchema {
 	fn get_trimmed_signature(&self) -> String {
 		self.proof.get_signature().trim_start_matches("0x").to_owned()
 	}
@@ -87,29 +87,28 @@ impl Validation for EndorseCredential {
 	}
 }
 
-impl IntoTerm for EndorseCredential {
-	const DOMAIN: u32 = 1;
-
+impl IntoTerm for StatusSchema {
 	fn into_term(self) -> Result<Term, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
 		let weight = 50;
+		let domain = 1;
+		let form = match self.credential_subject.current_status {
+			CurrentStatus::Endorsed => true,
+			CurrentStatus::Disputed => false,
+		};
 
 		Ok(Term::new(
-			from_did,
-			self.credential_subject.id,
-			weight,
-			Self::DOMAIN,
-			true,
+			from_did, self.credential_subject.id, weight, domain, form,
 		))
 	}
 }
 
 #[cfg(test)]
 mod test {
-	use crate::schemas::status::{CredentialSubject, EndorseCredential};
+	use crate::schemas::status::{CredentialSubject, StatusSchema};
 	use crate::schemas::{Proof, Validation};
 	use crate::utils::address_from_ecdsa_key;
 	use crate::{did::Did, schemas::status::CurrentStatus};
@@ -147,7 +146,7 @@ mod test {
 		let cs = CredentialSubject { id: did_string, current_status };
 		let proof = Proof { signature: sig_string };
 
-		let follow_schema = EndorseCredential { kind, issuer, credential_subject: cs, proof };
+		let follow_schema = StatusSchema { kind, issuer, credential_subject: cs, proof };
 
 		let rec_pk = follow_schema.validate().unwrap();
 

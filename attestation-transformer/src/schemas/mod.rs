@@ -9,6 +9,7 @@ use sha3::{Digest, Keccak256};
 pub mod approve;
 pub mod disapprove;
 pub mod status;
+pub mod trust;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Proof {
@@ -62,15 +63,14 @@ pub trait Validation {
 }
 
 pub trait IntoTerm: Validation {
-	const DOMAIN: u32;
-
 	fn into_term(self) -> Result<Term, AttTrError>;
 }
 
 pub enum SchemaType {
 	AuditApprove,
 	AuditDisapprove,
-	EndorseCredential,
+	StatusCredential,
+	TrustCredential,
 }
 
 impl From<u32> for SchemaType {
@@ -78,8 +78,26 @@ impl From<u32> for SchemaType {
 		match value {
 			2 => Self::AuditApprove,
 			3 => Self::AuditDisapprove,
-			4 => Self::EndorseCredential,
+			4 => Self::StatusCredential,
+			5 => Self::TrustCredential,
 			_ => panic!("Invalid Schema type"),
+		}
+	}
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub enum Domain {
+	Honesty,
+	SoftwareDevelopment,
+	SoftwareSecurity,
+}
+
+impl Into<u8> for Domain {
+	fn into(self) -> u8 {
+		match self {
+			Self::Honesty => 0,
+			Self::SoftwareDevelopment => 1,
+			Self::SoftwareSecurity => 2,
 		}
 	}
 }
