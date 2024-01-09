@@ -1,5 +1,3 @@
-use std::num::TryFromIntError;
-
 use hex::FromHexError;
 use rocksdb::Error as RocksDbError;
 use secp256k1::Error as SecpError;
@@ -9,14 +7,14 @@ use tonic::Status;
 
 #[derive(Debug, Error)]
 pub enum AttTrError {
+	#[error("SerialisationError")]
+	SerialisationError,
+
 	#[error("SerdeError: {0}")]
 	SerdeError(Error),
 
 	#[error("HexError: {0}")]
 	HexError(FromHexError),
-
-	#[error("TryFromError: {0}")]
-	TryFromError(TryFromIntError),
 
 	#[error("VerificationError: {0}")]
 	VerificationError(SecpError),
