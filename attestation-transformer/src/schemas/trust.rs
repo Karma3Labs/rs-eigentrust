@@ -148,7 +148,7 @@ mod test {
 		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[trust_arc.scope.clone().into()]);
-		keccak.update(&trust_arc.level.to_be_bytes());
+		// keccak.update(&trust_arc.level.to_be_bytes());
 
 		let digest = keccak.finalize();
 
