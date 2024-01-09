@@ -29,8 +29,8 @@ pub trait Validation {
 	fn get_trimmed_signature(&self) -> String;
 
 	fn validate(&self) -> Result<PublicKey, AttTrError> {
-		let sig_bytes = hex::decode(self.get_trimmed_signature())
-			.map_err(|_| AttTrError::SerialisationError)?;
+		let sig_bytes =
+			hex::decode(self.get_trimmed_signature()).map_err(|e| AttTrError::HexError(e))?;
 
 		let mut rs_bytes = [0; 64];
 		rs_bytes.copy_from_slice(&sig_bytes[..64]);

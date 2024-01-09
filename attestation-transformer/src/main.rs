@@ -166,7 +166,7 @@ impl Transformer for TransformerService {
 		}
 
 		let num_new_term_groups =
-			u32::try_from(terms.len()).map_err(|e| AttTrError::TryFromError(e).into_status())?;
+			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError.into_status())?;
 		checkpoint += num_new_term_groups;
 		let (num_total_new_terms, indexed_terms): (u32, Vec<(u32, Term)>) =
 			terms.iter().fold((0, Vec::new()), |(mut acc, mut new_items), items| {
