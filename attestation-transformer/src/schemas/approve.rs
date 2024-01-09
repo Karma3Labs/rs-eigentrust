@@ -73,7 +73,7 @@ impl Validation for AuditApproveSchema {
 }
 
 impl IntoTerm for AuditApproveSchema {
-	fn into_term(self) -> Result<Term, AttTrError> {
+	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
@@ -81,9 +81,8 @@ impl IntoTerm for AuditApproveSchema {
 		let weight = 50.;
 		let domain = 1;
 
-		Ok(Term::new(
-			from_did, self.credential_subject.id, weight, domain, true,
-		))
+		let term = Term::new(from_did, self.credential_subject.id, weight, domain, true);
+		Ok(vec![term])
 	}
 }
 

@@ -48,8 +48,9 @@ impl TransformerService {
 		let db = DB::open_default(db_url).map_err(|x| AttTrError::DbError(x))?;
 		let checkpoint = db.get(b"checkpoint").map_err(|x| AttTrError::DbError(x))?;
 		if let None = checkpoint {
-			let count = 0u32.to_be_bytes();
-			db.put(b"checkpoint", count).map_err(|e| AttTrError::DbError(e))?;
+			let zero = 0u32.to_be_bytes();
+			db.put(b"checkpoint", zero).map_err(|e| AttTrError::DbError(e))?;
+			db.put(b"count", zero).map_err(|e| AttTrError::DbError(e))?;
 		}
 
 		Ok(Self { indexer_channel, lt_channel, db: db_url.to_string() })
@@ -66,8 +67,9 @@ impl TransformerService {
 		Ok(offset)
 	}
 
-	fn write_checkpoint(db: &DB, count: u32) -> Result<(), AttTrError> {
-		db.put(b"checkpoint", count.to_be_bytes()).map_err(|e| AttTrError::DbError(e))?;
+	fn write_checkpoint(db: &DB, checkpoint: u32, count: u32) -> Result<(), AttTrError> {
+		db.put(b"checkpoint", checkpoint.to_be_bytes()).map_err(|e| AttTrError::DbError(e))?;
+		db.put(b"count", count.to_be_bytes()).map_err(|e| AttTrError::DbError(e))?;
 		Ok(())
 	}
 
@@ -86,10 +88,10 @@ impl TransformerService {
 		Ok(terms)
 	}
 
-	fn parse_event(event: IndexerEvent) -> Result<(u32, Term), AttTrError> {
+	fn parse_event(event: IndexerEvent) -> Result<Vec<Term>, AttTrError> {
 		let schema_id = event.schema_id;
 		let schema_type = SchemaType::from(schema_id);
-		let term = match schema_type {
+		let terms = match schema_type {
 			SchemaType::AuditApprove => {
 				let parsed_att: AuditApproveSchema =
 					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
@@ -112,7 +114,7 @@ impl TransformerService {
 			},
 		};
 
-		Ok((event.id, term))
+		Ok(terms)
 	}
 
 	fn write_terms(db: &DB, terms: Vec<(u32, Term)>) -> Result<(), AttTrError> {
@@ -132,7 +134,8 @@ impl Transformer for TransformerService {
 		let db = DB::open_default(self.db.clone())
 			.map_err(|_| Status::internal("Failed to connect to DB"))?;
 
-		let offset = 0;
+		let ch_offset = 0;
+		let ct_offset = 0;
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
@@ -147,21 +150,39 @@ impl Transformer for TransformerService {
 
 		let mut client = IndexerClient::new(self.indexer_channel.clone());
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
-		let mut count = offset;
+		let mut checkpoint = ch_offset;
+		let mut count = ct_offset;
+
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			assert!(res.id == count + 1);
-			let term =
+			assert!(res.id == checkpoint + 1);
+			let parsed_terms =
 				Self::parse_event(res).map_err(|_| Status::internal("Failed to parse event"))?;
-			terms.push(term);
-			count += 1;
+			terms.push(parsed_terms);
 		}
 
+		let num_new_term_groups =
+			u32::try_from(terms.len()).map_err(|_| Status::internal("Failed to parse count"))?;
+		checkpoint += num_new_term_groups;
+		let (num_total_new_terms, indexed_terms): (u32, Vec<(u32, Term)>) =
+			terms.iter().fold((0, Vec::new()), |(mut acc, mut new_items), items| {
+				let indexed_items = items
+					.into_iter()
+					.map(|x| {
+						let indexed_item = (acc, x.clone());
+						acc += 1;
+						indexed_item
+					})
+					.collect();
+				(acc, indexed_items)
+			});
+		count += num_total_new_terms;
 		println!("Received and saved terms: {:#?}", terms);
 
-		Self::write_terms(&db, terms).map_err(|_| Status::internal("Failed to write terms"))?;
-		Self::write_checkpoint(&db, count)
+		Self::write_terms(&db, indexed_terms)
+			.map_err(|_| Status::internal("Failed to write terms"))?;
+		Self::write_checkpoint(&db, checkpoint, count)
 			.map_err(|_| Status::internal("Failed to write checkpoint"))?;
 
 		Ok(Response::new(Void::default()))
@@ -206,6 +227,7 @@ mod test {
 	use crate::schemas::status::{CurrentStatus, StatusSchema};
 	use crate::schemas::IntoTerm;
 	use crate::TransformerService;
+	use itertools::Itertools;
 	use proto_buf::indexer::IndexerEvent;
 	use proto_buf::transformer::{TermBatch, TermObject};
 	use rocksdb::DB;
@@ -214,7 +236,7 @@ mod test {
 	#[test]
 	fn should_write_read_checkpoint() {
 		let db = DB::open_default("att-tr-checkpoint-test-storage").unwrap();
-		TransformerService::write_checkpoint(&db, 15).unwrap();
+		TransformerService::write_checkpoint(&db, 15, 14).unwrap();
 		let checkpoint = TransformerService::read_checkpoint(&db).unwrap();
 		assert_eq!(checkpoint, 15);
 	}
@@ -223,24 +245,25 @@ mod test {
 	fn should_write_read_term() {
 		let db = DB::open_default("att-tr-terms-test-storage").unwrap();
 
-		let follow_schema = StatusSchema::new(
+		let status_schema = StatusSchema::new(
 			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
 			CurrentStatus::Endorsed,
 		);
 		let indexed_event = IndexerEvent {
 			id: 0,
 			schema_id: 4,
-			schema_value: to_string(&follow_schema).unwrap(),
+			schema_value: to_string(&status_schema).unwrap(),
 			timestamp: 2397848,
 		};
-		let term = TransformerService::parse_event(indexed_event).unwrap();
-		TransformerService::write_terms(&db, vec![term]).unwrap();
+		let terms = TransformerService::parse_event(indexed_event).unwrap();
+		let indexed_terms = terms.into_iter().enumerate().map(|(i, x)| (i as u32, x)).collect_vec();
+		TransformerService::write_terms(&db, indexed_terms).unwrap();
 
 		let term_batch = TermBatch { start: 0, size: 1 };
 		let terms = TransformerService::read_terms(&db, term_batch).unwrap();
 
-		let term = follow_schema.into_term().unwrap();
-		let term_obj: TermObject = term.into();
-		assert_eq!(terms, vec![term_obj]);
+		let status_terms = status_schema.into_term().unwrap();
+		let term_objs: Vec<TermObject> = status_terms.into_iter().map(|x| x.into()).collect_vec();
+		assert_eq!(terms, term_objs);
 	}
 }

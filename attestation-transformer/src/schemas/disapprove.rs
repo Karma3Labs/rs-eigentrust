@@ -98,7 +98,7 @@ impl Validation for AuditDisapproveSchema {
 }
 
 impl IntoTerm for AuditDisapproveSchema {
-	fn into_term(self) -> Result<Term, AttTrError> {
+	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
@@ -110,9 +110,8 @@ impl IntoTerm for AuditDisapproveSchema {
 		};
 		let domain = 1;
 
-		Ok(Term::new(
-			from_did, self.credential_subject.id, weight, domain, false,
-		))
+		let term = Term::new(from_did, self.credential_subject.id, weight, domain, false);
+		Ok(vec![term])
 	}
 }
 

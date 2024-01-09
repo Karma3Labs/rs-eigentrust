@@ -67,7 +67,7 @@ impl TrustSchema {
 		bytes.push(rec_id_i32.to_le_bytes()[0]);
 		let encoded_sig = hex::encode(bytes);
 
-		let kind = "AuditReportApproveCredential".to_string();
+		let kind = "TrustCredential".to_string();
 		let address = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:{}", hex::encode(address));
 		let cs = CredentialSubject { id, trustworthiness: vec![trust_arc] };
@@ -96,22 +96,51 @@ impl Validation for TrustSchema {
 }
 
 impl IntoTerm for TrustSchema {
-	fn into_term(self) -> Result<Term, AttTrError> {
+	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
 		let trust_arc = self.credential_subject.trustworthiness[0].clone();
 		let form = trust_arc.level >= 0.;
-		let (domain, weight) = match trust_arc.scope {
-			Domain::SoftwareDevelopment => (1, trust_arc.level.abs() * 10.),
-			Domain::SoftwareSecurity => (2, trust_arc.level.abs() * 10.),
-			Domain::Honesty => return Err(AttTrError::NotImplemented),
+		let terms = match trust_arc.scope {
+			Domain::SoftwareDevelopment => vec![Term::new(
+				from_did,
+				self.credential_subject.id,
+				trust_arc.level.abs() * 10.,
+				1,
+				form,
+			)],
+			Domain::SoftwareSecurity => {
+				vec![Term::new(
+					from_did,
+					self.credential_subject.id,
+					trust_arc.level.abs() * 10.,
+					2,
+					form,
+				)]
+			},
+			Domain::Honesty => {
+				vec![
+					Term::new(
+						from_did.clone(),
+						self.credential_subject.id.clone(),
+						trust_arc.level.abs() * 1.,
+						1,
+						form,
+					),
+					Term::new(
+						from_did,
+						self.credential_subject.id,
+						trust_arc.level.abs() * 1.,
+						2,
+						form,
+					),
+				]
+			},
 		};
 
-		Ok(Term::new(
-			from_did, self.credential_subject.id, weight, domain, form,
-		))
+		Ok(terms)
 	}
 }
 
