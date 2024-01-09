@@ -5,17 +5,10 @@ use crate::{
 	term::Term,
 	utils::address_from_ecdsa_key,
 };
-use secp256k1::{
-	ecdsa::{RecoverableSignature, RecoveryId},
-	generate_keypair,
-	rand::thread_rng,
-	Message, PublicKey, Secp256k1,
-};
 use serde_derive::{Deserialize, Serialize};
-use sha3::{Digest, Keccak256};
 
 #[derive(Deserialize, Serialize, Clone)]
-struct DomainTrust {
+pub struct DomainTrust {
 	scope: Domain,
 	level: f32,
 	reason: Vec<String>,
@@ -28,9 +21,15 @@ impl DomainTrust {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
-struct CredentialSubject {
+pub struct CredentialSubject {
 	id: String,
 	trustworthiness: Vec<DomainTrust>,
+}
+
+impl CredentialSubject {
+	pub fn new(id: String, trustworthiness: Vec<DomainTrust>) -> Self {
+		Self { id, trustworthiness }
+	}
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -43,37 +42,11 @@ pub struct TrustSchema {
 	proof: Proof,
 }
 
-#[cfg(test)]
 impl TrustSchema {
-	fn new(id: String, trust_arc: DomainTrust) -> Self {
-		let did = Did::parse_snap(id.clone()).unwrap();
-		let mut keccak = Keccak256::default();
-		keccak.update(&did.key);
-		keccak.update(&[trust_arc.scope.clone().into()]);
-		keccak.update(trust_arc.level.to_be_bytes());
-		let digest = keccak.finalize();
-
-		let message = Message::from_digest_slice(digest.as_ref()).unwrap();
-
-		let rng = &mut thread_rng();
-		let (sk, pk) = generate_keypair(rng);
-		let secp = Secp256k1::new();
-		let res = secp.sign_ecdsa_recoverable(&message, &sk);
-		let (rec_id, sig_bytes) = res.serialize_compact();
-		let rec_id_i32 = rec_id.to_i32();
-
-		let mut bytes = Vec::new();
-		bytes.extend_from_slice(&sig_bytes);
-		bytes.push(rec_id_i32.to_le_bytes()[0]);
-		let encoded_sig = hex::encode(bytes);
-
-		let kind = "TrustCredential".to_string();
-		let address = address_from_ecdsa_key(&pk);
-		let issuer = format!("did:pkh:eth:{}", hex::encode(address));
-		let cs = CredentialSubject { id, trustworthiness: vec![trust_arc] };
-		let proof = Proof { signature: encoded_sig };
-
-		TrustSchema { kind, issuer, credential_subject: cs, proof }
+	pub fn new(
+		kind: String, issuer: String, credential_subject: CredentialSubject, proof: Proof,
+	) -> Self {
+		Self { kind, issuer, credential_subject, proof }
 	}
 }
 

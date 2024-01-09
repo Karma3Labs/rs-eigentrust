@@ -17,6 +17,10 @@ pub struct Proof {
 }
 
 impl Proof {
+	pub fn new(signature: String) -> Self {
+		Self { signature }
+	}
+
 	pub fn get_signature(&self) -> String {
 		self.signature.clone()
 	}

@@ -1,9 +1,6 @@
 use crate::did::Schema;
 use crate::{did::Did, error::AttTrError, term::Term, utils::address_from_ecdsa_key};
-use secp256k1::rand::thread_rng;
-use secp256k1::{generate_keypair, Message, Secp256k1};
 use serde_derive::{Deserialize, Serialize};
-use sha3::{Digest, Keccak256};
 
 use super::{IntoTerm, Proof, Validation};
 
@@ -24,9 +21,15 @@ impl Into<u8> for CurrentStatus {
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct CredentialSubject {
+pub struct CredentialSubject {
 	id: String,
 	current_status: CurrentStatus,
+}
+
+impl CredentialSubject {
+	pub fn new(id: String, current_status: CurrentStatus) -> Self {
+		Self { id, current_status }
+	}
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -39,36 +42,11 @@ pub struct StatusSchema {
 	proof: Proof,
 }
 
-#[cfg(test)]
 impl StatusSchema {
-	pub fn new(id: String, current_status: CurrentStatus) -> Self {
-		let did = Did::parse_pkh_eth(id.clone()).unwrap();
-		let mut keccak = Keccak256::new();
-		keccak.update(&did.key);
-		keccak.update(&[current_status.clone().into()]);
-		let digest = keccak.finalize();
-
-		let message = Message::from_digest_slice(digest.as_ref()).unwrap();
-
-		let rng = &mut thread_rng();
-		let (sk, pk) = generate_keypair(rng);
-		let secp = Secp256k1::new();
-		let res = secp.sign_ecdsa_recoverable(&message, &sk);
-		let (rec_id, sig_bytes) = res.serialize_compact();
-		let rec_id_i32 = rec_id.to_i32();
-
-		let mut bytes = Vec::new();
-		bytes.extend_from_slice(&sig_bytes);
-		bytes.push(rec_id_i32.to_le_bytes()[0]);
-		let encoded_sig = hex::encode(bytes);
-
-		let kind = "StatusCredential".to_string();
-		let addr = address_from_ecdsa_key(&pk);
-		let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
-		let cs = CredentialSubject { id, current_status };
-		let proof = Proof { signature: encoded_sig };
-
-		StatusSchema { kind, issuer, credential_subject: cs, proof }
+	pub fn new(
+		kind: String, issuer: String, credential_subject: CredentialSubject, proof: Proof,
+	) -> Self {
+		Self { kind, issuer, credential_subject, proof }
 	}
 }
 
@@ -120,7 +98,7 @@ mod test {
 		let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 		let current_status = CurrentStatus::Endorsed;
 
-		let mut keccak = Keccak256::new();
+		let mut keccak = Keccak256::default();
 		keccak.update(&did.key);
 		keccak.update(&[current_status.clone().into()]);
 		let digest = keccak.finalize();
