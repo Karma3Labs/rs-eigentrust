@@ -11,15 +11,13 @@ use rocksdb::{WriteBatch, DB};
 use schemas::security::SecurityReportSchema;
 use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
-use schemas::SchemaType;
+use schemas::{IntoTerm, SchemaType};
 use serde_json::from_str;
 use std::error::Error;
 use term::Term;
 
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
-
-use crate::schemas::IntoTerm;
 
 mod did;
 mod error;
@@ -104,17 +102,17 @@ impl TransformerService {
 		let terms = match schema_type {
 			SchemaType::SecurityCredential => {
 				let parsed_att: SecurityReportSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
 				parsed_att.into_term()?
 			},
 			SchemaType::StatusCredential => {
 				let parsed_att: StatusSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
 				parsed_att.into_term()?
 			},
 			SchemaType::TrustCredential => {
 				let parsed_att: TrustSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
+					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
 				parsed_att.into_term()?
 			},
 		};
@@ -163,14 +161,12 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			assert!(res.id == checkpoint + 1);
-			let parsed_terms =
-				Self::parse_event(res).map_err(|_| Status::internal("Failed to parse event"))?;
+			let parsed_terms = Self::parse_event(res).map_err(|e| e.into_status())?;
 			terms.push(parsed_terms);
 		}
 
 		let num_new_term_groups =
-			u32::try_from(terms.len()).map_err(|_| Status::internal("Failed to parse count"))?;
+			u32::try_from(terms.len()).map_err(|e| AttTrError::TryFromError(e).into_status())?;
 		checkpoint += num_new_term_groups;
 		let (num_total_new_terms, indexed_terms): (u32, Vec<(u32, Term)>) =
 			terms.iter().fold((0, Vec::new()), |(mut acc, mut new_items), items| {
@@ -188,10 +184,8 @@ impl Transformer for TransformerService {
 		count += num_total_new_terms;
 		println!("Received and saved terms: {:#?}", terms);
 
-		Self::write_terms(&db, indexed_terms)
-			.map_err(|_| Status::internal("Failed to write terms"))?;
-		Self::write_checkpoint(&db, checkpoint, count)
-			.map_err(|_| Status::internal("Failed to write checkpoint"))?;
+		Self::write_terms(&db, indexed_terms).map_err(|e| e.into_status())?;
+		Self::write_checkpoint(&db, checkpoint, count).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(Void::default()))
 	}
@@ -205,11 +199,9 @@ impl Transformer for TransformerService {
 			)));
 		}
 
-		let db = DB::open_default(self.db.clone())
-			.map_err(|_| Status::internal("Failed to connect to DB"))?;
-
-		let terms =
-			Self::read_terms(&db, inner).map_err(|_| Status::internal("Failed to read terms"))?;
+		let db =
+			DB::open_default(self.db.clone()).map_err(|e| AttTrError::DbError(e).into_status())?;
+		let terms = Self::read_terms(&db, inner).map_err(|e| e.into_status())?;
 
 		let mut client = LinearCombinerClient::new(self.lt_channel.clone());
 		let res = client.sync_transformer(Request::new(iter(terms))).await?;
