@@ -1,5 +1,6 @@
 use error::AttTrError;
 use futures::stream::iter;
+use itertools::Itertools;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::common::Void;
 use proto_buf::indexer::indexer_client::IndexerClient;
@@ -174,8 +175,9 @@ impl Transformer for TransformerService {
 						acc += 1;
 						indexed_item
 					})
-					.collect();
-				(acc, indexed_items)
+					.collect_vec();
+				new_items.extend(indexed_items);
+				(acc, new_items)
 			});
 		count += num_total_new_terms;
 		println!("Received and saved terms: {:#?}", terms);
@@ -224,14 +226,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-	use crate::schemas::status::{CurrentStatus, StatusSchema};
-	use crate::schemas::IntoTerm;
+	use crate::did::Did;
+	use crate::schemas::status::{CredentialSubject, CurrentStatus, StatusSchema};
+	use crate::schemas::{IntoTerm, Proof};
+	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
 	use itertools::Itertools;
 	use proto_buf::indexer::IndexerEvent;
 	use proto_buf::transformer::{TermBatch, TermObject};
 	use rocksdb::DB;
+	use secp256k1::rand::thread_rng;
+	use secp256k1::{generate_keypair, Message, Secp256k1};
 	use serde_json::to_string;
+	use sha3::{Digest, Keccak256};
 
 	#[test]
 	fn should_write_read_checkpoint() {
@@ -241,11 +248,43 @@ mod test {
 		assert_eq!(checkpoint, 15);
 	}
 
+	impl StatusSchema {
+		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
+			let did = Did::parse_pkh_eth(id.clone()).unwrap();
+			let mut keccak = Keccak256::new();
+			keccak.update(&did.key);
+			keccak.update(&[current_status.clone().into()]);
+			let digest = keccak.finalize();
+
+			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
+
+			let rng = &mut thread_rng();
+			let (sk, pk) = generate_keypair(rng);
+			let secp = Secp256k1::new();
+			let res = secp.sign_ecdsa_recoverable(&message, &sk);
+			let (rec_id, sig_bytes) = res.serialize_compact();
+			let rec_id_i32 = rec_id.to_i32();
+
+			let mut bytes = Vec::new();
+			bytes.extend_from_slice(&sig_bytes);
+			bytes.push(rec_id_i32.to_le_bytes()[0]);
+			let encoded_sig = hex::encode(bytes);
+
+			let kind = "StatusCredential".to_string();
+			let addr = address_from_ecdsa_key(&pk);
+			let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
+			let cs = CredentialSubject::new(id, current_status);
+			let proof = Proof::new(encoded_sig);
+
+			StatusSchema::new(kind, issuer, cs, proof)
+		}
+	}
+
 	#[test]
 	fn should_write_read_term() {
 		let db = DB::open_default("att-tr-terms-test-storage").unwrap();
 
-		let status_schema = StatusSchema::new(
+		let status_schema = StatusSchema::generate(
 			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
 			CurrentStatus::Endorsed,
 		);
