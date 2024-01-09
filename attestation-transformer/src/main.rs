@@ -8,6 +8,7 @@ use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{TermBatch, TermObject};
 use rocksdb::{WriteBatch, DB};
+use schemas::security::SecurityReportSchema;
 use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
 use schemas::SchemaType;
@@ -18,8 +19,6 @@ use term::Term;
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::schemas::approve::AuditApproveSchema;
-use crate::schemas::disapprove::AuditDisapproveSchema;
 use crate::schemas::IntoTerm;
 
 mod did;
@@ -93,13 +92,8 @@ impl TransformerService {
 		let schema_id = event.schema_id;
 		let schema_type = SchemaType::from(schema_id);
 		let terms = match schema_type {
-			SchemaType::AuditApprove => {
-				let parsed_att: AuditApproveSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
-				parsed_att.into_term()?
-			},
-			SchemaType::AuditDisapprove => {
-				let parsed_att: AuditDisapproveSchema =
+			SchemaType::SecurityCredential => {
+				let parsed_att: SecurityReportSchema =
 					from_str(&event.schema_value).map_err(|e| AttTrError::ParseError)?;
 				parsed_att.into_term()?
 			},
