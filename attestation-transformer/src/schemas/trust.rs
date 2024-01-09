@@ -60,9 +60,11 @@ impl Validation for TrustSchema {
 
 		let mut bytes = Vec::new();
 		bytes.extend_from_slice(&did.key);
-		let arc = self.credential_subject.trustworthiness[0].clone();
-		bytes.push(arc.scope.into());
-		bytes.extend_from_slice(&arc.level.to_be_bytes());
+		for arc in &self.credential_subject.trustworthiness {
+			bytes.push(arc.scope.clone().into());
+			// TODO: Uncomment when supported
+			// bytes.extend_from_slice(&arc.level.to_be_bytes());
+		}
 
 		Ok(bytes)
 	}
@@ -74,44 +76,49 @@ impl IntoTerm for TrustSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		let trust_arc = self.credential_subject.trustworthiness[0].clone();
-		let form = trust_arc.level >= 0.;
-		let terms = match trust_arc.scope {
-			Domain::SoftwareDevelopment => vec![Term::new(
-				from_did,
-				self.credential_subject.id,
-				trust_arc.level.abs() * 10.,
-				1,
-				form,
-			)],
-			Domain::SoftwareSecurity => {
-				vec![Term::new(
-					from_did,
-					self.credential_subject.id,
+
+		let mut terms = Vec::new();
+		for trust_arc in &self.credential_subject.trustworthiness {
+			let form = trust_arc.level >= 0.;
+			let term_group = match trust_arc.scope {
+				Domain::SoftwareDevelopment => vec![Term::new(
+					from_did.clone(),
+					self.credential_subject.id.clone(),
 					trust_arc.level.abs() * 10.,
-					2,
+					1,
 					form,
-				)]
-			},
-			Domain::Honesty => {
-				vec![
-					Term::new(
+				)],
+				Domain::SoftwareSecurity => {
+					vec![Term::new(
 						from_did.clone(),
 						self.credential_subject.id.clone(),
-						trust_arc.level.abs() * 1.,
-						1,
-						form,
-					),
-					Term::new(
-						from_did,
-						self.credential_subject.id,
-						trust_arc.level.abs() * 1.,
+						trust_arc.level.abs() * 10.,
 						2,
 						form,
-					),
-				]
-			},
-		};
+					)]
+				},
+				Domain::Honesty => {
+					vec![
+						Term::new(
+							from_did.clone(),
+							self.credential_subject.id.clone(),
+							trust_arc.level.abs() * 1.,
+							1,
+							form,
+						),
+						Term::new(
+							from_did.clone(),
+							self.credential_subject.id.clone(),
+							trust_arc.level.abs() * 1.,
+							2,
+							form,
+						),
+					]
+				},
+			};
+
+			terms.extend(term_group);
+		}
 
 		Ok(terms)
 	}
