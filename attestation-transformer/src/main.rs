@@ -56,15 +56,25 @@ impl TransformerService {
 		Ok(Self { indexer_channel, lt_channel, db: db_url.to_string() })
 	}
 
-	fn read_checkpoint(db: &DB) -> Result<u32, AttTrError> {
-		let offset_bytes_opt = db.get(b"checkpoint").map_err(|e| AttTrError::DbError(e))?;
-		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
+	fn read_checkpoint(db: &DB) -> Result<(u32, u32), AttTrError> {
+		let checkpoint_offset_bytes_opt =
+			db.get(b"checkpoint").map_err(|e| AttTrError::DbError(e))?;
+		let count_offset_bytes_opt = db.get(b"count").map_err(|e| AttTrError::DbError(e))?;
+
+		let checkpoint_offset_bytes = checkpoint_offset_bytes_opt.map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
 			bytes.copy_from_slice(&x);
 			bytes
 		});
-		let offset = u32::from_be_bytes(offset_bytes);
-		Ok(offset)
+		let count_offset_bytes = count_offset_bytes_opt.map_or([0; 4], |x| {
+			let mut bytes: [u8; 4] = [0; 4];
+			bytes.copy_from_slice(&x);
+			bytes
+		});
+
+		let checkpoint = u32::from_be_bytes(checkpoint_offset_bytes);
+		let count = u32::from_be_bytes(count_offset_bytes);
+		Ok((checkpoint, count))
 	}
 
 	fn write_checkpoint(db: &DB, checkpoint: u32, count: u32) -> Result<(), AttTrError> {
@@ -129,6 +139,8 @@ impl Transformer for TransformerService {
 		let db = DB::open_default(self.db.clone())
 			.map_err(|_| Status::internal("Failed to connect to DB"))?;
 
+		// let (ch_offset, ct_offset) = Self::read_checkpoint(&db)
+		// 	.map_err(|_| Status::internal("Failed to read checkpoint"))?;
 		let ch_offset = 0;
 		let ct_offset = 0;
 
@@ -238,8 +250,9 @@ mod test {
 	fn should_write_read_checkpoint() {
 		let db = DB::open_default("att-tr-checkpoint-test-storage").unwrap();
 		TransformerService::write_checkpoint(&db, 15, 14).unwrap();
-		let checkpoint = TransformerService::read_checkpoint(&db).unwrap();
+		let (checkpoint, count) = TransformerService::read_checkpoint(&db).unwrap();
 		assert_eq!(checkpoint, 15);
+		assert_eq!(count, 14);
 	}
 
 	impl StatusSchema {
