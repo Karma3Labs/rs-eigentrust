@@ -6,8 +6,7 @@ use secp256k1::{
 use serde_derive::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 
-pub mod approve;
-pub mod disapprove;
+pub mod security;
 pub mod status;
 pub mod trust;
 
@@ -71,8 +70,7 @@ pub trait IntoTerm: Validation {
 }
 
 pub enum SchemaType {
-	AuditApprove,
-	AuditDisapprove,
+	SecurityCredential,
 	StatusCredential,
 	TrustCredential,
 }
@@ -80,8 +78,7 @@ pub enum SchemaType {
 impl From<u32> for SchemaType {
 	fn from(value: u32) -> Self {
 		match value {
-			2 => Self::AuditApprove,
-			3 => Self::AuditDisapprove,
+			2 => Self::SecurityCredential,
 			4 => Self::StatusCredential,
 			5 => Self::TrustCredential,
 			_ => panic!("Invalid Schema type"),
@@ -98,6 +95,16 @@ pub enum Domain {
 
 impl Into<u8> for Domain {
 	fn into(self) -> u8 {
+		match self {
+			Self::Honesty => 0,
+			Self::SoftwareDevelopment => 1,
+			Self::SoftwareSecurity => 2,
+		}
+	}
+}
+
+impl Into<u32> for Domain {
+	fn into(self) -> u32 {
 		match self {
 			Self::Honesty => 0,
 			Self::SoftwareDevelopment => 1,
