@@ -43,7 +43,7 @@ pub struct StatusSchema {
 impl StatusSchema {
 	pub fn new(id: String, current_status: CurrentStatus) -> Self {
 		let did = Did::parse_pkh_eth(id.clone()).unwrap();
-		let mut keccak = Keccak256::default();
+		let mut keccak = Keccak256::new();
 		keccak.update(&did.key);
 		keccak.update(&[current_status.clone().into()]);
 		let digest = keccak.finalize();
@@ -88,7 +88,7 @@ impl Validation for StatusSchema {
 }
 
 impl IntoTerm for StatusSchema {
-	fn into_term(self) -> Result<Term, AttTrError> {
+	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
@@ -100,9 +100,8 @@ impl IntoTerm for StatusSchema {
 			CurrentStatus::Disputed => false,
 		};
 
-		Ok(Term::new(
-			from_did, self.credential_subject.id, weight, domain, form,
-		))
+		let term = Term::new(from_did, self.credential_subject.id, weight, domain, form);
+		Ok(vec![term])
 	}
 }
 
@@ -121,7 +120,7 @@ mod test {
 		let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 		let current_status = CurrentStatus::Endorsed;
 
-		let mut keccak = Keccak256::default();
+		let mut keccak = Keccak256::new();
 		keccak.update(&did.key);
 		keccak.update(&[current_status.clone().into()]);
 		let digest = keccak.finalize();

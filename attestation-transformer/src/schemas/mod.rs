@@ -63,7 +63,7 @@ pub trait Validation {
 }
 
 pub trait IntoTerm: Validation {
-	fn into_term(self) -> Result<Term, AttTrError>;
+	fn into_term(self) -> Result<Vec<Term>, AttTrError>;
 }
 
 pub enum SchemaType {
