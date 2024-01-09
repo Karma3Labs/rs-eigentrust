@@ -60,15 +60,15 @@ impl LinearCombinerService {
 	fn get_index(
 		db: &DB, mapping_db: &DB, source: String, offset: &mut u32,
 	) -> Result<[u8; 4], LcError> {
-		let key = hex::decode(source).map_err(|_| LcError::ParseError)?;
-		let source_index = db.get(&key).map_err(|e| LcError::DbError(e))?;
+		let key = source.as_bytes();
+		let source_index = db.get(key).map_err(|e| LcError::DbError(e))?;
 
 		let x = if let Some(from_i) = source_index {
 			let from_bytes: [u8; 4] = from_i.try_into().map_err(|_| LcError::ParseError)?;
 			from_bytes
 		} else {
 			let curr_offset = offset.to_be_bytes();
-			db.put(&key, curr_offset).map_err(|e| LcError::DbError(e))?;
+			db.put(key, curr_offset).map_err(|e| LcError::DbError(e))?;
 			mapping_db.put(curr_offset, key).map_err(|e| LcError::DbError(e))?;
 			*offset += 1;
 			curr_offset
@@ -93,18 +93,18 @@ impl LinearCombinerService {
 		mappings
 	}
 
-	fn get_value(main_db: &DB, key: &Vec<u8>) -> Result<u32, LcError> {
+	fn get_value(main_db: &DB, key: &Vec<u8>) -> Result<f32, LcError> {
 		let value_opt = main_db.get(&key).map_err(|e| LcError::DbError(e))?;
 		let value_bytes = value_opt.map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
 			bytes.copy_from_slice(&x);
 			bytes
 		});
-		Ok(u32::from_be_bytes(value_bytes))
+		Ok(f32::from_be_bytes(value_bytes))
 	}
 
 	fn update_value(
-		main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: u32,
+		main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: f32,
 	) -> Result<(), LcError> {
 		let value = Self::get_value(main_db, &key)?;
 		let new_value = (value + weight).to_be_bytes();
@@ -339,9 +339,9 @@ mod test {
 		let i = u32::from_be_bytes(bytes);
 
 		let id = mapping_db.get(index).unwrap().unwrap();
-		let encoded_id = hex::encode(id);
+		let id_string = String::from_utf8(id).unwrap();
 
-		assert_eq!(source, encoded_id);
+		assert_eq!(source, id_string);
 		assert_eq!(i, 15);
 	}
 
@@ -350,7 +350,7 @@ mod test {
 		let main_db = DB::open_default("lc-items-test-storage").unwrap();
 		let updates_db = DB::open_default("lc-updates-test-storage").unwrap();
 		let key = vec![0; 8];
-		let weight = 50;
+		let weight = 50.;
 
 		let prev_value = LinearCombinerService::get_value(&main_db, &key).unwrap();
 		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight).unwrap();
@@ -365,7 +365,7 @@ mod test {
 		let updates_db = DB::open_default("lc-rd-updates-test-storage").unwrap();
 		let prefix = vec![0; 8];
 		let key = vec![0; 16];
-		let weight = 50u32;
+		let weight = 50.;
 
 		let prev_value = LinearCombinerService::get_value(&main_db, &key).unwrap();
 		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight).unwrap();
@@ -392,7 +392,7 @@ mod test {
 		let x2: u32 = 1;
 		let y2: u32 = 1;
 
-		let weight = 50u32;
+		let weight = 50.;
 
 		let mut key1 = Vec::new();
 		key1.extend_from_slice(&prefix);
