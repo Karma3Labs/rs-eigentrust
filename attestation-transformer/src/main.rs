@@ -21,6 +21,7 @@ use tonic::{transport::Server, Request, Response, Status};
 
 mod did;
 mod error;
+mod managers;
 mod schemas;
 mod term;
 mod utils;
