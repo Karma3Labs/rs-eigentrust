@@ -1,5 +1,6 @@
 const ethers = require('ethers')
 const fs = require('fs')
+const path = require('path')
 const {
     schemaIds,
     EndorsementTypes,
@@ -8,9 +9,6 @@ const {
 const { createEndorsementSchema } = require('./endorsementSchema')
 const { createAuditReportSchema } = require('./auditReportSchema')
 
-const walletsCount = 4
-const attestationsCount = 10
-const snapsCount = 4
 
 const saveAttestationsToCSV = (attestations) => {
     const delimiter = ';'
@@ -28,14 +26,21 @@ const saveAttestationsToCSV = (attestations) => {
         .map(row => row.join(delimiter)).join('\n')
 
     const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '')
-    const filename = `output-${timestamp}.csv`
-    fs.writeFileSync(filename, CSVData, 'utf8')
+    const filename = `/output/output-${timestamp}.csv`
+
+    const filePath = path.join(process.cwd(), filename)
+    fs.writeFileSync(filePath, CSVData, 'utf8')
 
     console.log(`${attestations.length} attestations saved to ${filename}`)
 }
 
-(async () => {
-    console.log(`Generating ${walletsCount} wallets, ${attestationsCount} attestations`)
+const generate = async (
+    walletsCount = 4,
+    snapsCount = 4,
+    p2pAttestationsCount = 1,
+    snapAttestationsCount = 1,
+) => {
+    console.log(`Generating ${walletsCount} wallets, ${snapsCount} snaps, ${p2pAttestationsCount} p2p attestations, ${snapAttestationsCount} snap attestations`)
 
     const wallets = Array.from({ length: walletsCount }).map(() => {
         const mnemonic = ethers.Mnemonic.fromEntropy(ethers.randomBytes(32))
@@ -45,23 +50,22 @@ const saveAttestationsToCSV = (attestations) => {
     })
 
     const endorsmentAttestations = await Promise.all(
-        Array.from({ length: attestationsCount }).map(async () => {
+        Array.from({ length: p2pAttestationsCount }).map(async () => {
             const wallet = wallets[Math.floor(Math.random() * wallets.length)]
             const to = wallets[Math.floor(Math.random() * wallets.length)].address
-            const type = EndorsementTypes[Math.floor(Math.random() * EndorsementTypes.length)]
-            const attestation = await createEndorsementSchema({ wallet, to, type })
+            const level = EndorsementTypes[Math.floor(Math.random() * EndorsementTypes.length)]
+            const attestation = await createEndorsementSchema({ wallet, to, level })
 
             return attestation
         }))
 
     const snaps = Array.from({ length: snapsCount }).map(() => {
-        const snapId = ethers.keccak256(ethers.randomBytes(32)).substring(0, 12)
-
+        const snapId = ethers.keccak256(ethers.randomBytes(32)).substring(0, 42)
         return snapId
     })
 
     const auditReportAttestations = await Promise.all(
-        Array.from({ length: attestationsCount }).map(async () => {
+        Array.from({ length: snapAttestationsCount }).map(async () => {
             const wallet = wallets[Math.floor(Math.random() * wallets.length)]
             const to = snaps[Math.floor(Math.random() * snaps.length)]
             const type = AuditReportTypes[Math.floor(Math.random() * AuditReportTypes.length)]
@@ -70,5 +74,11 @@ const saveAttestationsToCSV = (attestations) => {
             return attestation
         }))
 
+    // console.log(JSON.stringify(endorsmentAttestations, null, '\t'))
+    // console.log(JSON.stringify(auditReportAttestations, null, '\t'))
     saveAttestationsToCSV([...endorsmentAttestations, ...auditReportAttestations])
-})()
+}
+
+module.exports = {
+    generate
+}

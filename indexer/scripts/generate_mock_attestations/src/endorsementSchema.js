@@ -9,20 +9,25 @@ const {
 const createEndorsementSchema = async ({
     wallet,
     to,
-    type,
+    level,
 }) => {
     const issuer = createDID(wallet.address)
     const toDID = createDID(to)
 
-    const attestationDetails = type === 'DisputeCredential'
-        ? {
-            currentStatus: "Disputed",
-            statusReason: "None"
-        }
-        : { currentStatus: "Endorsed" }
+    const attestationDetails = {
+        trustworthiness:
+            [
+
+                {
+                    scope: "Software security",
+                    level,
+                    reason: ["Not provided"]
+                }
+            ]
+    }
 
     const schemaPayload = {
-        type,
+        type: 'TrustCredential',
         issuer,
         credentialSubject: {
             id: toDID,

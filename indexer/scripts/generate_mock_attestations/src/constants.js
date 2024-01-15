@@ -5,11 +5,15 @@ const schemaIds = {
     'DisputeCredential': 4,
 }
 
-const EndorsementTypes = ['EndorsementCredential', 'DisputeCredential']
+const EndorsementTypes = [0, 1, -1]
 
 const AuditReportTypes = ['AuditReportApproveCredential', 'AuditReportDisapproveCredential']
 
-const AuditReportStatusReasons = ['Unreliable', 'Scam', 'Incomplete']
+const AuditReportStatusReasons = [{
+    "type": "Scam",
+    "value": "Interact with a fraudulent smart contract",
+    "lang": "en"
+}]
 
 const AuditReportStatusReasonsBytes = {
     Unreliable: new Uint8Array([0x0]),

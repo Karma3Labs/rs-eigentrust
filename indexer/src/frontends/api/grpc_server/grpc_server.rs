@@ -81,6 +81,7 @@ impl GRPCServer {
 		info!("GRPC server is starting at {}", address);
 		self.task_service.run().await;
 
+		// todo
 		let data = self.task_service.get_chunk(0, 10000).await;
 
 		let indexer_server = IndexerServer::new(IndexerService::new(data));

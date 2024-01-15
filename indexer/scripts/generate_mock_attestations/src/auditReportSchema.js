@@ -22,12 +22,15 @@ const createAuditReportSchema = async ({
 
     const attestationDetails = type === 'AuditReportDisapproveCredential'
         ? {
+            currentStatus: 'Disputed',
             statusReason
         }
-        : {}
+        : {
+            currentStatus: 'Endorsed'
+        }
 
     const schemaPayload = {
-        type,
+        type: 'StatusCredential',
         issuer,
         credentialSubject: {
             id: toDID,
@@ -38,9 +41,7 @@ const createAuditReportSchema = async ({
     const utf8Buffer = Buffer.from(to, 'utf-8');
     const snapIdBytes = new Uint8Array(utf8Buffer)
 
-    const statusReasonBytes = type === 'AuditReportDisapproveCredential'
-        ? AuditReportStatusReasonsBytes[attestationDetails.statusReason]
-        : new Uint8Array([])
+    const statusReasonBytes = new Uint8Array([])
 
     const keccak256Hash = ethers.keccak256(
         ethers.concat([
