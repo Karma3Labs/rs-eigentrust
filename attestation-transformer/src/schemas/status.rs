@@ -2,7 +2,7 @@ use crate::did::Schema;
 use crate::{did::Did, error::AttTrError, term::Term, utils::address_from_ecdsa_key};
 use serde_derive::{Deserialize, Serialize};
 
-use super::{IntoTerm, Proof, Validation};
+use super::{Domain, IntoTerm, Proof, Validation};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub enum CurrentStatus {
@@ -48,6 +48,10 @@ impl StatusSchema {
 	) -> Self {
 		Self { kind, issuer, credential_subject, proof }
 	}
+
+	pub fn get_issuer(&self) -> String {
+		self.issuer.clone()
+	}
 }
 
 impl Validation for StatusSchema {
@@ -72,13 +76,19 @@ impl IntoTerm for StatusSchema {
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
 		let weight = 25.;
-		let domain = 2;
+		let domain = Domain::SoftwareSecurity;
 		let form = match self.credential_subject.current_status {
 			CurrentStatus::Endorsed => true,
 			CurrentStatus::Disputed => false,
 		};
 
-		let term = Term::new(from_did, self.credential_subject.id, weight, domain, form);
+		let term = Term::new(
+			from_did,
+			self.credential_subject.id,
+			weight,
+			domain.into(),
+			form,
+		);
 		Ok(vec![term])
 	}
 }
