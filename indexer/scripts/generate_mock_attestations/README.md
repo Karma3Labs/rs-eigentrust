@@ -14,7 +14,7 @@ yarn
 
 use CLI to generate
 
-./cli [wallets] [snaps] [p2p attestations] [snap attestations]
+./cli generate|g [wallets] [snaps] [p2p attestations] [snap attestations]
 
 ```
 ./cli.sh g 5 5 5 5
