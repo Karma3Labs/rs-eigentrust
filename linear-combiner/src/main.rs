@@ -52,8 +52,12 @@ impl LinearCombiner for LinearCombinerService {
 	async fn sync_transformer(
 		&self, request: Request<Streaming<TermObject>>,
 	) -> Result<Response<Void>, Status> {
-		let db = DB::open_default(&self.db_url)
-			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+		let db = DB::open_cf(
+			&Options::default(),
+			&self.db_url,
+			vec!["checkpoint", "index", "item", "mapping", "update"],
+		)
+		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let mut offset = CheckpointManager::read_checkpoint(&db).map_err(|e| e.into_status())?;
 
@@ -113,7 +117,7 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<MappingQuery>,
 	) -> Result<Response<Self::GetDidMappingStream>, Status> {
 		let mapping_query = request.into_inner();
-		let db = DB::open_default(&self.db_url)
+		let db = DB::open_cf(&Options::default(), &self.db_url, vec!["mapping"])
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let mappings = MappingManager::read_mappings(&db, mapping_query.start, mapping_query.size)
@@ -133,7 +137,7 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<LtBatch>,
 	) -> Result<Response<Self::GetNewDataStream>, Status> {
 		let batch = request.into_inner();
-		let db = DB::open_default(&self.db_url)
+		let db = DB::open_cf(&Options::default(), &self.db_url, vec!["update"])
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let mut prefix = Vec::new();
@@ -159,7 +163,7 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<LtHistoryBatch>,
 	) -> Result<Response<Self::GetHistoricDataStream>, Status> {
 		let batch = request.into_inner();
-		let db = DB::open_default(&self.db_url)
+		let db = DB::open_cf(&Options::default(), &self.db_url, vec!["item"])
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let is_x_bigger = batch.x0 <= batch.x1;
