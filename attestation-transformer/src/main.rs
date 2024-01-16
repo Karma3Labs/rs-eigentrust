@@ -8,6 +8,7 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::TermBatch;
+use rocksdb::{Options, DB};
 use schemas::security::SecurityReportSchema;
 use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
@@ -44,6 +45,13 @@ impl TransformerService {
 	fn new(
 		indexer_channel: Channel, lt_channel: Channel, db_url: &str,
 	) -> Result<Self, AttTrError> {
+		let mut opts = Options::default();
+		opts.create_missing_column_families(true);
+		opts.create_if_missing(true);
+		let db = DB::open_cf(&opts, db_url, vec!["checkpoint", "term"])
+			.map_err(|e| AttTrError::DbError(e))?;
+		CheckpointManager::init(&db)?;
+
 		Ok(Self { indexer_channel, lt_channel, db_url: db_url.to_string() })
 	}
 
@@ -75,6 +83,13 @@ impl TransformerService {
 #[tonic::async_trait]
 impl Transformer for TransformerService {
 	async fn sync_indexer(&self, _: Request<Void>) -> Result<Response<Void>, Status> {
+		let db = DB::open_cf(
+			&Options::default(),
+			&self.db_url,
+			vec!["term", "checkpoint"],
+		)
+		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+
 		// let (ch_offset, ct_offset) = Self::read_checkpoint(&db).map_err(|e| e.into_status())?;
 		let ch_offset = 0;
 		let ct_offset = 0;
@@ -104,18 +119,13 @@ impl Transformer for TransformerService {
 		let num_new_term_groups =
 			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError.into_status())?;
 		let new_checkpoint = ch_offset + num_new_term_groups;
-		let (new_count, indexed_terms) = TermManager::get_indexed_terms(ct_offset, terms);
 
-		let term_manager = TermManager::new(&self.db_url).map_err(|e| e.into_status())?;
-		term_manager.write_terms(indexed_terms).map_err(|e| e.into_status())?;
-		term_manager.drop().map_err(|e| e.into_status())?;
+		let (new_count, indexed_terms) = TermManager::get_indexed_terms(ct_offset, terms)
+			.map_err(|_| AttTrError::SerialisationError.into_status())?;
 
-		let checkpoint_manager =
-			CheckpointManager::new(&self.db_url).map_err(|e| e.into_status())?;
-		checkpoint_manager
-			.write_checkpoint(new_checkpoint, new_count)
+		TermManager::write_terms(&db, indexed_terms).map_err(|e| e.into_status())?;
+		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)
 			.map_err(|e| e.into_status())?;
-		checkpoint_manager.drop().map_err(|e| e.into_status())?;
 
 		Ok(Response::new(Void::default()))
 	}
@@ -129,9 +139,14 @@ impl Transformer for TransformerService {
 			)));
 		}
 
-		let term_manager = TermManager::new(&self.db_url).map_err(|e| e.into_status())?;
-		let terms = term_manager.read_terms(inner).map_err(|e| e.into_status())?;
-		term_manager.drop().map_err(|e| e.into_status())?;
+		let db = DB::open_cf(
+			&Options::default(),
+			&self.db_url,
+			vec!["term", "checkpoint"],
+		)
+		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+
+		let terms = TermManager::read_terms(&db, inner).map_err(|e| e.into_status())?;
 
 		let mut client = LinearCombinerClient::new(self.lt_channel.clone());
 		let res = client.sync_transformer(Request::new(iter(terms))).await?;
