@@ -227,8 +227,10 @@ service Compute {
       returns (stream GetTrustMatrixResponse) {}
 
   // Update a trust matrix.
-  // Entries for the same matrix with the same timestamp can be batched
-  // in the same request.
+  // The timestamp in the header field applies to all entries.
+  // That is, entries for the same matrix with the same timestamp
+  // can and should (but need not) be batched in the same request,
+  // and entries with different timestamps cannot be batched together.
   // Updates cannot go back in time:
   // An update older than the target matrix is rejected.
   // Updates can be empty (have zero entries):
@@ -256,8 +258,10 @@ service Compute {
       returns (stream GetTrustVectorResponse) {}
 
   // Update a trust vector.
-  // Entries for the same vector with the same timestamp can be batched
-  // in the same request.
+  // The timestamp in the header field applies to all entries.
+  // That is, entries for the same vector with the same timestamp
+  // can and should (but need not) be batched in the same request,
+  // and entries with different timestamps cannot be batched together.
   // Updates cannot go back in time:
   // An update older than the target vector is rejected.
   rpc UpdateTrustVector(UpdateTrustVectorRequest)
