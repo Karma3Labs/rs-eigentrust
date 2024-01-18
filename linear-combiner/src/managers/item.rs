@@ -6,22 +6,26 @@ use crate::{error::LcError, item::LtItem};
 pub struct ItemManager;
 
 impl ItemManager {
-	pub fn get_value(db: &DB, key: &Vec<u8>) -> Result<f32, LcError> {
+	pub fn get_value(db: &DB, key: &Vec<u8>) -> Result<LtItem, LcError> {
 		let cf = db.cf_handle("item").ok_or_else(|| LcError::NotFoundError)?;
 		let value_opt = db.get_cf(&cf, &key).map_err(|e| LcError::DbError(e))?;
-		let value_bytes = value_opt.map_or([0; 4], |x| {
-			let mut bytes: [u8; 4] = [0; 4];
-			bytes.copy_from_slice(&x);
-			bytes
-		});
-		Ok(f32::from_be_bytes(value_bytes))
+		let item = value_opt.map_or(LtItem::default(), |value| LtItem::from_raw(key, &value));
+		Ok(item)
 	}
 
-	pub fn update_value(db: &DB, key: Vec<u8>, weight: f32) -> Result<f32, LcError> {
+	pub fn update_value(
+		db: &DB, key: Vec<u8>, weight: f32, timestamp: u64,
+	) -> Result<f32, LcError> {
 		let cf = db.cf_handle("item").ok_or_else(|| LcError::NotFoundError)?;
-		let value = Self::get_value(db, &key)?;
-		let new_value = value + weight;
-		db.put_cf(&cf, key.clone(), new_value.to_be_bytes()).map_err(|e| LcError::DbError(e))?;
+		let item = Self::get_value(db, &key)?;
+
+		let new_value = item.value + weight;
+
+		let mut bytes = Vec::new();
+		bytes.extend_from_slice(&new_value.to_be_bytes());
+		bytes.extend_from_slice(&timestamp.to_be_bytes());
+
+		db.put_cf(&cf, key.clone(), bytes).map_err(|e| LcError::DbError(e))?;
 		Ok(new_value)
 	}
 
@@ -60,11 +64,12 @@ mod test {
 
 		let key = vec![0; 8];
 		let weight = 50.;
+		let timestamp = 0;
 
-		let new_value = ItemManager::update_value(&db, key.clone(), weight).unwrap();
-		let value = ItemManager::get_value(&db, &key).unwrap();
+		let new_value = ItemManager::update_value(&db, key.clone(), weight, timestamp).unwrap();
+		let item = ItemManager::get_value(&db, &key).unwrap();
 
-		assert_eq!(value, new_value);
+		assert_eq!(item.value, new_value);
 	}
 
 	#[test]
@@ -84,6 +89,8 @@ mod test {
 
 		let weight = 50.;
 
+		let timestamp = 0;
+
 		let mut key1 = Vec::new();
 		key1.extend_from_slice(&prefix);
 		key1.extend_from_slice(&x1.to_be_bytes());
@@ -94,12 +101,12 @@ mod test {
 		key2.extend_from_slice(&x2.to_be_bytes());
 		key2.extend_from_slice(&y2.to_be_bytes());
 
-		let prev_value1 = ItemManager::get_value(&db, &key1).unwrap();
-		let prev_value2 = ItemManager::get_value(&db, &key2).unwrap();
-		ItemManager::update_value(&db, key1.clone(), weight).unwrap();
-		ItemManager::update_value(&db, key2.clone(), weight).unwrap();
-		let new_item1 = LtItem::new(x1, y1, prev_value1 + weight);
-		let new_item2 = LtItem::new(x2, y2, prev_value2 + weight);
+		let prev_item1 = ItemManager::get_value(&db, &key1).unwrap();
+		let prev_item2 = ItemManager::get_value(&db, &key2).unwrap();
+		ItemManager::update_value(&db, key1.clone(), weight, timestamp).unwrap();
+		ItemManager::update_value(&db, key2.clone(), weight, timestamp).unwrap();
+		let new_item1 = LtItem::new(x1, y1, prev_item1.value + weight, timestamp);
+		let new_item2 = LtItem::new(x2, y2, prev_item2.value + weight, timestamp);
 		let new_items = vec![new_item1, new_item2];
 
 		let items = ItemManager::read_window(&db, prefix, (x1, y1), (x2, y2)).unwrap();

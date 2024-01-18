@@ -70,7 +70,7 @@ impl Validation for StatusSchema {
 }
 
 impl IntoTerm for StatusSchema {
-	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
+	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
@@ -88,6 +88,7 @@ impl IntoTerm for StatusSchema {
 			weight,
 			domain.into(),
 			form,
+			timestamp,
 		);
 		Ok(vec![term])
 	}

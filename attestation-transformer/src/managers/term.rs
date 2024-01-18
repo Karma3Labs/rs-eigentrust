@@ -79,6 +79,7 @@ mod test {
 			25.,
 			Domain::SoftwareSecurity.into(),
 			true,
+			0,
 		)];
 		let indexed_terms =
 			org_terms.clone().into_iter().enumerate().map(|(i, x)| (i as u32, x)).collect_vec();

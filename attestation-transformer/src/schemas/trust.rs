@@ -71,7 +71,7 @@ impl Validation for TrustSchema {
 }
 
 impl IntoTerm for TrustSchema {
-	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
+	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
@@ -87,6 +87,7 @@ impl IntoTerm for TrustSchema {
 					trust_arc.level.abs() * 10.,
 					1,
 					form,
+					timestamp,
 				)],
 				Domain::SoftwareSecurity => {
 					vec![Term::new(
@@ -95,6 +96,7 @@ impl IntoTerm for TrustSchema {
 						trust_arc.level.abs() * 10.,
 						2,
 						form,
+						timestamp,
 					)]
 				},
 				Domain::Honesty => {
@@ -105,6 +107,7 @@ impl IntoTerm for TrustSchema {
 							trust_arc.level.abs() * 1.,
 							1,
 							form,
+							timestamp,
 						),
 						Term::new(
 							from_did.clone(),
@@ -112,6 +115,7 @@ impl IntoTerm for TrustSchema {
 							trust_arc.level.abs() * 1.,
 							2,
 							form,
+							timestamp,
 						),
 					]
 				},

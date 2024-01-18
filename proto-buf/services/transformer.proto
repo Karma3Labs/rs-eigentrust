@@ -4,8 +4,17 @@ package transformer;
 import "common.proto";
 
 service Transformer {
-    rpc SyncIndexer (common.Void) returns (common.Void);
+    rpc SyncIndexer (EventBatch) returns (EventResult);
     rpc TermStream (TermBatch) returns (common.Void);
+}
+
+message EventBatch {
+    uint32 size = 2;
+}
+
+message EventResult {
+    uint32 total_count = 1;
+    uint32 num_terms = 2;
 }
 
 message TermBatch {
@@ -24,4 +33,5 @@ message TermObject {
     float weight = 3;
     uint32 domain = 4;
     Form form = 5;
+    uint64 timestamp = 6;
 }

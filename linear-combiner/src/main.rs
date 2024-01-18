@@ -103,7 +103,7 @@ impl LinearCombiner for LinearCombinerService {
 				term.weight
 			);
 
-			let value = ItemManager::update_value(&db, key.clone(), term.weight)
+			let value = ItemManager::update_value(&db, key.clone(), term.weight, term.timestamp)
 				.map_err(|e| e.into_status())?;
 			UpdateManager::set_value(&db, key.clone(), value).map_err(|e| e.into_status())?;
 		}
