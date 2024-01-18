@@ -1,6 +1,4 @@
 const ethers = require('ethers')
-const fs = require('fs')
-const path = require('path')
 const {
     schemaIds,
     EndorsementTypes,
@@ -8,39 +6,8 @@ const {
 } = require('./constants')
 const { createEndorsementSchema } = require('./endorsementSchema')
 const { createAuditReportSchema } = require('./auditReportSchema')
+const { saveAttestationsToCSV } = require('./csv')
 
-
-const dir = __dirname.split('/src')[0] + '/output'
-
-if (!fs.existsSync(dir)){
-    fs.mkdirSync(dir, { recursive: true });
-}
-
-console.log({dir})
-
-const saveAttestationsToCSV = (attestations) => {
-    const delimiter = ';'
-
-    // https://github.com/Karma3Labs/rs-eigentrust/blob/indexer/proto-buf/services/indexer.proto#L15-L19
-    const CSVData = attestations
-        .map((a, i) => {
-            const id = (i + 1).toString(16)
-            const schema_id = schemaIds[a.type] || 0
-            const schema_value = JSON.stringify(a)
-            const timestamp = Date.now().toString()
-
-            return [id, timestamp, schema_id, schema_value]
-        })
-        .map(row => row.join(delimiter)).join('\n')
-
-    const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '')
-    const filename = `/output/output-${timestamp}.csv`
-
-    const filePath = path.join(process.cwd(), filename)
-    fs.writeFileSync(filePath, CSVData, 'utf8')
-
-    console.log(`${attestations.length} attestations saved to ${filename}`)
-}
 
 const generate = async (
     walletsCount = 4,
@@ -48,7 +15,12 @@ const generate = async (
     p2pAttestationsCount = 1,
     snapAttestationsCount = 1,
 ) => {
-    console.log(`Generating ${walletsCount} wallets, ${snapsCount} snaps, ${p2pAttestationsCount} p2p attestations, ${snapAttestationsCount} snap attestations`)
+    console.log(`
+    Generating ${walletsCount} wallets, 
+    ${snapsCount} snaps, 
+    ${p2pAttestationsCount} p2p attestations, 
+    ${snapAttestationsCount} snap attestations
+    `)
 
     const wallets = Array.from({ length: walletsCount }).map(() => {
         const mnemonic = ethers.Mnemonic.fromEntropy(ethers.randomBytes(32))

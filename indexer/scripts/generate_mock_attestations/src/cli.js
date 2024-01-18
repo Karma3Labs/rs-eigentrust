@@ -23,10 +23,12 @@ const run = async () => {
             p2pAttestationsCount,
             snapAttestationsCount,
         ) => {
-            await generate(walletsCount,
+            await generate(
+                walletsCount,
                 snapsCount,
                 p2pAttestationsCount,
-                snapAttestationsCount)
+                snapAttestationsCount
+            )
         })
 
     try {
