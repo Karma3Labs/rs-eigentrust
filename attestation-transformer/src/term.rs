@@ -80,9 +80,10 @@ impl Term {
 	}
 
 	pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, AttTrError> {
+		println!("{}", bytes.len());
 		let term: Term = match bytes.len() {
-			// 52 + 47 + 4 + 4 + 1 = 108
-			108 => {
+			// 52 + 47 + 4 + 4 + 1 + 8 = 116
+			116 => {
 				let from_bytes: Vec<u8> = bytes.drain(..52).collect();
 				let to_bytes: Vec<u8> = bytes.drain(..47).collect();
 				let weight_bytes: [u8; 4] = bytes
@@ -97,7 +98,7 @@ impl Term {
 					.map_err(|_| AttTrError::SerialisationError)?;
 				let form_byte: u8 = bytes.remove(0);
 				let timestamp_bytes = bytes
-					.drain(..6)
+					.drain(..8)
 					.collect::<Vec<u8>>()
 					.try_into()
 					.map_err(|_| AttTrError::SerialisationError)?;
@@ -111,8 +112,8 @@ impl Term {
 
 				Term { from, to, weight, domain, form, timestamp }
 			},
-			// 52 + 52 + 4 + 4 + 1 = 113
-			113 => {
+			// 52 + 52 + 4 + 4 + 1 + 8 = 121
+			121 => {
 				let from_bytes: Vec<u8> = bytes.drain(..52).collect();
 				let to_bytes: Vec<u8> = bytes.drain(..52).collect();
 				let weight_bytes: [u8; 4] = bytes
@@ -127,7 +128,7 @@ impl Term {
 					.map_err(|_| AttTrError::SerialisationError)?;
 				let form_byte: u8 = bytes.remove(0);
 				let timestamp_bytes = bytes
-					.drain(..6)
+					.drain(..8)
 					.collect::<Vec<u8>>()
 					.try_into()
 					.map_err(|_| AttTrError::SerialisationError)?;
