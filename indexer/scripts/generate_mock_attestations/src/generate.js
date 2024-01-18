@@ -10,6 +10,14 @@ const { createEndorsementSchema } = require('./endorsementSchema')
 const { createAuditReportSchema } = require('./auditReportSchema')
 
 
+const dir = __dirname.split('/src')[0] + '/output'
+
+if (!fs.existsSync(dir)){
+    fs.mkdirSync(dir, { recursive: true });
+}
+
+console.log({dir})
+
 const saveAttestationsToCSV = (attestations) => {
     const delimiter = ';'
 

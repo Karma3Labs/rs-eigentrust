@@ -32,7 +32,7 @@ const run = async () => {
     try {
         program.parse(process.argv)
     } catch (e) {
-        l.error(e)
+        console.error(e)
         process.exit(1)
     }
 }

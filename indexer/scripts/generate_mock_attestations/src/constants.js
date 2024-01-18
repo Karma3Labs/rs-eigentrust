@@ -5,7 +5,7 @@ const schemaIds = {
     'DisputeCredential': 4,
 }
 
-const EndorsementTypes = [0, 1, -1]
+const EndorsementTypes = [1, -1] // 0 - undo
 
 const AuditReportTypes = ['AuditReportApproveCredential', 'AuditReportDisapproveCredential']
 
