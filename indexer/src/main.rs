@@ -37,7 +37,7 @@ async fn main() {
 
 	let csv_client_config = CSVClientConfig {
 		// path: "./assets/csv/mock.csv".to_string(),
-		path: "./scripts/generate_mock_attestations/output.csv".to_string(),
+		path: "./scripts/generate_mock_attestations/output/output.csv".to_string(),
 	};
 	let csv_client = CSVClient::new(csv_client_config);
 	let csv_poc_task = CSVPOCTask::new(csv_client);
