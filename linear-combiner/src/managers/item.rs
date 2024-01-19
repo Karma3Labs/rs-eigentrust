@@ -62,7 +62,7 @@ mod test {
 		opts.create_if_missing(true);
 		let db = DB::open_cf(&opts, "lc-ui-test-storage", vec!["item"]).unwrap();
 
-		let key = vec![0; 8];
+		let key = vec![0; 16];
 		let weight = 50.;
 		let timestamp = 0;
 

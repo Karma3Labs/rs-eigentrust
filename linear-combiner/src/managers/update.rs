@@ -6,9 +6,12 @@ use crate::{error::LcError, item::LtItem};
 pub struct UpdateManager;
 
 impl UpdateManager {
-	pub fn set_value(db: &DB, key: Vec<u8>, value: f32) -> Result<(), LcError> {
+	pub fn set_value(db: &DB, key: Vec<u8>, value: f32, timestamp: u64) -> Result<(), LcError> {
 		let cf = db.cf_handle("update").ok_or_else(|| LcError::NotFoundError)?;
-		db.put_cf(&cf, key.clone(), value.to_be_bytes()).map_err(|e| LcError::DbError(e))?;
+		let mut bytes = Vec::new();
+		bytes.extend_from_slice(&value.to_be_bytes());
+		bytes.extend_from_slice(&timestamp.to_be_bytes());
+		db.put_cf(&cf, key.clone(), bytes).map_err(|e| LcError::DbError(e))?;
 		Ok(())
 	}
 
@@ -59,10 +62,15 @@ mod test {
 		let prefix = vec![0; 8];
 		let key = vec![0; 16];
 		let weight = 50.;
+		let timestamp = 0;
 
-		UpdateManager::set_value(&db, key.clone(), weight).unwrap();
+		UpdateManager::set_value(&db, key.clone(), weight, timestamp).unwrap();
 
-		let org_items = vec![LtItem::from_raw(key.clone(), weight.to_be_bytes().to_vec())];
+		let mut bytes = Vec::new();
+		bytes.extend_from_slice(&weight.to_be_bytes());
+		bytes.extend_from_slice(&timestamp.to_be_bytes());
+
+		let org_items = vec![LtItem::from_raw(key.clone(), bytes)];
 		let items = UpdateManager::read_batch(&db, prefix.clone(), 1).unwrap();
 		assert_eq!(items, org_items);
 
