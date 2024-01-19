@@ -15,8 +15,8 @@ const generate = async (
     p2pAttestationsCount = 1,
     snapAttestationsCount = 1,
 ) => {
-    console.log(`
-    Generating ${walletsCount} wallets, 
+    console.log(`Generating 
+    ${walletsCount} wallets, 
     ${snapsCount} snaps, 
     ${p2pAttestationsCount} p2p attestations, 
     ${snapAttestationsCount} snap attestations
