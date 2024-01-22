@@ -80,12 +80,17 @@ impl Term {
 	}
 
 	pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, AttTrError> {
-		println!("{}", bytes.len());
 		let term: Term = match bytes.len() {
-			// 52 + 47 + 4 + 4 + 1 + 8 = 116
-			116 => {
-				let from_bytes: Vec<u8> = bytes.drain(..52).collect();
-				let to_bytes: Vec<u8> = bytes.drain(..47).collect();
+			// 54 + 49 + 4 + 4 + 1 + 8 = 120
+			// 54: did:pkh:eth:0x152d4dd8afe95f7c38103d7460befbed07dedd8f - from
+			// 49: snap://0x9dc6c239a0f3abad2094cd6891cdc56cdf8994f8 - to
+			// 4: f32 - weight
+			// 4: u32 - domain
+			// 1: u8 - form
+			// 8: u63 - timestamp
+			120 => {
+				let from_bytes: Vec<u8> = bytes.drain(..54).collect();
+				let to_bytes: Vec<u8> = bytes.drain(..49).collect();
 				let weight_bytes: [u8; 4] = bytes
 					.drain(..4)
 					.collect::<Vec<u8>>()
@@ -103,8 +108,9 @@ impl Term {
 					.try_into()
 					.map_err(|_| AttTrError::SerialisationError)?;
 
-				let from = hex::encode(from_bytes);
-				let to = hex::encode(to_bytes);
+				let from =
+					String::from_utf8(from_bytes).map_err(|_| AttTrError::SerialisationError)?;
+				let to = String::from_utf8(to_bytes).map_err(|_| AttTrError::SerialisationError)?;
 				let weight = f32::from_be_bytes(weight_bytes);
 				let domain = u32::from_be_bytes(domain_bytes);
 				let form = TermForm::from(form_byte);
@@ -112,10 +118,16 @@ impl Term {
 
 				Term { from, to, weight, domain, form, timestamp }
 			},
-			// 52 + 52 + 4 + 4 + 1 + 8 = 121
-			121 => {
-				let from_bytes: Vec<u8> = bytes.drain(..52).collect();
-				let to_bytes: Vec<u8> = bytes.drain(..52).collect();
+			// 54 + 54 + 4 + 4 + 1 + 8 = 125
+			// 54: did:pkh:eth:0x152d4dd8afe95f7c38103d7460befbed07dedd8f - from
+			// 54: did:pkh:eth:0x152d4dd8afe95f7c38103d7460befbed07dedd8f - to
+			// 4: f32 - weight
+			// 4: u32 - domain
+			// 1: u8 - form
+			// 8: u63 - timestamp
+			125 => {
+				let from_bytes: Vec<u8> = bytes.drain(..54).collect();
+				let to_bytes: Vec<u8> = bytes.drain(..54).collect();
 				let weight_bytes: [u8; 4] = bytes
 					.drain(..4)
 					.collect::<Vec<u8>>()

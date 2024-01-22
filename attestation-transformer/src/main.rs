@@ -3,11 +3,10 @@ use futures::stream::iter;
 use managers::checkpoint::CheckpointManager;
 use managers::term::TermManager;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
-use proto_buf::common::Void;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
-use proto_buf::transformer::{EventBatch, EventResult, TermBatch};
+use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
 use rocksdb::{Options, DB};
 use schemas::security::SecurityReportSchema;
 use schemas::status::StatusSchema;
@@ -136,7 +135,9 @@ impl Transformer for TransformerService {
 		Ok(Response::new(event_result))
 	}
 
-	async fn term_stream(&self, request: Request<TermBatch>) -> Result<Response<Void>, Status> {
+	async fn term_stream(
+		&self, request: Request<TermBatch>,
+	) -> Result<Response<TermResult>, Status> {
 		let inner = request.into_inner();
 		if inner.size > MAX_TERM_BATCH_SIZE {
 			return Result::Err(Status::invalid_argument(format!(
@@ -153,11 +154,16 @@ impl Transformer for TransformerService {
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let terms = TermManager::read_terms(&db, inner).map_err(|e| e.into_status())?;
+		let num_terms = terms.len();
 
 		let mut client = LinearCombinerClient::new(self.lt_channel.clone());
-		let res = client.sync_transformer(Request::new(iter(terms))).await?;
+		client.sync_transformer(Request::new(iter(terms))).await?;
 
-		Ok(res)
+		let term_size =
+			u32::try_from(num_terms).map_err(|_| AttTrError::SerialisationError.into_status())?;
+		let res = TermResult { size: term_size };
+
+		Ok(Response::new(res))
 	}
 }
 

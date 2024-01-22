@@ -5,7 +5,7 @@ import "common.proto";
 
 service Transformer {
     rpc SyncIndexer (EventBatch) returns (EventResult);
-    rpc TermStream (TermBatch) returns (common.Void);
+    rpc TermStream (TermBatch) returns (TermResult);
 }
 
 message EventBatch {
@@ -20,6 +20,10 @@ message EventResult {
 message TermBatch {
     uint32 start = 1;
     uint32 size = 2;
+}
+
+message TermResult {
+    uint32 size = 1;
 }
 
 enum Form {

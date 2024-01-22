@@ -60,7 +60,7 @@ impl Validation for StatusSchema {
 	}
 
 	fn get_message(&self) -> Result<Vec<u8>, AttTrError> {
-		let did = Did::parse_pkh_eth(self.credential_subject.id.clone())?;
+		let did = Did::parse_snap(self.credential_subject.id.clone())?;
 		let mut bytes = Vec::new();
 		bytes.extend_from_slice(&did.key);
 		bytes.push(self.credential_subject.current_status.clone().into());

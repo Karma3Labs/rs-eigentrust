@@ -44,7 +44,7 @@ impl Did {
 	pub fn parse_snap(value: String) -> Result<Self, AttTrError> {
 		let parts = value.split("://");
 		let part_slices: Vec<&str> = parts.into_iter().collect();
-		// 4 parts: did, pkh, eth, [public key hash]
+		// 2 parts: snap, [key]
 		if part_slices.len() != 2 {
 			return Err(AttTrError::ParseError);
 		}
@@ -65,8 +65,8 @@ impl Into<String> for Did {
 	fn into(self) -> String {
 		let key = hex::encode(self.key);
 		match self.schema {
-			Schema::PkhEth => format!("did:pkh:eth:{}", key),
-			Schema::Snap => format!("snap://{}", key),
+			Schema::PkhEth => format!("did:pkh:eth:0x{}", key),
+			Schema::Snap => format!("snap://0x{}", key),
 		}
 	}
 }

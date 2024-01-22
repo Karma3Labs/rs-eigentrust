@@ -10,7 +10,7 @@ use tonic::transport::Channel;
 use tonic::Request;
 
 const BATCH_SIZE: u32 = 1000;
-const INTERVAL_SECS: u64 = 1000;
+const INTERVAL_SECS: u64 = 5;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Some(_ts) = stream.next().await {
 		let event_request = Request::new(EventBatch { size: BATCH_SIZE });
 		let response = tr_client.sync_indexer(event_request).await?.into_inner();
-		println!("basic response {:?}", response.num_terms);
+		println!("sync_indexer response {:?}", response);
 
 		if response.num_terms != 0 {
 			let void_request = Request::new(TermBatch {
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				size: response.num_terms,
 			});
 			let response = tr_client.term_stream(void_request).await?.into_inner();
-			println!("basic response {:?}", response);
+			println!("term_stream response {:?}", response);
 		}
 	}
 

@@ -78,9 +78,9 @@ pub enum SchemaType {
 impl From<u32> for SchemaType {
 	fn from(value: u32) -> Self {
 		match value {
-			2 => Self::SecurityCredential,
-			4 => Self::StatusCredential,
-			5 => Self::TrustCredential,
+			0 => Self::SecurityCredential,
+			1 => Self::StatusCredential,
+			2 => Self::TrustCredential,
 			_ => panic!("Invalid Schema type"),
 		}
 	}
@@ -89,7 +89,9 @@ impl From<u32> for SchemaType {
 #[derive(Deserialize, Serialize, Clone)]
 pub enum Domain {
 	Honesty,
+	#[serde(alias = "Software development")]
 	SoftwareDevelopment,
+	#[serde(alias = "Software security")]
 	SoftwareSecurity,
 }
 
