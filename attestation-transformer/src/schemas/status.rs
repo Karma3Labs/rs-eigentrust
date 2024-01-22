@@ -105,8 +105,8 @@ mod test {
 
 	#[test]
 	fn should_validate_endorse_credential() {
-		let did_string = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
+		let did_string = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let did = Did::parse_snap(did_string.clone()).unwrap();
 		let current_status = CurrentStatus::Endorsed;
 
 		let mut keccak = Keccak256::default();
@@ -130,7 +130,7 @@ mod test {
 
 		let kind = "AuditReportDisapproveCredential".to_string();
 		let address = address_from_ecdsa_key(&pk);
-		let issuer = format!("did:pkh:eth:{}", hex::encode(address));
+		let issuer = format!("did:pkh:eth:0x{}", hex::encode(address));
 		let cs = CredentialSubject { id: did_string, current_status };
 		let proof = Proof { signature: sig_string };
 

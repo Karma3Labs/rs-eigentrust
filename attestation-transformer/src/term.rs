@@ -183,8 +183,8 @@ mod test {
 	#[test]
 	fn should_convert_term_to_bytes_and_back() {
 		let term = Term {
-			from: "did:eth:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned(),
-			to: "did:eth:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
+			from: "did:eth:pkh:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned(),
+			to: "did:eth:pkh:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
 			weight: 50.,
 			domain: 67834578,
 			form: TermForm::Trust,

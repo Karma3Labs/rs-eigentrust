@@ -73,8 +73,8 @@ mod test {
 		let db = DB::open_cf(&opts, "att-wrt-test-storage", vec!["term"]).unwrap();
 
 		let org_terms = vec![Term::new(
-			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string(),
-			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c3".to_string(),
+			"did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string(),
+			"did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c3".to_string(),
 			25.,
 			Domain::SoftwareSecurity.into(),
 			true,

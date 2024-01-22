@@ -195,7 +195,7 @@ mod test {
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
-			let did = Did::parse_pkh_eth(id.clone()).unwrap();
+			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
 			keccak.update(&did.key);
 			keccak.update(&[current_status.clone().into()]);
@@ -217,7 +217,7 @@ mod test {
 
 			let kind = "StatusCredential".to_string();
 			let addr = address_from_ecdsa_key(&pk);
-			let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
+			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
 			let cs = CredentialSubject::new(id, current_status);
 			let proof = Proof::new(encoded_sig);
 
@@ -227,12 +227,12 @@ mod test {
 
 	#[test]
 	fn should_parse_event() {
-		let recipient = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let recipient = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let status_schema = StatusSchema::generate(recipient.clone(), CurrentStatus::Endorsed);
 		let timestamp = 2397848;
 		let indexed_event = IndexerEvent {
 			id: 0,
-			schema_id: 4,
+			schema_id: 1,
 			schema_value: to_string(&status_schema).unwrap(),
 			timestamp,
 		};

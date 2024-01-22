@@ -31,7 +31,6 @@ pub trait Validation {
 	fn validate(&self) -> Result<PublicKey, AttTrError> {
 		let sig_bytes =
 			hex::decode(self.get_trimmed_signature()).map_err(|e| AttTrError::HexError(e))?;
-
 		let mut rs_bytes = [0; 64];
 		rs_bytes.copy_from_slice(&sig_bytes[..64]);
 		let rec_id: i32 = match i32::from(sig_bytes[64]) {

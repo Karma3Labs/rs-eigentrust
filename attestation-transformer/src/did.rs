@@ -79,7 +79,7 @@ mod test {
 
 	#[test]
 	fn test_did_parsing() {
-		let did_string = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
+		let did_string = "did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
 		let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 		assert_eq!(did.schema, Schema::PkhEth);
 		assert_eq!(
