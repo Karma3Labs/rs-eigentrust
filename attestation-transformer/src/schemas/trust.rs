@@ -9,13 +9,13 @@ use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct DomainTrust {
-	scope: Domain,
-	level: f32,
+	pub(crate) scope: Domain,
+	pub(crate) level: f32,
 	reason: Vec<String>,
 }
 
 impl DomainTrust {
-	fn new(scope: Domain, level: f32, reason: Vec<String>) -> Self {
+	pub fn new(scope: Domain, level: f32, reason: Vec<String>) -> Self {
 		Self { scope, level, reason }
 	}
 }

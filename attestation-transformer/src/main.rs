@@ -183,13 +183,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 mod test {
 	use crate::did::Did;
 	use crate::schemas::status::{CredentialSubject, CurrentStatus, StatusSchema};
+	use crate::schemas::trust::{
+		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
+	};
 	use crate::schemas::{Domain, Proof};
 	use crate::term::Term;
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
 	use proto_buf::indexer::IndexerEvent;
-	use secp256k1::rand::thread_rng;
-	use secp256k1::{generate_keypair, Message, Secp256k1};
+	use secp256k1::rand::rngs::StdRng;
+	use secp256k1::rand::{thread_rng, Rng, RngCore, SeedableRng};
+	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
 	use serde_json::to_string;
 	use sha3::{Digest, Keccak256};
 
@@ -224,6 +228,82 @@ mod test {
 
 			StatusSchema::new(kind, issuer, cs, proof)
 		}
+
+		pub fn generate_from_sk(
+			id: String, current_status: CurrentStatus, sk_string: String,
+		) -> Self {
+			let did = Did::parse_snap(id.clone()).unwrap();
+			let mut keccak = Keccak256::default();
+			keccak.update(&[did.schema.into()]);
+			keccak.update(&did.key);
+			keccak.update(&[current_status.clone().into()]);
+			let digest = keccak.finalize();
+
+			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
+
+			let secp = Secp256k1::new();
+			let sk_bytes = hex::decode(sk_string).unwrap();
+			let sk = SecretKey::from_slice(&sk_bytes).unwrap();
+			let pk = sk.public_key(&secp);
+
+			let res = secp.sign_ecdsa_recoverable(&message, &sk);
+			let (rec_id, sig_bytes) = res.serialize_compact();
+			let rec_id_i32 = rec_id.to_i32();
+
+			let mut bytes = Vec::new();
+			bytes.extend_from_slice(&sig_bytes);
+			bytes.push(rec_id_i32.to_le_bytes()[0]);
+			let encoded_sig = hex::encode(bytes);
+
+			let kind = "StatusCredential".to_string();
+			let addr = address_from_ecdsa_key(&pk);
+			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
+			let cs = CredentialSubject::new(id, current_status);
+			let proof = Proof::new(encoded_sig);
+
+			StatusSchema::new(kind, issuer, cs, proof)
+		}
+	}
+
+	impl TrustSchema {
+		pub fn generate_from_sk(
+			did_string: String, domain_trust: DomainTrust, sk_string: String,
+		) -> Self {
+			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
+			let trust_arc = DomainTrust::new(Domain::SoftwareSecurity, 0.5, Vec::new());
+
+			let mut keccak = Keccak256::default();
+			keccak.update(&[did.schema.into()]);
+			keccak.update(&did.key);
+			keccak.update(&[trust_arc.scope.clone().into()]);
+			// keccak.update(&trust_arc.level.to_be_bytes());
+
+			let digest = keccak.finalize();
+
+			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
+
+			let secp = Secp256k1::new();
+			let sk_bytes = hex::decode(sk_string).unwrap();
+			let sk = SecretKey::from_slice(&sk_bytes).unwrap();
+			let pk = sk.public_key(&secp);
+
+			let res = secp.sign_ecdsa_recoverable(&message, &sk);
+			let (rec_id, sig_bytes) = res.serialize_compact();
+			let rec_id = rec_id.to_i32().to_le_bytes()[0];
+
+			let mut bytes = Vec::new();
+			bytes.extend_from_slice(&sig_bytes);
+			bytes.push(rec_id);
+			let sig_string = hex::encode(bytes);
+
+			let kind = "AuditReportApproveCredential".to_string();
+			let addr = address_from_ecdsa_key(&pk);
+			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
+			let cs = CredentialSubjectTrust::new(did_string, vec![trust_arc]);
+			let proof = Proof::new(sig_string);
+
+			TrustSchema::new(kind, issuer, cs, proof)
+		}
 	}
 
 	#[test]
@@ -249,5 +329,145 @@ mod test {
 				timestamp,
 			)]
 		)
+	}
+
+	#[test]
+	fn generate_functional_test_schemas() {
+		let x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
+		let x = "did:pkh:eth:0xa9572220348b1080264e81c0779f77c144790cd6".to_owned();
+
+		let y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
+		let y = "did:pkh:eth:0xba9090181312bd0e40254a3dc29841980dd392d2".to_owned();
+
+		let z_sk = "ac7f0d9eaea4d4bf5438b887e34d0cf87e7f98d97da70eff001850487b2cae23".to_owned();
+		let z = "did:pkh:eth:0x9a2954b87d8745df0b1010291c51d68ae9269d43".to_owned();
+
+		let p_sk = "bbb7d40b7bb8e41c550696fdef78fff6f013bb34627ba50ca2d63b6e84cffa6c".to_owned();
+		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
+
+		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
+		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+
+		// Trust
+		// p => x - Trust Credential - Honesty - trust
+		// p => x - Trust Credential - Software security - trust
+		// p => s1 - Status Credential - Endorse
+		// q => y - Trust Credential - Software security - trust
+		// q => s2 - Status Credential - Endorse
+		// x => z - Trust credential - Honesty - trust
+		// x => s1 - Status Credential - Endorse
+
+		let p_x1 = TrustSchema::generate_from_sk(
+			x.clone(),
+			DomainTrust::new(Domain::Honesty, 1., Vec::new()),
+			p_sk.clone(),
+		);
+		let p_x2 = TrustSchema::generate_from_sk(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			p_sk.clone(),
+		);
+		let q_y = TrustSchema::generate_from_sk(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			q_sk.clone(),
+		);
+		let x_z = TrustSchema::generate_from_sk(
+			z.clone(),
+			DomainTrust::new(Domain::Honesty, 1., Vec::new()),
+			x_sk.clone(),
+		);
+		let q_s2 =
+			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Endorsed, q_sk.clone());
+		let p_s1 =
+			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Endorsed, p_sk.clone());
+		let x_s1 =
+			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Endorsed, x_sk.clone());
+
+		// Distrust
+		// p => y - Trust Credential - Honest - distrust
+		// q => x - Trust Credential - Software security - distrust
+		// y => z - Trust Credential - Software security - distrust
+		// y => s2 - Status Credential - Dispute
+		// z => s1 - Status Credential - Dispute
+		// z => s2 - Status Credential - Dispute
+		let p_y = TrustSchema::generate_from_sk(
+			y.clone(),
+			DomainTrust::new(Domain::Honesty, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let q_x = TrustSchema::generate_from_sk(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			q_sk.clone(),
+		);
+		let y_z = TrustSchema::generate_from_sk(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			y_sk.clone(),
+		);
+		let y_s2 =
+			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Disputed, y_sk.clone());
+		let z_s1 =
+			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Disputed, z_sk.clone());
+		let z_s2 =
+			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Disputed, z_sk.clone());
+
+		let trust_arcs = [p_x1, p_x2, q_y, x_z, p_y, q_x, y_z];
+		let status_arcs = [q_s2, p_s1, x_s1, y_s2, z_s1, z_s2];
+
+		let mut timestamp = 2397848;
+		let mut id = 1;
+		let trust_schema_id = 2;
+		let status_schema_id = 1;
+
+		for schema_value in trust_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: trust_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				trust_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(",");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+
+		for schema_value in status_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: status_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				status_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(",");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
 	}
 }
