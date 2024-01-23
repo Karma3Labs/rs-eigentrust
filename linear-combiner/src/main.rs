@@ -158,6 +158,7 @@ impl LinearCombiner for LinearCombinerService {
 		}
 
 		for term in terms {
+			println!("Received Term({}, {})", term.from.clone(), term.to.clone());
 			let x = Self::get_index(&main_db, term.from.clone(), &mut offset)
 				.map_err(|e| e.into_status())?;
 			let y = Self::get_index(&main_db, term.to.clone(), &mut offset)
@@ -170,6 +171,13 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&form);
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
+
+			println!(
+				"Received Item({}, {}, {})",
+				u32::from_be_bytes(x),
+				u32::from_be_bytes(y),
+				term.weight
+			);
 
 			Self::update_value(&main_db, &updates_db, key.clone(), term.weight)
 				.map_err(|e| e.into_status())?;
