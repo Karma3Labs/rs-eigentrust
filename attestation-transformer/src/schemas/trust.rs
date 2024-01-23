@@ -76,6 +76,9 @@ impl IntoTerm for TrustSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		if from_did != self.issuer {
+			return Err(AttTrError::VerificationError);
+		}
 
 		let mut terms = Vec::new();
 		for trust_arc in &self.credential_subject.trustworthiness {

@@ -97,6 +97,9 @@ impl IntoTerm for SecurityReportSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		if from_did != self.issuer {
+			return Err(AttTrError::VerificationError);
+		}
 
 		let form = match self.credential_subject.security_status {
 			SecurityStatus::Unsecure => false,

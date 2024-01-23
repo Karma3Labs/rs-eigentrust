@@ -3,8 +3,10 @@ use sha3::{digest::Digest, Keccak256};
 
 pub fn address_from_ecdsa_key(pub_key: &PublicKey) -> Vec<u8> {
 	let raw_pub_key = pub_key.serialize_uncompressed();
+	debug_assert_eq!(raw_pub_key[0], 0x04);
 	// Hash and get the last 20 bytes.
 	let pub_key_hash = Keccak256::digest(&raw_pub_key[1..]);
+	println!("full pk: {:?}", pub_key_hash);
 	pub_key_hash[12..].to_vec()
 }
 

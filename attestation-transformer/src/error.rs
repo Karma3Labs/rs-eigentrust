@@ -16,8 +16,11 @@ pub enum AttTrError {
 	#[error("HexError: {0}")]
 	HexError(FromHexError),
 
-	#[error("VerificationError: {0}")]
-	VerificationError(SecpError),
+	#[error("SigVerificationError: {0}")]
+	SigVerificationError(SecpError),
+
+	#[error("VerificationError")]
+	VerificationError,
 
 	#[error("DbError: {0}")]
 	DbError(RocksDbError),
