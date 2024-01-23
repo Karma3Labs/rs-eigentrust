@@ -62,6 +62,7 @@ impl Validation for StatusSchema {
 	fn get_message(&self) -> Result<Vec<u8>, AttTrError> {
 		let did = Did::parse_snap(self.credential_subject.id.clone())?;
 		let mut bytes = Vec::new();
+		bytes.push(did.schema.into());
 		bytes.extend_from_slice(&did.key);
 		bytes.push(self.credential_subject.current_status.clone().into());
 
@@ -114,6 +115,7 @@ mod test {
 		let current_status = CurrentStatus::Endorsed;
 
 		let mut keccak = Keccak256::default();
+		keccak.update(&[did.schema.into()]);
 		keccak.update(&did.key);
 		keccak.update(&[current_status.clone().into()]);
 		let digest = keccak.finalize();

@@ -59,6 +59,7 @@ impl Validation for TrustSchema {
 		let did = Did::parse_pkh_eth(self.credential_subject.id.clone())?;
 
 		let mut bytes = Vec::new();
+		bytes.push(did.schema.into());
 		bytes.extend_from_slice(&did.key);
 		for arc in &self.credential_subject.trustworthiness {
 			bytes.push(arc.scope.clone().into());
@@ -153,6 +154,7 @@ mod test {
 		let trust_arc = DomainTrust::new(Domain::SoftwareSecurity, 0.5, Vec::new());
 
 		let mut keccak = Keccak256::default();
+		keccak.update(&[did.schema.into()]);
 		keccak.update(&did.key);
 		keccak.update(&[trust_arc.scope.clone().into()]);
 		// keccak.update(&trust_arc.level.to_be_bytes());

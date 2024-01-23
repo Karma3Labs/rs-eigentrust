@@ -197,6 +197,7 @@ mod test {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
+			keccak.update(&[did.schema.into()]);
 			keccak.update(&did.key);
 			keccak.update(&[current_status.clone().into()]);
 			let digest = keccak.finalize();
