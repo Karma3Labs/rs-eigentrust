@@ -39,5 +39,5 @@ message LtHistoryBatch {
 message LtObject {
     uint32 x = 1;
     uint32 y = 2;
-    uint32 value = 3;
+    float value = 3;
 }

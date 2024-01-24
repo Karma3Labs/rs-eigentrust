@@ -1,14 +1,14 @@
 use proto_buf::combiner::{LtObject, Mapping};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LtItem {
 	x: u32,
 	y: u32,
-	value: u32,
+	value: f32,
 }
 
 impl LtItem {
-	pub fn new(x: u32, y: u32, value: u32) -> Self {
+	pub fn new(x: u32, y: u32, value: f32) -> Self {
 		LtItem { x, y, value }
 	}
 
@@ -37,7 +37,7 @@ impl LtItem {
 
 		let x = u32::from_be_bytes(x_bytes);
 		let y = u32::from_be_bytes(y_bytes);
-		let value = u32::from_be_bytes(value_bytes);
+		let value = f32::from_be_bytes(value_bytes);
 
 		Self { x, y, value }
 	}

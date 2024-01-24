@@ -35,17 +35,17 @@ impl Into<Form> for TermForm {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Term {
 	from: String,
 	to: String,
-	weight: u32,
+	weight: f32,
 	domain: u32,
 	form: TermForm,
 }
 
 impl Term {
-	pub fn new(from: String, to: String, weight: u32, domain: u32, is_trust: bool) -> Term {
+	pub fn new(from: String, to: String, weight: f32, domain: u32, is_trust: bool) -> Term {
 		Term {
 			from,
 			to,
@@ -58,8 +58,8 @@ impl Term {
 	pub fn into_bytes(self) -> Result<Vec<u8>, AttTrError> {
 		let mut bytes = Vec::new();
 
-		let from_bytes = hex::decode(self.from).map_err(|_| AttTrError::SerialisationError)?;
-		let to_bytes = hex::decode(self.to).map_err(|_| AttTrError::SerialisationError)?;
+		let from_bytes = self.from.as_bytes();
+		let to_bytes = self.to.as_bytes();
 		let weight_bytes = self.weight.to_be_bytes();
 		let domain_bytes = self.domain.to_be_bytes();
 		let form_byte: u8 = self.form.into();
@@ -74,30 +74,58 @@ impl Term {
 	}
 
 	pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, AttTrError> {
-		if bytes.len() != 49 {
-			return Err(AttTrError::SerialisationError);
-		}
-		let from_bytes: Vec<u8> = bytes.drain(..20).collect();
-		let to_bytes: Vec<u8> = bytes.drain(..20).collect();
-		let weight_bytes: [u8; 4] = bytes
-			.drain(..4)
-			.collect::<Vec<u8>>()
-			.try_into()
-			.map_err(|_| AttTrError::SerialisationError)?;
-		let domain_bytes: [u8; 4] = bytes
-			.drain(..4)
-			.collect::<Vec<u8>>()
-			.try_into()
-			.map_err(|_| AttTrError::SerialisationError)?;
-		let form_byte = bytes[0];
+		let term: Term = match bytes.len() {
+			// 52 + 47 + 4 + 4 + 1 = 108
+			108 => {
+				let from_bytes: Vec<u8> = bytes.drain(..52).collect();
+				let to_bytes: Vec<u8> = bytes.drain(..47).collect();
+				let weight_bytes: [u8; 4] = bytes
+					.drain(..4)
+					.collect::<Vec<u8>>()
+					.try_into()
+					.map_err(|_| AttTrError::SerialisationError)?;
+				let domain_bytes: [u8; 4] = bytes
+					.drain(..4)
+					.collect::<Vec<u8>>()
+					.try_into()
+					.map_err(|_| AttTrError::SerialisationError)?;
+				let form_byte = bytes[0];
 
-		let from = hex::encode(from_bytes);
-		let to = hex::encode(to_bytes);
-		let weight = u32::from_be_bytes(weight_bytes);
-		let domain = u32::from_be_bytes(domain_bytes);
-		let form = TermForm::from(form_byte);
+				let from = hex::encode(from_bytes);
+				let to = hex::encode(to_bytes);
+				let weight = f32::from_be_bytes(weight_bytes);
+				let domain = u32::from_be_bytes(domain_bytes);
+				let form = TermForm::from(form_byte);
+				Term { from, to, weight, domain, form }
+			},
+			// 52 + 52 + 4 + 4 + 1 = 113
+			113 => {
+				let from_bytes: Vec<u8> = bytes.drain(..52).collect();
+				let to_bytes: Vec<u8> = bytes.drain(..52).collect();
+				let weight_bytes: [u8; 4] = bytes
+					.drain(..4)
+					.collect::<Vec<u8>>()
+					.try_into()
+					.map_err(|_| AttTrError::SerialisationError)?;
+				let domain_bytes: [u8; 4] = bytes
+					.drain(..4)
+					.collect::<Vec<u8>>()
+					.try_into()
+					.map_err(|_| AttTrError::SerialisationError)?;
+				let form_byte = bytes[0];
 
-		Ok(Self { from, to, weight, domain, form })
+				let from =
+					String::from_utf8(from_bytes).map_err(|_| AttTrError::SerialisationError)?;
+				let to = String::from_utf8(to_bytes).map_err(|_| AttTrError::SerialisationError)?;
+				let weight = f32::from_be_bytes(weight_bytes);
+				let domain = u32::from_be_bytes(domain_bytes);
+				let form = TermForm::from(form_byte);
+				Term { from, to, weight, domain, form }
+			},
+			_ => return Err(AttTrError::SerialisationError),
+		};
+
+		Ok(term)
 	}
 }
 
@@ -121,9 +149,9 @@ mod test {
 	#[test]
 	fn should_convert_term_to_bytes_and_back() {
 		let term = Term {
-			from: "90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned(),
-			to: "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
-			weight: 50,
+			from: "did:eth:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned(),
+			to: "did:eth:pkh:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned(),
+			weight: 50.,
 			domain: 67834578,
 			form: TermForm::Trust,
 		};
