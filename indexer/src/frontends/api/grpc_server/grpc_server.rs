@@ -61,7 +61,7 @@ impl Indexer for IndexerService {
 					id: i + 1,
 					schema_id: record.schema_id as u32,
 					schema_value: record.data,
-					timestamp: current_secs,
+					timestamp: record.timestamp.parse::<u64>().unwrap(),
 				};
 				tx.send(Ok(event)).await.unwrap();
 			}
