@@ -1,14 +1,13 @@
-use std::thread;
-use std::time::Duration;
 use tracing::{ info, debug };
 use csv::{ ReaderBuilder, WriterBuilder };
 use serde::Deserialize;
 use std::error::Error;
 use std::fs::{ File, OpenOptions };
-use std::path::{Path, PathBuf};
+use std::path::{ Path, PathBuf };
 use crate::storage::types::BaseKVStorage;
 pub use crate::tasks::types::{ BaseTask, TaskRecord };
 use flume::{ Sender, Receiver, bounded };
+use tokio::time::{ sleep, Duration };
 
 pub struct TaskService {
     pub task: Box<dyn BaseTask>,
@@ -49,19 +48,23 @@ impl TaskService {
             }
         }
 
-        self.index().await;
+        self.index();
     }
 
     pub async fn index(&mut self) {
         // todo catch inner level errors
+        // todo non blocking loop
         loop {
             let n: Option<u64> = None;
             let records = self.task.run(n, n).await;
-            
+
             self.append_cache(records).await;
-            //for r in records.iter() {
-            //    self.event_publisher.send(r.clone());
-            //}
+
+            /* 
+            for r in records.iter() {
+                self.event_publisher.send(r.clone());
+            }
+            */
 
             let task_id = self.task.get_id();
             let task_state = self.task.get_state_dump();
@@ -69,6 +72,7 @@ impl TaskService {
 
             let state = self.task.get_state();
 
+            // todo change to true
             if state.is_finished == true {
                 info!("Job id={} is finished", task_id);
                 break;
@@ -81,7 +85,7 @@ impl TaskService {
     }
 
     pub async fn sleep(&self, duration: Duration) {
-        thread::sleep(duration);
+        sleep(duration);
     }
 
     // change to flume subscriber

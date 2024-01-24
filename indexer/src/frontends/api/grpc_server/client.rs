@@ -30,7 +30,7 @@ impl GRPCServerClient {
             count: 100,
         };
 
-        let indexer_channel = Channel::from_static("http://[::1]:50050").connect().await?;
+        let indexer_channel = Channel::from_static("http://[::1]:50050").connect().await.unwrap();
 
         info!("GRPC client is started");
         let mut client = IndexerClient::new(indexer_channel.clone());
@@ -44,7 +44,6 @@ impl GRPCServerClient {
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        //do not mess server println functions
         info!("client is exiting");
         Ok(())
     }

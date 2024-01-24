@@ -30,7 +30,7 @@ impl IndexerService {
     }
 }
 
-const DELIMITER: u8 = b';';
+const DELIMITER: u8 = b',';
 const CSV_COLUMN_INDEX_DATA: usize = 3;
 const CSV_COLUMN_SCHEMA_ID: usize = 2;
 const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
@@ -54,11 +54,11 @@ impl Indexer for IndexerService {
 
         let data = self.data.clone();
 
-        let file_name = self.cache_file_path.clone().to_string_lossy().into_owned();
+        let cache_file_path = self.cache_file_path.clone().to_string_lossy().into_owned();
 
-        let (tx, rx) = channel(4);
+        let (tx, rx) = channel(128);
         tokio::spawn(async move {
-            let file: File = File::open(file_name).unwrap();
+            let file: File = File::open(cache_file_path).unwrap();
 
             let mut csv_reader = ReaderBuilder::new().delimiter(DELIMITER).from_reader(file);
 
@@ -68,7 +68,7 @@ impl Indexer for IndexerService {
 
             let mut records: Vec<Result<StringRecord, csv::Error>> = csv_reader
                 .into_records()
-                .take(limit.try_into().unwrap())
+                .take(100_000) // todo
                 .collect();
 
             for (index, record) in records.iter().enumerate() {
@@ -108,8 +108,6 @@ impl GRPCServer {
         let data = self.task_service.get_chunk(0, 10000).await;
         // todo move to cache layer
         let cache_file_path = self.task_service.get_cache_file_path();
-
-        // let task_service_event_receiver = self.task_service.event_receiver.clone();
 
         std::thread::sleep(std::time::Duration::from_millis(3000));
 
