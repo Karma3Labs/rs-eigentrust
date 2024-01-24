@@ -115,4 +115,8 @@ impl BaseTask for CliqueTask {
 		let json_string = serde_json::to_string(&self.state).expect("Failed to serialize to JSON");
 		json_string
 	}
+
+	fn set_state_dump(&mut self, state_json_string: &str) {
+		let my_struct: CliqueTaskState = serde_json::from_str(state_json_string).unwrap();
+    }
 }

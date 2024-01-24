@@ -11,7 +11,8 @@ pub struct CSVClient {
 	config: CSVClientConfig,
 }
 
-const DEFAULT_OFFSET: u64 = 1024;
+const DEFAULT_LIMIT: u64 = 1024;
+const DELIMITER: u8 = b';';
 
 impl CSVClient {
 	pub fn new(config: CSVClientConfig) -> Self {
@@ -25,10 +26,10 @@ impl CSVClient {
 		let file = File::open(&self.config.path)?;
 
 		let offset = from.unwrap_or(0);
-		let limit = range.unwrap_or(DEFAULT_OFFSET);
+		let limit = range.unwrap_or(DEFAULT_LIMIT);
 
 		// todo no header
-		let mut csv_reader = ReaderBuilder::new().delimiter(b';').from_reader(file);
+		let mut csv_reader = ReaderBuilder::new().delimiter(DELIMITER).from_reader(file);
 
 		// todo ??? skip records
 		for _ in 0..offset {

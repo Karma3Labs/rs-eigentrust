@@ -19,6 +19,9 @@ pub trait BaseTask {
 
 	// get serialized state to store to a db
 	fn get_state_dump(&self) -> String;
+
+	// deserialize and set state
+	fn set_state_dump(&mut self, state_json_string: &str);
 }
 
 // todo, dublicate for proto struct, remove once settled
