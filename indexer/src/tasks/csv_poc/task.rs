@@ -7,7 +7,7 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 pub use crate::clients::csv::client::CSVClient;
-pub use crate::tasks::types::{BaseTask, BaseTaskState, TaskResponse};
+pub use crate::tasks::types::{BaseTask, BaseTaskState, TaskRecord};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CSVPOCTaskState {
@@ -43,7 +43,7 @@ impl CSVPOCTask {
 
 #[tonic::async_trait]
 impl BaseTask for CSVPOCTask {
-	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse> {
+	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord> {
 		let from = offset.unwrap_or(self.state.from);
 		let range = limit.unwrap_or(self.state.from + self.state.range);
 
@@ -56,13 +56,13 @@ impl BaseTask for CSVPOCTask {
 
 		let is_finished = self.state.range > records_total.try_into().unwrap();
 
-		let results: Vec<TaskResponse> = records
+		let results: Vec<TaskRecord> = records
 			.into_iter()
-			.map(|record| -> TaskResponse {
+			.map(|record| -> TaskRecord {
 				let r = record.unwrap();
 
 				let schema_id = r.get(CSV_COLUMN_SCHEMA_ID).unwrap().parse::<usize>().unwrap_or(0);
-				TaskResponse {
+				TaskRecord {
 					timestamp: r.get(CSV_COLUMN_INDEX_TIMESTAMP).unwrap().to_string(),
 					id: 1,
 					job_id: "0".to_string(),

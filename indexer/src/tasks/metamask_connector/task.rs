@@ -7,7 +7,7 @@ use std::time::Duration;
 use tracing::{ debug, info };
 
 pub use crate::clients::metamask_connector::client::MetamaskConnectorClient;
-pub use crate::tasks::types::{ BaseTask, BaseTaskState, TaskResponse };
+pub use crate::tasks::types::{ BaseTask, BaseTaskState, TaskRecord };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MetamaskConnectorTaskState {
@@ -41,7 +41,7 @@ impl MetamaskConnectorTask {
 
 #[tonic::async_trait]
 impl BaseTask for MetamaskConnectorTask {
-    async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse> {
+    async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord> {
         let from = offset.unwrap_or(self.state.from);
         let range = limit.unwrap_or(self.state.from + self.state.range);
 
@@ -51,17 +51,16 @@ impl BaseTask for MetamaskConnectorTask {
         let records_total = records.len();
         info!("Received {:?} records", records_total);
 
-        let results: Vec<TaskResponse> = records
+        let results: Vec<TaskRecord> = records
             .into_iter()
-            .map(|record| -> TaskResponse {
+            .map(|record| -> TaskRecord {
                 let r = record;
-
-                let schema_id = 0;
-                TaskResponse {
-                    timestamp: r.clone(),
+                
+                TaskRecord {
+                    timestamp: "0".to_string(),
                     id: 1,
                     job_id: "0".to_string(),
-                    schema_id,
+                    schema_id: 0,
                     data: r.clone(),
                 }
             })

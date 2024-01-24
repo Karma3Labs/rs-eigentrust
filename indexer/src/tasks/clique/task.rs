@@ -13,7 +13,7 @@ pub use crate::clients::types::EVMLogsClient;
 pub use crate::clients::clique::client::CliqueClient;
 pub use crate::clients::clique::types::EVMIndexerConfig;
 
-pub use crate::tasks::types::{BaseTask, BaseTaskState, TaskResponse};
+pub use crate::tasks::types::{BaseTask, BaseTaskState, TaskRecord};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CliqueTaskState {
@@ -50,7 +50,7 @@ impl CliqueTask {
 
 #[tonic::async_trait]
 impl BaseTask for CliqueTask {
-	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse> {
+	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord> {
 		info!(
 			"Indexing logs in [{}..{}] block range",
 			self.state.from_block,
@@ -78,7 +78,7 @@ impl BaseTask for CliqueTask {
 
 		self.update_state(new_state);
 
-		let res: Vec<TaskResponse> = Vec::new();
+		let res: Vec<TaskRecord> = Vec::new();
 		res
 	}
 

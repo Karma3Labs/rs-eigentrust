@@ -3,12 +3,19 @@ use std::time::Duration;
 use tracing::{ info, debug };
 
 use crate::storage::types::BaseKVStorage;
-pub use crate::tasks::types::{ BaseTask, TaskResponse };
+pub use crate::tasks::types::{ BaseTask, TaskRecord };
+use flume::{ Sender, Receiver, bounded };
 
 pub struct TaskService {
     task: Box<dyn BaseTask>,
     db: Box<dyn BaseKVStorage>,
+
+    //pubsub
+    event_publisher: Sender<TaskRecord>,
+    pub event_receiver: Receiver<TaskRecord>,
 }
+
+const FLUME_PUBSUB_MAX_EVENT_STACK: usize = 100;
 
 // todo global generic state
 impl TaskService {
@@ -16,8 +23,12 @@ impl TaskService {
         let task_id = task.get_id();
         info!("Job created id={}", task_id);
 
+        let (event_publisher, event_receiver): (Sender<TaskRecord>, Receiver<TaskRecord>) = bounded(
+            FLUME_PUBSUB_MAX_EVENT_STACK
+        );
+
         // todo pass to a task
-        TaskService { task, db }
+        TaskService { task, db, event_publisher, event_receiver }
     }
 
     pub async fn run(&mut self) {
@@ -41,7 +52,11 @@ impl TaskService {
         // todo catch inner level errors
         loop {
             let n: Option<u64> = None;
-            self.task.run(n, n).await;
+            let records = self.task.run(n, n).await;
+
+            for r in records.iter() {
+                self.event_publisher.send(r.clone());
+            }
 
             let task_id = self.task.get_id();
             let task_state = self.task.get_state_dump();
@@ -65,13 +80,13 @@ impl TaskService {
     }
 
     // change to flume subscriber
-    async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {
+    async fn on_data(&self, data: Vec<TaskRecord>) -> Vec<TaskRecord> {
         println!("{:?}", data);
         data
     }
 
     // todo tmp shortcut for poc
-    pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskResponse> {
+    pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskRecord> {
         let res = self.task.run(Some(offset), Some(limit)).await;
 
         res

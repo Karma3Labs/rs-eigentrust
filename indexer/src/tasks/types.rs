@@ -5,7 +5,7 @@ use std::time::Duration;
 #[tonic::async_trait]
 pub trait BaseTask {
 	// todo offset and limit are tmp args for POC, remove after
-	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse>;
+	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord>;
 
 	fn get_sleep_interval(&self) -> Duration;
 
@@ -25,9 +25,9 @@ pub trait BaseTask {
 }
 
 // todo, dublicate for proto struct, remove once settled
-// todo rename TaskRecord
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TaskResponse {
+pub struct TaskRecord {
 	pub id: usize,
 	pub timestamp: String,
 	pub job_id: String,

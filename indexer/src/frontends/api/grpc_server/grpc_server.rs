@@ -8,14 +8,14 @@ use tonic::{ transport::Server, Request, Response, Status };
 
 use super::types::GRPCServerConfig;
 use crate::tasks::service::TaskService;
-use crate::tasks::types::TaskResponse;
+use crate::tasks::types::TaskRecord;
 use std::cmp;
 use std::sync::{ Arc, Mutex };
 use flume::{ Sender, Receiver, bounded };
 
 pub struct IndexerService {
-    data: Vec<TaskResponse>,
-    task_service_receiver: Receiver<i32>,
+    data: Vec<TaskRecord>,
+    task_service_event_receiver: Receiver<TaskRecord>,
 }
 pub struct GRPCServer {
     config: GRPCServerConfig,
@@ -23,16 +23,9 @@ pub struct GRPCServer {
 }
 
 impl IndexerService {
-    fn new(data: Vec<TaskResponse>, task_service_receiver: Receiver<i32>) -> Self {
-        println!("checking");
-        for i in 0..10 {
-            match task_service_receiver.recv() {
-                Ok(msg) => println!("Received: {}", msg),
-                Err(err) => println!("Error receiving: {}", err),
-            }
-        }
+    fn new(data: Vec<TaskRecord>, task_service_event_receiver: Receiver<TaskRecord>) -> Self {
 
-        IndexerService { data, task_service_receiver }
+        IndexerService { data, task_service_event_receiver }
     }
 }
 
@@ -48,21 +41,26 @@ impl Indexer for IndexerService {
 
         let start = SystemTime::now();
         let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
+        let offset = inner.offset;
         let limit = cmp::min(inner.offset + inner.count, self.data.len().try_into().unwrap());
 
         let data = self.data.clone();
 
-        match self.task_service_receiver.recv() {
-            Ok(msg) => println!("Received: {}", msg),
-            Err(err) => println!("Error receiving: {}", err),
-        }
+        /* 
+        for i in 0..10 {
+            match self.task_service_event_receiver.recv() {
+                Ok(msg) => println!("Received: {:?}", msg),
+                Err(err) => println!("Error receiving: {}", err),
+            }
+        }*/
 
         let (tx, rx) = channel(4);
         tokio::spawn(async move {
-            for i in inner.offset..limit {
+            for i in offset..limit {
                 let index: usize = i as usize;
 
                 let record = data[index].clone();
+                // info!("{:?}", record);
 
                 let event = IndexerEvent {
                     id: i + 1,
@@ -91,29 +89,11 @@ impl GRPCServer {
         // todo
         let data = self.task_service.get_chunk(0, 10000).await;
 
-        // Create a bounded channel with a capacity of 5
-        let (task_service_publisher, task_service_receiver): (Sender<i32>, Receiver<i32>) = bounded(
-            5
-        );
-
-        // Spawn a thread to send messages
-        let sender_thread = std::thread::spawn(move || {
-            for i in 0..10 {
-                match task_service_publisher.send(i) {
-                    Ok(_) => println!("Sent: {}", i),
-                    Err(err) => println!("Error sending: {}", err),
-                }
-
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-        });
-
-        // Wait for threads to finish
-
-        // sender_thread.join().unwrap();
+        let task_service_event_receiver = self.task_service.event_receiver.clone();
+        
         std::thread::sleep(std::time::Duration::from_millis(3000));
 
-        let indexer_server = IndexerServer::new(IndexerService::new(data, task_service_receiver));
+        let indexer_server = IndexerServer::new(IndexerService::new(data, task_service_event_receiver));
         Server::builder().add_service(indexer_server).serve(address).await?;
 
         Ok(())
