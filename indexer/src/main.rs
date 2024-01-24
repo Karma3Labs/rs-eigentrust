@@ -42,6 +42,7 @@ async fn main() {
     let lm_db_config = config.lm_db_config;
     let db = LMDBClient::new(lm_db_config);
 
+    /*
     let csv_client_config = CSVClientConfig {
         // path: "./assets/csv/mock.csv".to_string(),
         path: "./scripts/generate_mock_attestations/output/output.csv".to_string(),
@@ -50,8 +51,7 @@ async fn main() {
     let csv_poc_task = CSVPOCTask::new(csv_client);
 
     let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
-
-    /*
+ */
 
     let metamask_connector_client_config = MetamaskConnectorClientConfig {
         url: "http://localhost:3000/output.json".to_string(),
@@ -64,12 +64,12 @@ async fn main() {
         Box::new(metamask_connector_task),
         Box::new(db.clone())
     );
- */
+
     let grpc_server_config = config.grpc_server_config;
     let mut server = GRPCServer::new(grpc_server_config, task_service);
 
     tokio::spawn(async {
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(6)).await;
         GRPCServerClient::run().await;
     });
 

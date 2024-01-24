@@ -1,10 +1,12 @@
 use tracing::info;
-
+use csv::{ ReaderBuilder, StringRecord };
+use std::fs::File;
 use proto_buf::indexer::{ indexer_server::{ Indexer, IndexerServer }, IndexerEvent, Query };
 use std::{ error::Error, time::{ SystemTime, UNIX_EPOCH } };
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{ transport::Server, Request, Response, Status };
+use std::path::{ Path, PathBuf };
 
 use super::types::GRPCServerConfig;
 use crate::tasks::service::TaskService;
@@ -15,7 +17,7 @@ use flume::{ Sender, Receiver, bounded };
 
 pub struct IndexerService {
     data: Vec<TaskRecord>,
-    task_service_event_receiver: Receiver<TaskRecord>,
+    cache_file_path: PathBuf,
 }
 pub struct GRPCServer {
     config: GRPCServerConfig,
@@ -23,11 +25,15 @@ pub struct GRPCServer {
 }
 
 impl IndexerService {
-    fn new(data: Vec<TaskRecord>, task_service_event_receiver: Receiver<TaskRecord>) -> Self {
-
-        IndexerService { data, task_service_event_receiver }
+    fn new(data: Vec<TaskRecord>, cache_file_path: PathBuf) -> Self {
+        IndexerService { data, cache_file_path }
     }
 }
+
+const DELIMITER: u8 = b';';
+const CSV_COLUMN_INDEX_DATA: usize = 3;
+const CSV_COLUMN_SCHEMA_ID: usize = 2;
+const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
 
 #[tonic::async_trait]
 impl Indexer for IndexerService {
@@ -37,6 +43,8 @@ impl Indexer for IndexerService {
         &self,
         request: Request<Query>
     ) -> Result<Response<Self::SubscribeStream>, Status> {
+        println!("grpc requested");
+
         let inner = request.into_inner();
 
         let start = SystemTime::now();
@@ -46,28 +54,38 @@ impl Indexer for IndexerService {
 
         let data = self.data.clone();
 
-        /* 
-        for i in 0..10 {
-            match self.task_service_event_receiver.recv() {
-                Ok(msg) => println!("Received: {:?}", msg),
-                Err(err) => println!("Error receiving: {}", err),
-            }
-        }*/
+        let file_name = self.cache_file_path.clone().to_string_lossy().into_owned();
 
         let (tx, rx) = channel(4);
         tokio::spawn(async move {
-            for i in offset..limit {
-                let index: usize = i as usize;
+            let file: File = File::open(file_name).unwrap();
 
-                let record = data[index].clone();
-                // info!("{:?}", record);
+            let mut csv_reader = ReaderBuilder::new().delimiter(DELIMITER).from_reader(file);
+
+            for i in offset..limit {
+                csv_reader.records().next();
+            }
+
+            let mut records: Vec<Result<StringRecord, csv::Error>> = csv_reader
+                .into_records()
+                .take(limit.try_into().unwrap())
+                .collect();
+
+            for (index, record) in records.iter().enumerate() {
+                let r = record.as_ref().unwrap();
 
                 let event = IndexerEvent {
-                    id: i + 1,
-                    schema_id: record.schema_id as u32,
-                    schema_value: record.data,
-                    timestamp: record.timestamp.parse::<u64>().unwrap(),
+                    id: (index as u32) + (offset as u32),
+                    schema_id: r.get(CSV_COLUMN_SCHEMA_ID).unwrap().parse::<u32>().unwrap_or(0),
+                    schema_value: r.get(CSV_COLUMN_INDEX_DATA).unwrap().to_string(),
+                    timestamp: r
+                        .get(CSV_COLUMN_INDEX_TIMESTAMP)
+                        .unwrap()
+                        .parse::<u64>()
+                        .unwrap_or(0),
                 };
+
+                println!("{:?}", event);
                 tx.send(Ok(event)).await.unwrap();
             }
         });
@@ -88,12 +106,14 @@ impl GRPCServer {
 
         // todo
         let data = self.task_service.get_chunk(0, 10000).await;
+        // todo move to cache layer
+        let cache_file_path = self.task_service.get_cache_file_path();
 
-        let task_service_event_receiver = self.task_service.event_receiver.clone();
-        
+        // let task_service_event_receiver = self.task_service.event_receiver.clone();
+
         std::thread::sleep(std::time::Duration::from_millis(3000));
 
-        let indexer_server = IndexerServer::new(IndexerService::new(data, task_service_event_receiver));
+        let indexer_server = IndexerServer::new(IndexerService::new(data, cache_file_path));
         Server::builder().add_service(indexer_server).serve(address).await?;
 
         Ok(())

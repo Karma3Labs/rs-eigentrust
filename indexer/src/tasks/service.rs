@@ -1,16 +1,20 @@
 use std::thread;
 use std::time::Duration;
 use tracing::{ info, debug };
-
+use csv::{ ReaderBuilder, WriterBuilder };
+use serde::Deserialize;
+use std::error::Error;
+use std::fs::{ File, OpenOptions };
+use std::path::{Path, PathBuf};
 use crate::storage::types::BaseKVStorage;
 pub use crate::tasks::types::{ BaseTask, TaskRecord };
 use flume::{ Sender, Receiver, bounded };
 
 pub struct TaskService {
-    task: Box<dyn BaseTask>,
+    pub task: Box<dyn BaseTask>,
     db: Box<dyn BaseKVStorage>,
 
-    //pubsub
+    //pubsub, probably redundant
     event_publisher: Sender<TaskRecord>,
     pub event_receiver: Receiver<TaskRecord>,
 }
@@ -53,10 +57,11 @@ impl TaskService {
         loop {
             let n: Option<u64> = None;
             let records = self.task.run(n, n).await;
-
-            for r in records.iter() {
-                self.event_publisher.send(r.clone());
-            }
+            
+            self.append_cache(records).await;
+            //for r in records.iter() {
+            //    self.event_publisher.send(r.clone());
+            //}
 
             let task_id = self.task.get_id();
             let task_state = self.task.get_state_dump();
@@ -90,5 +95,38 @@ impl TaskService {
         let res = self.task.run(Some(offset), Some(limit)).await;
 
         res
+    }
+
+    pub fn get_cache_file_path(&self) -> PathBuf {
+        let current_dir = std::env::current_dir().unwrap();
+        let cache_dir = current_dir.join("cache");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        let file_name = self.task.get_id();
+        let file_path = cache_dir.join(format!("{}.csv", file_name));
+
+        file_path
+    }
+
+    // move to cache.rs
+    async fn append_cache(&self, records: Vec<TaskRecord>) -> Result<(), Box<dyn Error>> {
+        let file_path = self.get_cache_file_path();
+        let file_exists = File::open(&file_path).is_ok();
+
+        let file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true) // Create the file if it doesn't exist
+            .open(&file_path)?;
+
+        let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
+
+        for record in records {
+            writer.serialize(record)?;
+        }
+
+        writer.flush()?;
+        debug!("Cache has been appended to {:?}", file_path);
+
+        Ok(())
     }
 }
