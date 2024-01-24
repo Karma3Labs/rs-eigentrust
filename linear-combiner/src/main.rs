@@ -164,7 +164,7 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<LtHistoryBatch>,
 	) -> Result<Response<Self::GetHistoricDataStream>, Status> {
 		let batch = request.into_inner();
-		let db = DB::open_cf(&Options::default(), &self.db_url, vec!["item"])
+		let db = DB::open_cf_for_read_only(&Options::default(), &self.db_url, vec!["item"], false)
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let is_x_bigger = batch.x0 <= batch.x1;
@@ -189,13 +189,15 @@ impl LinearCombiner for LinearCombinerService {
 		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))
 			.map_err(|e| e.into_status())?;
 
-		let (tx, rx) = channel(1);
-		for x in items.clone() {
-			let x_obj: LtObject = x.into();
-			if let Err(e) = tx.send(Ok(x_obj)).await {
-				e.0?;
+		println!("Read items: {:?}", items);
+
+		let (tx, rx) = channel(4);
+		tokio::spawn(async move {
+			for x in items.clone() {
+				let x_obj: LtObject = x.into();
+				tx.send(Ok(x_obj)).await.unwrap();
 			}
-		}
+		});
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
