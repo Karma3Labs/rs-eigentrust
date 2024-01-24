@@ -324,7 +324,7 @@ mod test {
 			vec![Term::new(
 				status_schema.get_issuer(),
 				recipient,
-				25.,
+				50.,
 				Domain::SoftwareSecurity.into(),
 				true,
 				timestamp,
