@@ -118,6 +118,7 @@ impl Transformer for TransformerService {
 			let parsed_terms = Self::parse_event(res).map_err(|e| e.into_status())?;
 			terms.push(parsed_terms);
 		}
+		println!("Received num events: {}", terms.len());
 		println!("Received terms: {:#?}", terms);
 
 		let num_new_term_groups =
@@ -126,6 +127,8 @@ impl Transformer for TransformerService {
 
 		let (new_count, indexed_terms) = TermManager::get_indexed_terms(ct_offset, terms)
 			.map_err(|_| AttTrError::SerialisationError.into_status())?;
+
+		println!("Received num terms: {}", new_count);
 
 		TermManager::write_terms(&db, indexed_terms).map_err(|e| e.into_status())?;
 		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)
@@ -191,8 +194,7 @@ mod test {
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
 	use proto_buf::indexer::IndexerEvent;
-	use secp256k1::rand::rngs::StdRng;
-	use secp256k1::rand::{thread_rng, Rng, RngCore, SeedableRng};
+	use secp256k1::rand::thread_rng;
 	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
 	use serde_json::to_string;
 	use sha3::{Digest, Keccak256};
@@ -267,10 +269,9 @@ mod test {
 
 	impl TrustSchema {
 		pub fn generate_from_sk(
-			did_string: String, domain_trust: DomainTrust, sk_string: String,
+			did_string: String, trust_arc: DomainTrust, sk_string: String,
 		) -> Self {
 			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
-			let trust_arc = DomainTrust::new(Domain::SoftwareSecurity, 0.5, Vec::new());
 
 			let mut keccak = Keccak256::default();
 			keccak.update(&[did.schema.into()]);
@@ -296,7 +297,7 @@ mod test {
 			bytes.push(rec_id);
 			let sig_string = hex::encode(bytes);
 
-			let kind = "AuditReportApproveCredential".to_string();
+			let kind = "TrustCredential".to_string();
 			let addr = address_from_ecdsa_key(&pk);
 			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
 			let cs = CredentialSubjectTrust::new(did_string, vec![trust_arc]);
@@ -353,11 +354,11 @@ mod test {
 
 		// Trust
 		// p => x - Trust Credential - Honesty - trust
-		// p => x - Trust Credential - Software security - trust
-		// p => s1 - Status Credential - Endorse
-		// q => y - Trust Credential - Software security - trust
-		// q => s2 - Status Credential - Endorse
 		// x => z - Trust credential - Honesty - trust
+		// p => x - Trust Credential - Software security - trust
+		// q => y - Trust Credential - Software security - trust
+		// p => s1 - Status Credential - Endorse
+		// q => s2 - Status Credential - Endorse
 		// x => s1 - Status Credential - Endorse
 
 		let p_x1 = TrustSchema::generate_from_sk(
@@ -365,6 +366,12 @@ mod test {
 			DomainTrust::new(Domain::Honesty, 1., Vec::new()),
 			p_sk.clone(),
 		);
+		let x_z = TrustSchema::generate_from_sk(
+			z.clone(),
+			DomainTrust::new(Domain::Honesty, 1., Vec::new()),
+			x_sk.clone(),
+		);
+
 		let p_x2 = TrustSchema::generate_from_sk(
 			x.clone(),
 			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
@@ -375,11 +382,7 @@ mod test {
 			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
 			q_sk.clone(),
 		);
-		let x_z = TrustSchema::generate_from_sk(
-			z.clone(),
-			DomainTrust::new(Domain::Honesty, 1., Vec::new()),
-			x_sk.clone(),
-		);
+
 		let q_s2 =
 			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Endorsed, q_sk.clone());
 		let p_s1 =
@@ -409,6 +412,7 @@ mod test {
 			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
 			y_sk.clone(),
 		);
+
 		let y_s2 =
 			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Disputed, y_sk.clone());
 		let z_s1 =
@@ -419,10 +423,14 @@ mod test {
 		let trust_arcs = [p_x1, p_x2, q_y, x_z, p_y, q_x, y_z];
 		let status_arcs = [q_s2, p_s1, x_s1, y_s2, z_s1, z_s2];
 
+		println!("num attestations: {}", trust_arcs.len() + status_arcs.len());
+
 		let mut timestamp = 2397848;
 		let mut id = 1;
 		let trust_schema_id = 2;
 		let status_schema_id = 1;
+
+		println!("id;timestamp;schema_id;schema_value");
 
 		for schema_value in trust_arcs {
 			// Validate event
@@ -440,7 +448,7 @@ mod test {
 				trust_schema_id.to_string(),
 				to_string(&schema_value).unwrap(),
 			]
-			.join(",");
+			.join(";");
 			println!("{}", string);
 
 			timestamp += 1000;
@@ -463,7 +471,7 @@ mod test {
 				status_schema_id.to_string(),
 				to_string(&schema_value).unwrap(),
 			]
-			.join(",");
+			.join(";");
 			println!("{}", string);
 
 			timestamp += 1000;

@@ -80,7 +80,7 @@ impl IntoTerm for StatusSchema {
 			return Err(AttTrError::VerificationError);
 		}
 
-		let weight = 25.;
+		let weight = 50.;
 		let domain = Domain::SoftwareSecurity;
 		let form = match self.credential_subject.current_status {
 			CurrentStatus::Endorsed => true,
