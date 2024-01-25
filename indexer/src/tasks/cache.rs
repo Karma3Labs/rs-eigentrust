@@ -1,11 +1,11 @@
-pub use crate::tasks::types::{BaseTask, TaskRecord};
-use csv::{ReaderBuilder, WriterBuilder};
-use serde::Deserialize;
+pub use crate::tasks::types::TaskRecord;
+use csv::WriterBuilder;
+
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::path::{Path, PathBuf};
-use tokio::time::{sleep, Duration};
-use tracing::{debug, info};
+use std::path::PathBuf;
+
+use tracing::debug;
 
 pub struct CacheService {
 	pub task_id: String,
@@ -32,7 +32,7 @@ impl CacheService {
 
 	pub async fn append_cache(&self, records: Vec<TaskRecord>) -> Result<(), Box<dyn Error>> {
 		let file_path = self.get_cache_file_path();
-		let file_exists = File::open(&file_path).is_ok();
+		let _file_exists = File::open(&file_path).is_ok();
 
 		let file = OpenOptions::new()
 			.write(true)

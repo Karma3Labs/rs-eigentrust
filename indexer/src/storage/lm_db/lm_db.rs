@@ -3,7 +3,7 @@ use heed::{Database, EnvOpenOptions, Result};
 use std::fs;
 
 use super::types::LMDBClientConfig;
-use crate::storage::types::BaseKVStorage;
+use crate::storage::types::KVStorageTrait;
 
 // todo change string to bytes?
 #[derive(Clone)]
@@ -28,7 +28,7 @@ impl LMDBClient {
 	}
 }
 
-impl BaseKVStorage for LMDBClient {
+impl KVStorageTrait for LMDBClient {
 	fn put(&self, key: &str, value: &str) -> Result<()> {
 		let mut write_txn = self.env.write_txn()?;
 		self.db.put(&mut write_txn, key, value)?;

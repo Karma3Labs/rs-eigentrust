@@ -7,7 +7,7 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 pub use crate::clients::csv::client::CSVClient;
-pub use crate::tasks::types::{BaseTask, BaseTaskState, TaskRecord};
+pub use crate::tasks::types::{BaseTaskState, TaskRecord, TaskTrait};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CSVPOCTaskState {
@@ -40,7 +40,7 @@ impl CSVPOCTask {
 }
 
 #[tonic::async_trait]
-impl BaseTask for CSVPOCTask {
+impl TaskTrait for CSVPOCTask {
 	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord> {
 		let from = offset.unwrap_or(self.state.from);
 		let range = limit.unwrap_or(self.state.from + self.state.range);
@@ -72,7 +72,7 @@ impl BaseTask for CSVPOCTask {
 
 		let global = BaseTaskState { is_synced: is_finished, is_finished, records_total };
 
-		let from_new = self.state.from + self.state.range;
+		let _from_new = self.state.from + self.state.range;
 		let new_state = CSVPOCTaskState {
 			// from: from_new,
 			global,
@@ -115,6 +115,6 @@ impl BaseTask for CSVPOCTask {
 	}
 
 	fn set_state_dump(&mut self, state_json_string: &str) {
-		let my_struct: CSVPOCTaskState = serde_json::from_str(state_json_string).unwrap();
+		let _my_struct: CSVPOCTaskState = serde_json::from_str(state_json_string).unwrap();
 	}
 }

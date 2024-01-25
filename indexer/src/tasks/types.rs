@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-// todo better layer separation
+// todo better layer separation rename to TaskTrait
 #[tonic::async_trait]
-pub trait BaseTask {
+pub trait TaskTrait {
 	// todo offset and limit are tmp args for POC, remove after
 	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord>;
 

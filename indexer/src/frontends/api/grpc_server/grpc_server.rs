@@ -4,7 +4,7 @@ use proto_buf::indexer::{
 	IndexerEvent, Query,
 };
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{
 	error::Error,
 	time::{SystemTime, UNIX_EPOCH},
@@ -17,9 +17,8 @@ use tracing::info;
 use super::types::GRPCServerConfig;
 use crate::tasks::service::TaskService;
 use crate::tasks::types::TaskRecord;
-use flume::{bounded, Receiver, Sender};
+
 use std::cmp;
-use std::sync::{Arc, Mutex};
 
 pub struct IndexerService {
 	data: Vec<TaskRecord>,
@@ -53,14 +52,15 @@ impl Indexer for IndexerService {
 		let inner = request.into_inner();
 
 		let start = SystemTime::now();
-		let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
+		let _current_secs =
+			start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
 		let offset = inner.offset;
 		let limit = cmp::min(
 			inner.offset + inner.count,
 			self.data.len().try_into().unwrap(),
 		);
 
-		let data = self.data.clone();
+		let _data = self.data.clone();
 
 		let cache_file_path = self.cache_file_path.clone().to_string_lossy().into_owned();
 
@@ -70,11 +70,11 @@ impl Indexer for IndexerService {
 
 			let mut csv_reader = ReaderBuilder::new().delimiter(DELIMITER).from_reader(file);
 
-			for i in offset..limit {
+			for _i in offset..limit {
 				csv_reader.records().next();
 			}
 
-			let mut records: Vec<Result<StringRecord, csv::Error>> = csv_reader
+			let records: Vec<Result<StringRecord, csv::Error>> = csv_reader
 				.into_records()
 				.take(100_000) // todo
 				.collect();

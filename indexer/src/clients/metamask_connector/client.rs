@@ -1,10 +1,10 @@
 use eyre::Result;
 use reqwest;
-use reqwest::Response;
-use serde_json::{from_str, Value};
+
+use serde_json::Value;
 use std::error::Error;
-use std::fs::File;
-use tracing::{debug, info};
+
+use tracing::debug;
 
 use super::types::MetamaskConnectorClientConfig;
 pub use crate::clients::types::EVMLogsClient;
@@ -24,8 +24,8 @@ impl MetamaskConnectorClient {
 	pub async fn query(
 		&self, from: Option<u64>, range: Option<u64>,
 	) -> Result<Vec<String>, Box<dyn Error>> {
-		let offset = from.unwrap_or(0);
-		let limit = range.unwrap_or(DEFAULT_LIMIT);
+		let _offset = from.unwrap_or(0);
+		let _limit = range.unwrap_or(DEFAULT_LIMIT);
 		let url = &self.config.url.clone();
 
 		let response = reqwest::get(url).await?.json::<Vec<Value>>().await?;

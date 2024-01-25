@@ -1,10 +1,7 @@
 use proto_buf::indexer::indexer_client::IndexerClient;
-use proto_buf::indexer::{
-	indexer_server::{Indexer, IndexerServer},
-	IndexerEvent, Query,
-};
+use proto_buf::indexer::{indexer_server::Indexer, Query};
 use std::time::Duration;
-use tokio_stream::{Stream, StreamExt};
+
 use tonic::transport::Channel;
 use tracing::info;
 

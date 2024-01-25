@@ -2,7 +2,7 @@
 use heed::Result;
 
 // #[tonic::async_trait]
-pub trait BaseKVStorage {
+pub trait KVStorageTrait {
 	fn put(&self, key: &str, value: &str) -> Result<()>;
 
 	fn get(&self, key: &str) -> Option<String>;

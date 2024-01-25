@@ -1,18 +1,15 @@
-use crate::storage::types::BaseKVStorage;
+use crate::storage::types::KVStorageTrait;
 pub use crate::tasks::cache::CacheService;
-pub use crate::tasks::types::{BaseTask, TaskRecord};
-use csv::{ReaderBuilder, WriterBuilder};
+pub use crate::tasks::types::{TaskRecord, TaskTrait};
+
 use flume::{bounded, Receiver, Sender};
-use serde::Deserialize;
-use std::error::Error;
-use std::fs::{File, OpenOptions};
-use std::path::{Path, PathBuf};
+
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info};
 
 pub struct TaskService {
-	pub task: Box<dyn BaseTask>,
-	db: Box<dyn BaseKVStorage>,
+	pub task: Box<dyn TaskTrait>,
+	db: Box<dyn KVStorageTrait>,
 	pub cache: CacheService,
 	//pubsub, probably redundant
 	event_publisher: Sender<TaskRecord>,
@@ -23,10 +20,9 @@ const FLUME_PUBSUB_MAX_EVENT_STACK: usize = 100;
 
 // todo global generic state
 impl TaskService {
-	pub fn new(task: Box<dyn BaseTask>, db: Box<dyn BaseKVStorage>) -> Self {
+	pub fn new(task: Box<dyn TaskTrait>, db: Box<dyn KVStorageTrait>) -> Self {
 		let task_id = task.get_id();
 		info!("Job created id={}", task_id);
-
 		let cache = CacheService::new(task_id);
 
 		let (event_publisher, event_receiver): (Sender<TaskRecord>, Receiver<TaskRecord>) =
@@ -57,7 +53,11 @@ impl TaskService {
 		// todo catch inner level errors
 		loop {
 			let n: Option<u64> = None;
-			let records = self.task.run(n, n).await;
+
+			// todo must be dedicated field in the global state
+			let from = self.task.get_state().records_total as u64;
+
+			let records = self.task.run(Some(from), n).await;
 			self.cache.append_cache(records).await;
 
 			/*
