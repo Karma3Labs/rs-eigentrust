@@ -6,7 +6,7 @@ mod storage;
 mod tasks;
 
 use tracing::info;
-use std::time::Duration;
+use tokio::time::{ sleep, Duration };
 
 use crate::frontends::api::grpc_server::grpc_server::GRPCServer;
 use crate::frontends::api::grpc_server::client::GRPCServerClient;
@@ -66,6 +66,7 @@ async fn main() {
     );
 
     let grpc_server_config = config.grpc_server_config;
+
     let mut server = GRPCServer::new(grpc_server_config, task_service);
 
     tokio::spawn(async {
@@ -73,10 +74,6 @@ async fn main() {
         GRPCServerClient::run().await;
     });
 
-    tokio::spawn(async {
-        tokio::time::sleep(Duration::from_secs(20)).await;
-        GRPCServerClient::run().await;
-    });
-
     server.serve().await;
+    sleep(Duration::from_secs(1000)).await;
 }

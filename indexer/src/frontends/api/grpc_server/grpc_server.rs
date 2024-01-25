@@ -102,17 +102,19 @@ impl GRPCServer {
     pub async fn serve(&mut self) -> Result<(), Box<dyn Error>> {
         let address = format!("{}{}", "[::1]:", self.config.port.to_string()).parse()?;
         info!("GRPC server is starting at {}", address);
-        self.task_service.run().await;
 
         // todo
         let data = self.task_service.get_chunk(0, 10000).await;
         // todo move to cache layer
-        let cache_file_path = self.task_service.get_cache_file_path();
-
-        std::thread::sleep(std::time::Duration::from_millis(3000));
+        let cache_file_path = self.task_service.cache.get_cache_file_path();
 
         let indexer_server = IndexerServer::new(IndexerService::new(data, cache_file_path));
-        Server::builder().add_service(indexer_server).serve(address).await?;
+
+        tokio::spawn(async move {
+            Server::builder().add_service(indexer_server).serve(address).await;
+        });
+
+        self.task_service.run().await;
 
         Ok(())
     }

@@ -80,9 +80,8 @@ impl BaseTask for MetamaskConnectorTask {
             global,
             ..self.state
         };
-
         self.update_state(new_state);
-
+        
         results
     }
 

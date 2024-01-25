@@ -8,11 +8,12 @@ use crate::storage::types::BaseKVStorage;
 pub use crate::tasks::types::{ BaseTask, TaskRecord };
 use flume::{ Sender, Receiver, bounded };
 use tokio::time::{ sleep, Duration };
+pub use crate::tasks::cache::{ CacheService };
 
 pub struct TaskService {
     pub task: Box<dyn BaseTask>,
     db: Box<dyn BaseKVStorage>,
-
+    pub cache: CacheService,
     //pubsub, probably redundant
     event_publisher: Sender<TaskRecord>,
     pub event_receiver: Receiver<TaskRecord>,
@@ -25,13 +26,15 @@ impl TaskService {
     pub fn new(task: Box<dyn BaseTask>, db: Box<dyn BaseKVStorage>) -> Self {
         let task_id = task.get_id();
         info!("Job created id={}", task_id);
+        
+        let cache = CacheService::new(task_id);
 
         let (event_publisher, event_receiver): (Sender<TaskRecord>, Receiver<TaskRecord>) = bounded(
             FLUME_PUBSUB_MAX_EVENT_STACK
         );
 
         // todo pass to a task
-        TaskService { task, db, event_publisher, event_receiver }
+        TaskService { task, db, event_publisher, event_receiver, cache }
     }
 
     pub async fn run(&mut self) {
@@ -48,7 +51,7 @@ impl TaskService {
             }
         }
 
-        self.index();
+        self.index().await;
     }
 
     pub async fn index(&mut self) {
@@ -57,8 +60,7 @@ impl TaskService {
         loop {
             let n: Option<u64> = None;
             let records = self.task.run(n, n).await;
-
-            self.append_cache(records).await;
+            self.cache.append_cache(records).await;
 
             /* 
             for r in records.iter() {
@@ -85,7 +87,7 @@ impl TaskService {
     }
 
     pub async fn sleep(&self, duration: Duration) {
-        sleep(duration);
+        sleep(duration).await;
     }
 
     // change to flume subscriber
@@ -101,36 +103,4 @@ impl TaskService {
         res
     }
 
-    pub fn get_cache_file_path(&self) -> PathBuf {
-        let current_dir = std::env::current_dir().unwrap();
-        let cache_dir = current_dir.join("cache");
-        std::fs::create_dir_all(&cache_dir).unwrap();
-        let file_name = self.task.get_id();
-        let file_path = cache_dir.join(format!("{}.csv", file_name));
-
-        file_path
-    }
-
-    // move to cache.rs
-    async fn append_cache(&self, records: Vec<TaskRecord>) -> Result<(), Box<dyn Error>> {
-        let file_path = self.get_cache_file_path();
-        let file_exists = File::open(&file_path).is_ok();
-
-        let file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true) // Create the file if it doesn't exist
-            .open(&file_path)?;
-
-        let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
-
-        for record in records {
-            writer.serialize(record)?;
-        }
-
-        writer.flush()?;
-        debug!("Cache has been appended to {:?}", file_path);
-
-        Ok(())
-    }
 }
