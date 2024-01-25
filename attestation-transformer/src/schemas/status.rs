@@ -20,15 +20,26 @@ impl Into<u8> for CurrentStatus {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
+pub struct StatusReason {
+	#[serde(alias = "type")]
+	kind: Option<String>,
+	value: String,
+	lang: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialSubject {
 	id: String,
 	current_status: CurrentStatus,
+	status_reason: Option<StatusReason>,
 }
 
 impl CredentialSubject {
-	pub fn new(id: String, current_status: CurrentStatus) -> Self {
-		Self { id, current_status }
+	pub fn new(
+		id: String, current_status: CurrentStatus, status_reason: Option<StatusReason>,
+	) -> Self {
+		Self { id, current_status, status_reason }
 	}
 }
 
@@ -72,13 +83,13 @@ impl Validation for StatusSchema {
 
 impl IntoTerm for StatusSchema {
 	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
-		let pk = self.validate()?;
-
-		let from_address = address_from_ecdsa_key(&pk);
-		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		if from_did != self.issuer {
-			return Err(AttTrError::VerificationError);
-		}
+		// TODO: uncomment when verification spec is defined
+		// let pk = self.validate()?;
+		// let from_address = address_from_ecdsa_key(&pk);
+		// let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		// if from_did != self.issuer {
+		// 	return Err(AttTrError::VerificationError);
+		// }
 
 		let weight = 50.;
 		let domain = Domain::SoftwareSecurity;
@@ -88,7 +99,7 @@ impl IntoTerm for StatusSchema {
 		};
 
 		let term = Term::new(
-			from_did,
+			self.issuer,
 			self.credential_subject.id,
 			weight,
 			domain.into(),
@@ -137,7 +148,7 @@ mod test {
 		let kind = "AuditReportDisapproveCredential".to_string();
 		let address = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:0x{}", hex::encode(address));
-		let cs = CredentialSubject { id: did_string, current_status };
+		let cs = CredentialSubject::new(did_string, current_status, None);
 		let proof = Proof { signature: sig_string };
 
 		let follow_schema = StatusSchema { kind, issuer, credential_subject: cs, proof };

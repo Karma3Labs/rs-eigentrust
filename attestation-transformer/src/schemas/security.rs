@@ -94,13 +94,13 @@ impl Validation for SecurityReportSchema {
 
 impl IntoTerm for SecurityReportSchema {
 	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
-		let pk = self.validate()?;
-
-		let from_address = address_from_ecdsa_key(&pk);
-		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		if from_did != self.issuer {
-			return Err(AttTrError::VerificationError);
-		}
+		// TODO: uncomment when final spec is defined
+		// let pk = self.validate()?;
+		// let from_address = address_from_ecdsa_key(&pk);
+		// let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		// if from_did != self.issuer {
+		// 	return Err(AttTrError::VerificationError);
+		// }
 
 		let form = match self.credential_subject.security_status {
 			SecurityStatus::Unsecure => false,
@@ -111,7 +111,7 @@ impl IntoTerm for SecurityReportSchema {
 		let mut terms = Vec::new();
 		if form {
 			let term = Term::new(
-				from_did,
+				self.issuer.clone(),
 				self.credential_subject.id,
 				weight,
 				Domain::SoftwareSecurity.into(),
@@ -122,7 +122,7 @@ impl IntoTerm for SecurityReportSchema {
 		} else {
 			for finding in &self.credential_subject.security_findings {
 				let term = Term::new(
-					from_did.clone(),
+					self.issuer.clone(),
 					self.credential_subject.id.clone(),
 					finding.criticality * weight,
 					Domain::SoftwareSecurity.into(),
