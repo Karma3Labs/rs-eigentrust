@@ -16,12 +16,13 @@ impl TaskService {
 	pub fn new(task: Box<dyn TaskTrait>, db: Box<dyn KVStorageTrait>) -> Self {
 		let task_id = task.get_id();
 		info!("Job created id={}", task_id);
+		// todo composition
 		let cache = CacheService::new(task_id);
 
 		TaskService { task, db, cache }
 	}
 
-	// run once
+	// todo check is running
 	pub async fn run(&mut self) {
 		let task_id = self.task.get_id();
 		let restored_state = self.db.get(task_id.as_str());
@@ -48,7 +49,7 @@ impl TaskService {
 			let from = self.task.get_state().records_total as u64;
 
 			let records = self.task.run(Some(from), n).await;
-			let _ = self.cache.append_cache(records).await;
+			let _ = self.cache.append(records).await;
 
 			let task_id = self.task.get_id();
 			let task_state = self.task.get_state_dump();

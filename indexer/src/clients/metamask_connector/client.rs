@@ -26,7 +26,7 @@ impl MetamaskConnectorClient {
 	) -> Result<Vec<String>, Box<dyn Error>> {
 		let _offset = from.unwrap_or(0);
 		let _limit = range.unwrap_or(DEFAULT_LIMIT);
-		let url = &self.config.url.clone();
+		let url = &self.config.url;
 
 		let response = reqwest::get(url).await?.json::<Vec<Value>>().await?;
 		let records: Vec<String> = response.iter().map(|value| value.to_string()).collect();

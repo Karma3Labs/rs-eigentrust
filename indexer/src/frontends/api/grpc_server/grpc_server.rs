@@ -94,8 +94,8 @@ impl GRPCServer {
 		let address = format!("{}{}", "[::1]:", self.config.port.to_string()).parse()?;
 		info!("GRPC server is starting at {}", address);
 
-		// todo ?? task id only
-		let cache_file_path = self.task_service.cache.get_cache_file_path();
+		// todo task id only
+		let cache_file_path = self.task_service.cache.get_file_path();
 		let indexer_server = IndexerServer::new(IndexerService::new(cache_file_path));
 
 		tokio::spawn(async move {

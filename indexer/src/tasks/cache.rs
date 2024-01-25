@@ -14,13 +14,14 @@ pub struct CacheService {
 const CACHE_DIR_NAME: &str = "cache";
 const DELIMITER: u8 = b',';
 
+// todo trait for testing purposes
 // cache to csv records
 impl CacheService {
 	pub fn new(task_id: String) -> Self {
 		CacheService { task_id }
 	}
 
-	pub fn get_cache_file_path(&self) -> PathBuf {
+	pub fn get_file_path(&self) -> PathBuf {
 		let current_dir = std::env::current_dir().unwrap();
 		let cache_dir = current_dir.join(CACHE_DIR_NAME);
 		std::fs::create_dir_all(&cache_dir).unwrap();
@@ -30,8 +31,9 @@ impl CacheService {
 		file_path
 	}
 
-	pub async fn append_cache(&self, records: Vec<TaskRecord>) -> Result<(), Box<dyn Error>> {
-		let file_path = self.get_cache_file_path();
+	// gaps in syncing
+	pub async fn append(&self, records: Vec<TaskRecord>) -> Result<(), Box<dyn Error>> {
+		let file_path = self.get_file_path();
 		let _file_exists = File::open(&file_path).is_ok();
 
 		let file = OpenOptions::new()
@@ -55,6 +57,7 @@ impl CacheService {
 	}
 
 	// perfomance of accessing the data. read from end of the file?
+	// filenames with postfix 0_1000_000 etc
 	pub async fn read(
 		file_path: PathBuf, offset: usize, limit: usize,
 	) -> Vec<Result<StringRecord, csv::Error>> {
