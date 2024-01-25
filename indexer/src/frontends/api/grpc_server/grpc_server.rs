@@ -103,7 +103,7 @@ impl GRPCServer {
 		let indexer_server = IndexerServer::new(IndexerService::new(cache_file_path));
 
 		tokio::spawn(async move {
-			Server::builder().add_service(indexer_server).serve(address).await;
+			let _ = Server::builder().add_service(indexer_server).serve(address).await;
 		});
 
 		// todo don't need to launch in server

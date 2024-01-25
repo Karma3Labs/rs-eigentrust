@@ -10,12 +10,7 @@ pub struct TaskService {
 	pub task: Box<dyn TaskTrait>,
 	db: Box<dyn KVStorageTrait>,
 	pub cache: CacheService,
-	//pubsub, probably redundant
-	event_publisher: Sender<TaskRecord>,
-	pub event_receiver: Receiver<TaskRecord>,
 }
-
-const FLUME_PUBSUB_MAX_EVENT_STACK: usize = 100;
 
 // todo global generic state
 impl TaskService {
@@ -24,10 +19,7 @@ impl TaskService {
 		info!("Job created id={}", task_id);
 		let cache = CacheService::new(task_id);
 
-		let (event_publisher, event_receiver): (Sender<TaskRecord>, Receiver<TaskRecord>) =
-			bounded(FLUME_PUBSUB_MAX_EVENT_STACK);
-
-		TaskService { task, db, event_publisher, event_receiver, cache }
+		TaskService { task, db, cache }
 	}
 
 	// run once
@@ -58,12 +50,6 @@ impl TaskService {
 
 			let records = self.task.run(Some(from), n).await;
 			let _ = self.cache.append_cache(records).await;
-
-			/*
-			for r in records.iter() {
-				self.event_publisher.send(r.clone());
-			}
-			*/
 
 			let task_id = self.task.get_id();
 			let task_state = self.task.get_state_dump();

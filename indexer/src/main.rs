@@ -64,5 +64,5 @@ async fn main() {
 		GRPCServerClient::run().await;
 	});
 
-	server.serve().await;
+	let _ = server.serve().await;
 }

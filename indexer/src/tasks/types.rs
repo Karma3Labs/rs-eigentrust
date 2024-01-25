@@ -11,7 +11,7 @@ pub trait TaskTrait {
 
 	fn get_state(&self) -> BaseTaskState;
 
-	// get job id
+	// get job id, move hashing logic to utils
 	fn get_id(&self) -> String;
 
 	// if job finished
