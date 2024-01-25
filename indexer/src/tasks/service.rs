@@ -3,7 +3,6 @@ pub use crate::tasks::cache::CacheService;
 pub use crate::tasks::types::{TaskRecord, TaskTrait};
 
 use flume::{bounded, Receiver, Sender};
-
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info};
 
@@ -58,7 +57,7 @@ impl TaskService {
 			let from = self.task.get_state().records_total as u64;
 
 			let records = self.task.run(Some(from), n).await;
-			self.cache.append_cache(records).await;
+			let _ = self.cache.append_cache(records).await;
 
 			/*
 			for r in records.iter() {

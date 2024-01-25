@@ -1,5 +1,5 @@
 pub use crate::tasks::types::TaskRecord;
-use csv::WriterBuilder;
+use csv::{ReaderBuilder, StringRecord, WriterBuilder};
 
 use std::error::Error;
 use std::fs::{File, OpenOptions};
@@ -41,7 +41,8 @@ impl CacheService {
 			.open(&file_path)
 			.unwrap();
 
-		let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
+		let mut writer =
+			WriterBuilder::new().delimiter(DELIMITER).has_headers(false).from_writer(file);
 
 		for record in records {
 			writer.serialize(record).unwrap();
@@ -51,5 +52,25 @@ impl CacheService {
 		debug!("Cache has been appended to {:?}", file_path);
 
 		Ok(())
+	}
+
+	pub async fn read(
+		file_path: PathBuf, offset: usize, limit: usize,
+	) -> Vec<Result<StringRecord, csv::Error>> {
+		let file: File = File::open(file_path).unwrap();
+
+		let mut csv_reader =
+			ReaderBuilder::new().has_headers(false).delimiter(DELIMITER).from_reader(file);
+
+		for _i in offset..limit {
+			csv_reader.records().next();
+		}
+
+		let records: Vec<Result<StringRecord, csv::Error>> = csv_reader
+			.into_records()
+			.take(100_000) // todo
+			.collect();
+
+		records
 	}
 }
