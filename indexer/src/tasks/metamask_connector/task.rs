@@ -51,12 +51,13 @@ impl TaskTrait for MetamaskConnectorTask {
 
 		let results: Vec<TaskRecord> = records
 			.into_iter()
-			.map(|record| -> TaskRecord {
+			.enumerate()
+			.map(|(i, record)| -> TaskRecord {
 				let r = record;
 
 				TaskRecord {
 					timestamp: "0".to_string(),
-					id: 1,
+					id: from as usize + i,
 					job_id: "0".to_string(),
 					schema_id: 0,
 					data: r.clone(),

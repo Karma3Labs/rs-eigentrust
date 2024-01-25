@@ -60,7 +60,7 @@ async fn main() {
 	let mut server = GRPCServer::new(grpc_server_config, task_service);
 
 	tokio::spawn(async {
-		tokio::time::sleep(Duration::from_secs(10)).await;
+		tokio::time::sleep(Duration::from_secs(5)).await;
 		GRPCServerClient::run().await;
 	});
 

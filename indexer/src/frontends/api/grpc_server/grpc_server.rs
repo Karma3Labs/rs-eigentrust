@@ -53,7 +53,7 @@ impl Indexer for IndexerService {
 			start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
 
 		let offset = inner.offset;
-		let limit = inner.offset + inner.count;
+		let limit = inner.count;
 
 		let cache_file_path = self.cache_file_path.clone().to_string_lossy().into_owned();
 
@@ -98,7 +98,7 @@ impl GRPCServer {
 		let address = format!("{}{}", "[::1]:", self.config.port.to_string()).parse()?;
 		info!("GRPC server is starting at {}", address);
 
-		// todo ??
+		// todo ?? task id only
 		let cache_file_path = self.task_service.cache.get_cache_file_path();
 		let indexer_server = IndexerServer::new(IndexerService::new(cache_file_path));
 
