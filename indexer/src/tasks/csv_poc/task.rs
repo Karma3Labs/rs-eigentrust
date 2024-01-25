@@ -28,8 +28,6 @@ const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
 impl CSVPOCTask {
 	pub fn new(client: CSVClient) -> Self {
 		let global = BaseTaskState { is_synced: false, is_finished: false, records_total: 0 };
-
-		// todo restore prev state
 		let state = CSVPOCTaskState { from: 0, range: 2000, global };
 
 		debug!("CSV POC task created");
@@ -118,5 +116,5 @@ impl BaseTask for CSVPOCTask {
 
 	fn set_state_dump(&mut self, state_json_string: &str) {
 		let my_struct: CSVPOCTaskState = serde_json::from_str(state_json_string).unwrap();
-    }
+	}
 }

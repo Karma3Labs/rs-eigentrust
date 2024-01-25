@@ -31,12 +31,10 @@ pub struct CliqueTask {
 
 impl CliqueTask {
 	pub fn new(config: EVMIndexerConfig, client: CliqueClient) -> Self {
-		// todo restore prev state
 		let from_block = config.from_block;
 		let range = 100;
 
 		let global = BaseTaskState { is_synced: false, is_finished: false, records_total: 0 };
-
 		let state = CliqueTaskState { from_block, range, global };
 
 		debug!("Clique task created");
@@ -118,5 +116,5 @@ impl BaseTask for CliqueTask {
 
 	fn set_state_dump(&mut self, state_json_string: &str) {
 		let my_struct: CliqueTaskState = serde_json::from_str(state_json_string).unwrap();
-    }
+	}
 }

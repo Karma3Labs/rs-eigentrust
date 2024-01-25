@@ -1,106 +1,104 @@
-use tracing::{ info, debug };
-use csv::{ ReaderBuilder, WriterBuilder };
+use crate::storage::types::BaseKVStorage;
+pub use crate::tasks::cache::CacheService;
+pub use crate::tasks::types::{BaseTask, TaskRecord};
+use csv::{ReaderBuilder, WriterBuilder};
+use flume::{bounded, Receiver, Sender};
 use serde::Deserialize;
 use std::error::Error;
-use std::fs::{ File, OpenOptions };
-use std::path::{ Path, PathBuf };
-use crate::storage::types::BaseKVStorage;
-pub use crate::tasks::types::{ BaseTask, TaskRecord };
-use flume::{ Sender, Receiver, bounded };
-use tokio::time::{ sleep, Duration };
-pub use crate::tasks::cache::{ CacheService };
+use std::fs::{File, OpenOptions};
+use std::path::{Path, PathBuf};
+use tokio::time::{sleep, Duration};
+use tracing::{debug, info};
 
 pub struct TaskService {
-    pub task: Box<dyn BaseTask>,
-    db: Box<dyn BaseKVStorage>,
-    pub cache: CacheService,
-    //pubsub, probably redundant
-    event_publisher: Sender<TaskRecord>,
-    pub event_receiver: Receiver<TaskRecord>,
+	pub task: Box<dyn BaseTask>,
+	db: Box<dyn BaseKVStorage>,
+	pub cache: CacheService,
+	//pubsub, probably redundant
+	event_publisher: Sender<TaskRecord>,
+	pub event_receiver: Receiver<TaskRecord>,
 }
 
 const FLUME_PUBSUB_MAX_EVENT_STACK: usize = 100;
 
 // todo global generic state
 impl TaskService {
-    pub fn new(task: Box<dyn BaseTask>, db: Box<dyn BaseKVStorage>) -> Self {
-        let task_id = task.get_id();
-        info!("Job created id={}", task_id);
-        
-        let cache = CacheService::new(task_id);
+	pub fn new(task: Box<dyn BaseTask>, db: Box<dyn BaseKVStorage>) -> Self {
+		let task_id = task.get_id();
+		info!("Job created id={}", task_id);
 
-        let (event_publisher, event_receiver): (Sender<TaskRecord>, Receiver<TaskRecord>) = bounded(
-            FLUME_PUBSUB_MAX_EVENT_STACK
-        );
+		let cache = CacheService::new(task_id);
 
-        // todo pass to a task
-        TaskService { task, db, event_publisher, event_receiver, cache }
-    }
+		let (event_publisher, event_receiver): (Sender<TaskRecord>, Receiver<TaskRecord>) =
+			bounded(FLUME_PUBSUB_MAX_EVENT_STACK);
 
-    pub async fn run(&mut self) {
-        let task_id = self.task.get_id();
-        let restored_state = self.db.get(task_id.as_str());
+		// todo pass to a task
+		TaskService { task, db, event_publisher, event_receiver, cache }
+	}
 
-        match restored_state {
-            Some(state) => {
-                info!("Restored state={}", state);
-                self.task.set_state_dump(&state.clone());
-            }
-            None => {
-                debug!("No previous state found");
-            }
-        }
+	pub async fn run(&mut self) {
+		let task_id = self.task.get_id();
+		let restored_state = self.db.get(task_id.as_str());
 
-        self.index().await;
-    }
+		match restored_state {
+			Some(state) => {
+				info!("Restored state={}", state);
+				self.task.set_state_dump(&state.clone());
+			},
+			None => {
+				debug!("No previous state found");
+			},
+		}
 
-    pub async fn index(&mut self) {
-        // todo catch inner level errors
-        // todo non blocking loop
-        loop {
-            let n: Option<u64> = None;
-            let records = self.task.run(n, n).await;
-            self.cache.append_cache(records).await;
+		self.index().await;
+	}
 
-            /* 
-            for r in records.iter() {
-                self.event_publisher.send(r.clone());
-            }
-            */
+	pub async fn index(&mut self) {
+		// todo catch inner level errors
+		// todo non blocking loop
+		loop {
+			let n: Option<u64> = None;
+			let records = self.task.run(n, n).await;
+			self.cache.append_cache(records).await;
 
-            let task_id = self.task.get_id();
-            let task_state = self.task.get_state_dump();
-            let _ = self.db.put(task_id.as_str(), task_state.as_str());
+			/*
+			for r in records.iter() {
+				self.event_publisher.send(r.clone());
+			}
+			*/
 
-            let state = self.task.get_state();
+			let task_id = self.task.get_id();
+			let task_state = self.task.get_state_dump();
+			let _ = self.db.put(task_id.as_str(), task_state.as_str());
 
-            // todo change to true
-            if state.is_finished == true {
-                info!("Job id={} is finished", task_id);
-                break;
-            }
-            // info!("batch received {} id=", task_id);
+			let state = self.task.get_state();
 
-            let duration = self.task.get_sleep_interval();
-            self.sleep(duration).await;
-        }
-    }
+			// todo change to true
+			if state.is_finished == true {
+				info!("Job id={} is finished", task_id);
+				break;
+			}
+			// info!("batch received {} id=", task_id);
 
-    pub async fn sleep(&self, duration: Duration) {
-        sleep(duration).await;
-    }
+			let duration = self.task.get_sleep_interval();
+			self.sleep(duration).await;
+		}
+	}
 
-    // change to flume subscriber
-    async fn on_data(&self, data: Vec<TaskRecord>) -> Vec<TaskRecord> {
-        println!("{:?}", data);
-        data
-    }
+	pub async fn sleep(&self, duration: Duration) {
+		sleep(duration).await;
+	}
 
-    // todo tmp shortcut for poc
-    pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskRecord> {
-        let res = self.task.run(Some(offset), Some(limit)).await;
+	// change to flume subscriber
+	async fn on_data(&self, data: Vec<TaskRecord>) -> Vec<TaskRecord> {
+		println!("{:?}", data);
+		data
+	}
 
-        res
-    }
+	// todo tmp shortcut for poc
+	pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskRecord> {
+		let res = self.task.run(Some(offset), Some(limit)).await;
 
+		res
+	}
 }
