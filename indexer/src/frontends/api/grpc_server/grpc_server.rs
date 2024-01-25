@@ -1,9 +1,8 @@
-use csv::{ReaderBuilder, StringRecord};
 use proto_buf::indexer::{
 	indexer_server::{Indexer, IndexerServer},
 	IndexerEvent, Query,
 };
-use std::fs::File;
+
 use std::path::PathBuf;
 use std::{
 	error::Error,
@@ -17,9 +16,6 @@ use tracing::info;
 use super::types::GRPCServerConfig;
 use crate::tasks::cache::CacheService;
 use crate::tasks::service::TaskService;
-use crate::tasks::types::TaskRecord;
-
-use std::cmp;
 
 pub struct IndexerService {
 	cache_file_path: PathBuf,

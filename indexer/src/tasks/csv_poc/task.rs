@@ -7,13 +7,13 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 pub use crate::clients::csv::client::CSVClient;
-pub use crate::tasks::types::{BaseTaskState, TaskRecord, TaskTrait};
+pub use crate::tasks::types::{TaskGlobalState, TaskRecord, TaskTrait};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CSVPOCTaskState {
 	from: u64,
 	range: u64,
-	global: BaseTaskState,
+	global: TaskGlobalState,
 }
 
 pub struct CSVPOCTask {
@@ -27,7 +27,7 @@ const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
 
 impl CSVPOCTask {
 	pub fn new(client: CSVClient) -> Self {
-		let global = BaseTaskState { is_synced: false, is_finished: false, records_total: 0 };
+		let global = TaskGlobalState { is_synced: false, is_finished: false, records_total: 0 };
 		let state = CSVPOCTaskState { from: 0, range: 2000, global };
 
 		debug!("CSV POC task created");
@@ -70,7 +70,7 @@ impl TaskTrait for CSVPOCTask {
 			})
 			.collect();
 
-		let global = BaseTaskState { is_synced: is_finished, is_finished, records_total };
+		let global = TaskGlobalState { is_synced: is_finished, is_finished, records_total };
 
 		let _from_new = self.state.from + self.state.range;
 		let new_state = CSVPOCTaskState {
@@ -101,7 +101,7 @@ impl TaskTrait for CSVPOCTask {
 		id
 	}
 
-	fn get_state(&self) -> BaseTaskState {
+	fn get_state(&self) -> TaskGlobalState {
 		self.state.global.clone()
 	}
 

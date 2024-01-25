@@ -13,13 +13,13 @@ pub use crate::clients::types::EVMLogsClient;
 pub use crate::clients::clique::client::CliqueClient;
 pub use crate::clients::clique::types::EVMIndexerConfig;
 
-pub use crate::tasks::types::{BaseTaskState, TaskRecord, TaskTrait};
+pub use crate::tasks::types::{TaskGlobalState, TaskRecord, TaskTrait};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CliqueTaskState {
 	from_block: u64,
 	range: u64,
-	global: BaseTaskState,
+	global: TaskGlobalState,
 }
 
 pub struct CliqueTask {
@@ -34,7 +34,7 @@ impl CliqueTask {
 		let from_block = config.from_block;
 		let range = 100;
 
-		let global = BaseTaskState { is_synced: false, is_finished: false, records_total: 0 };
+		let global = TaskGlobalState { is_synced: false, is_finished: false, records_total: 0 };
 		let state = CliqueTaskState { from_block, range, global };
 
 		debug!("Clique task created");
@@ -101,7 +101,7 @@ impl TaskTrait for CliqueTask {
 		id
 	}
 
-	fn get_state(&self) -> BaseTaskState {
+	fn get_state(&self) -> TaskGlobalState {
 		self.state.global.clone()
 	}
 

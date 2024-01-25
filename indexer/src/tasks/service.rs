@@ -2,7 +2,6 @@ use crate::storage::types::KVStorageTrait;
 pub use crate::tasks::cache::CacheService;
 pub use crate::tasks::types::{TaskRecord, TaskTrait};
 
-use flume::{bounded, Receiver, Sender};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info};
 

@@ -7,13 +7,13 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 pub use crate::clients::metamask_connector::client::MetamaskConnectorClient;
-pub use crate::tasks::types::{BaseTaskState, TaskRecord, TaskTrait};
+pub use crate::tasks::types::{TaskGlobalState, TaskRecord, TaskTrait};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MetamaskConnectorTaskState {
 	from: u64,
 	range: u64,
-	global: BaseTaskState,
+	global: TaskGlobalState,
 }
 
 pub struct MetamaskConnectorTask {
@@ -25,7 +25,7 @@ const DEFAULT_SLEEP_INTERVAL_SECONDS: u64 = 5;
 
 impl MetamaskConnectorTask {
 	pub fn new(client: MetamaskConnectorClient) -> Self {
-		let global = BaseTaskState { is_synced: false, is_finished: false, records_total: 0 };
+		let global = TaskGlobalState { is_synced: false, is_finished: false, records_total: 0 };
 		let state = MetamaskConnectorTaskState { from: 0, range: 2000, global };
 
 		debug!("Metamask connector task created");
@@ -57,7 +57,7 @@ impl TaskTrait for MetamaskConnectorTask {
 
 				TaskRecord {
 					timestamp: "0".to_string(),
-					id: from as usize + i,
+					id: (from as usize) + i,
 					job_id: "0".to_string(),
 					schema_id: 0,
 					data: r.clone(),
@@ -68,8 +68,11 @@ impl TaskTrait for MetamaskConnectorTask {
 		let from_new = self.state.from + (records_total as u64);
 		let records_total_new = self.state.global.records_total + records_total;
 
-		let global =
-			BaseTaskState { is_synced: true, is_finished: false, records_total: records_total_new };
+		let global = TaskGlobalState {
+			is_synced: true,
+			is_finished: false,
+			records_total: records_total_new,
+		};
 
 		let new_state = MetamaskConnectorTaskState { from: from_new, global, ..self.state };
 		self.update_state(new_state);
@@ -78,6 +81,7 @@ impl TaskTrait for MetamaskConnectorTask {
 	}
 
 	fn get_sleep_interval(&self) -> Duration {
+		// todo 0 if not synced
 		let duration = Duration::from_secs(DEFAULT_SLEEP_INTERVAL_SECONDS);
 		duration
 	}
@@ -93,7 +97,7 @@ impl TaskTrait for MetamaskConnectorTask {
 		id
 	}
 
-	fn get_state(&self) -> BaseTaskState {
+	fn get_state(&self) -> TaskGlobalState {
 		self.state.global.clone()
 	}
 

@@ -49,7 +49,7 @@ async fn main() {
 
 	let metamask_connector_client_config =
 		MetamaskConnectorClientConfig { url: "http://localhost:3000/output.json".to_string() };
-	// todo config
+
 	let metamask_connector_client = MetamaskConnectorClient::new(metamask_connector_client_config);
 	let metamask_connector_task = MetamaskConnectorTask::new(metamask_connector_client);
 
@@ -61,7 +61,7 @@ async fn main() {
 
 	tokio::spawn(async {
 		tokio::time::sleep(Duration::from_secs(5)).await;
-		GRPCServerClient::run().await;
+		let _ = GRPCServerClient::run().await;
 	});
 
 	let _ = server.serve().await;

@@ -9,7 +9,7 @@ pub trait TaskTrait {
 
 	fn get_sleep_interval(&self) -> Duration;
 
-	fn get_state(&self) -> BaseTaskState;
+	fn get_state(&self) -> TaskGlobalState;
 
 	// get job id, move hashing logic to utils
 	fn get_id(&self) -> String;
@@ -24,8 +24,6 @@ pub trait TaskTrait {
 	fn set_state_dump(&mut self, state_json_string: &str);
 }
 
-// todo, dublicate for proto struct, remove once settled
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskRecord {
 	pub id: usize,
@@ -36,7 +34,7 @@ pub struct TaskRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BaseTaskState {
+pub struct TaskGlobalState {
 	pub is_finished: bool,
 	pub is_synced: bool,
 	pub records_total: usize,
