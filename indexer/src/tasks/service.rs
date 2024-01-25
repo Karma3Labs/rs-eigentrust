@@ -55,7 +55,6 @@ impl TaskService {
 
 	pub async fn index(&mut self) {
 		// todo catch inner level errors
-		// todo non blocking loop
 		loop {
 			let n: Option<u64> = None;
 			let records = self.task.run(n, n).await;
@@ -73,7 +72,6 @@ impl TaskService {
 
 			let state = self.task.get_state();
 
-			// todo change to true
 			if state.is_finished == true {
 				info!("Job id={} is finished", task_id);
 				break;
@@ -87,12 +85,6 @@ impl TaskService {
 
 	pub async fn sleep(&self, duration: Duration) {
 		sleep(duration).await;
-	}
-
-	// change to flume subscriber
-	async fn on_data(&self, data: Vec<TaskRecord>) -> Vec<TaskRecord> {
-		println!("{:?}", data);
-		data
 	}
 
 	// todo tmp shortcut for poc

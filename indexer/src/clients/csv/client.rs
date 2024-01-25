@@ -27,7 +27,7 @@ impl CSVClient {
 
 		let offset = from.unwrap_or(0);
 		let limit = range.unwrap_or(DEFAULT_LIMIT);
-
+		
 		// todo no header
 		let mut csv_reader = ReaderBuilder::new().delimiter(DELIMITER).from_reader(file);
 

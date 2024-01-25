@@ -71,5 +71,4 @@ async fn main() {
 	});
 
 	server.serve().await;
-	sleep(Duration::from_secs(1000)).await;
 }
