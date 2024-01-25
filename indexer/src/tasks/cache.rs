@@ -62,7 +62,7 @@ impl CacheService {
 		let mut csv_reader =
 			ReaderBuilder::new().has_headers(false).delimiter(DELIMITER).from_reader(file);
 
-		for _i in offset..limit {
+		for _i in offset..offset + limit {
 			csv_reader.records().next();
 		}
 

@@ -27,10 +27,10 @@ impl TaskService {
 		let (event_publisher, event_receiver): (Sender<TaskRecord>, Receiver<TaskRecord>) =
 			bounded(FLUME_PUBSUB_MAX_EVENT_STACK);
 
-		// todo pass to a task
 		TaskService { task, db, event_publisher, event_receiver, cache }
 	}
 
+	// run once
 	pub async fn run(&mut self) {
 		let task_id = self.task.get_id();
 		let restored_state = self.db.get(task_id.as_str());
@@ -84,12 +84,5 @@ impl TaskService {
 
 	pub async fn sleep(&self, duration: Duration) {
 		sleep(duration).await;
-	}
-
-	// todo tmp shortcut for poc
-	pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskRecord> {
-		let res = self.task.run(Some(offset), Some(limit)).await;
-
-		res
 	}
 }

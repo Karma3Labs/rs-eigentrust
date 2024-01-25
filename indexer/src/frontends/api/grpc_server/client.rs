@@ -34,17 +34,14 @@ impl GRPCServerClient {
 
 		info!("GRPC client is started");
 		let mut client = IndexerClient::new(indexer_channel.clone());
-		info!("Client created");
-
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
-		info!("getting data");
+		let mut count = 0;
 		while let Ok(Some(res)) = response.message().await {
-			info!("{:?}", res);
+			// info!("{:?}", res);
+			count = count + 1;
 		}
-
+		info!("Got {:?} records", count);
 		tokio::time::sleep(Duration::from_secs(1)).await;
-
-		info!("client is exiting");
 		Ok(())
 	}
 }
