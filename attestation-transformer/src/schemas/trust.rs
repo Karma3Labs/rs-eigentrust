@@ -73,20 +73,20 @@ impl Validation for TrustSchema {
 
 impl IntoTerm for TrustSchema {
 	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
-		let pk = self.validate()?;
-
-		let from_address = address_from_ecdsa_key(&pk);
-		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		if from_did != self.issuer {
-			return Err(AttTrError::VerificationError);
-		}
+		// TODO: uncomment when verification spec is defined
+		// let pk = self.validate()?;
+		// let from_address = address_from_ecdsa_key(&pk);
+		// let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		// if from_did != self.issuer {
+		// 	return Err(AttTrError::VerificationError);
+		// }
 
 		let mut terms = Vec::new();
 		for trust_arc in &self.credential_subject.trustworthiness {
 			let form = trust_arc.level >= 0.;
 			let term_group = match trust_arc.scope {
 				Domain::SoftwareDevelopment => vec![Term::new(
-					from_did.clone(),
+					self.issuer.clone(),
 					self.credential_subject.id.clone(),
 					trust_arc.level.abs() * 10.,
 					Domain::SoftwareDevelopment.into(),
@@ -95,7 +95,7 @@ impl IntoTerm for TrustSchema {
 				)],
 				Domain::SoftwareSecurity => {
 					vec![Term::new(
-						from_did.clone(),
+						self.issuer.clone(),
 						self.credential_subject.id.clone(),
 						trust_arc.level.abs() * 10.,
 						Domain::SoftwareSecurity.into(),
@@ -106,7 +106,7 @@ impl IntoTerm for TrustSchema {
 				Domain::Honesty => {
 					vec![
 						Term::new(
-							from_did.clone(),
+							self.issuer.clone(),
 							self.credential_subject.id.clone(),
 							trust_arc.level.abs() * 1.,
 							Domain::SoftwareDevelopment.into(),
@@ -114,7 +114,7 @@ impl IntoTerm for TrustSchema {
 							timestamp,
 						),
 						Term::new(
-							from_did.clone(),
+							self.issuer.clone(),
 							self.credential_subject.id.clone(),
 							trust_arc.level.abs() * 1.,
 							Domain::SoftwareSecurity.into(),
@@ -178,7 +178,7 @@ mod test {
 		let kind = "AuditReportApproveCredential".to_string();
 		let addr = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
-		let cs = CredentialSubject { id: did_string, trustworthiness: vec![trust_arc] };
+		let cs = CredentialSubject::new(did_string, vec![trust_arc]);
 		let proof = Proof { signature: sig_string };
 
 		let aa_schema = TrustSchema { kind, issuer, credential_subject: cs, proof };

@@ -14,7 +14,7 @@ use tonic::Request;
 const BATCH_SIZE: u32 = 1000;
 const INTERVAL_SECS: u64 = 5;
 const NUM_ITERATIONS: usize = 3;
-const MAX_SIZE: u32 = 10;
+const MAX_SIZE: u32 = 200;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

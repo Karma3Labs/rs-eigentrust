@@ -225,7 +225,7 @@ mod test {
 			let kind = "StatusCredential".to_string();
 			let addr = address_from_ecdsa_key(&pk);
 			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
-			let cs = CredentialSubject::new(id, current_status);
+			let cs = CredentialSubject::new(id, current_status, None);
 			let proof = Proof::new(encoded_sig);
 
 			StatusSchema::new(kind, issuer, cs, proof)
@@ -260,7 +260,7 @@ mod test {
 			let kind = "StatusCredential".to_string();
 			let addr = address_from_ecdsa_key(&pk);
 			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
-			let cs = CredentialSubject::new(id, current_status);
+			let cs = CredentialSubject::new(id, current_status, None);
 			let proof = Proof::new(encoded_sig);
 
 			StatusSchema::new(kind, issuer, cs, proof)
