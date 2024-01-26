@@ -127,13 +127,14 @@ impl LinearCombiner for LinearCombinerService {
 		let mappings = MappingManager::read_mappings(&db, mapping_query.start, mapping_query.size)
 			.map_err(|e| e.into_status())?;
 
-		let (tx, rx) = channel(1);
-		for x in mappings.clone() {
-			let x_obj: Mapping = x.into();
-			if let Err(e) = tx.send(Ok(x_obj)).await {
-				e.0?;
+		let (tx, rx) = channel(4);
+		tokio::spawn(async move {
+			for x in mappings.clone() {
+				let x_obj: Mapping = x.into();
+				tx.send(Ok(x_obj)).await.unwrap();
 			}
-		}
+		});
+
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
 
@@ -154,13 +155,14 @@ impl LinearCombiner for LinearCombinerService {
 		let items = UpdateManager::read_batch(&db, prefix.clone(), batch.size)
 			.map_err(|e| e.into_status())?;
 
-		let (tx, rx) = channel(1);
-		for x in items.clone() {
-			let x_obj: LtObject = x.into();
-			if let Err(e) = tx.send(Ok(x_obj)).await {
-				e.0?;
+		let items_to_send = items.clone();
+		let (tx, rx) = channel(4);
+		tokio::spawn(async move {
+			for x in items_to_send {
+				let x_obj: LtObject = x.into();
+				tx.send(Ok(x_obj)).await.unwrap();
 			}
-		}
+		});
 
 		UpdateManager::delete_batch(&db, prefix, items).map_err(|e| e.into_status())?;
 
