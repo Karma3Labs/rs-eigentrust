@@ -97,7 +97,9 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&y);
 
 			println!(
-				"Received Item({}, {}, {})",
+				"Received Item({}, {}, {}, {}, {})",
+				term.domain,
+				term.form,
 				u32::from_be_bytes(x),
 				u32::from_be_bytes(y),
 				term.weight

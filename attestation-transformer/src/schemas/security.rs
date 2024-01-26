@@ -1,9 +1,8 @@
 use super::{Domain, IntoTerm, Proof, Validation};
 use crate::{
-	did::{Did, Schema},
+	did::Did,
 	error::AttTrError,
-	term::Term,
-	utils::address_from_ecdsa_key,
+	term::{Term, TermForm},
 };
 use serde_derive::{Deserialize, Serialize};
 
@@ -103,13 +102,13 @@ impl IntoTerm for SecurityReportSchema {
 		// }
 
 		let form = match self.credential_subject.security_status {
-			SecurityStatus::Unsecure => false,
-			SecurityStatus::Secure => true,
+			SecurityStatus::Unsecure => TermForm::Distrust,
+			SecurityStatus::Secure => TermForm::Trust,
 		};
 
 		let weight = 50.;
 		let mut terms = Vec::new();
-		if form {
+		if form == TermForm::Trust {
 			let term = Term::new(
 				self.issuer.clone(),
 				self.credential_subject.id,
@@ -126,7 +125,7 @@ impl IntoTerm for SecurityReportSchema {
 					self.credential_subject.id.clone(),
 					finding.criticality * weight,
 					Domain::SoftwareSecurity.into(),
-					form,
+					form.clone(),
 					timestamp,
 				);
 				terms.push(term);

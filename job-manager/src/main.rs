@@ -14,7 +14,7 @@ use tonic::Request;
 const BATCH_SIZE: u32 = 1000;
 const INTERVAL_SECS: u64 = 5;
 const NUM_ITERATIONS: usize = 3;
-const MAX_SIZE: u32 = 200;
+const MAX_SIZE: u32 = 7;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -43,8 +43,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		}
 	}
 
-	let trust_form = 0;
-	let distrust_form = 1;
+	let trust_form = 1;
+	let distrust_form = 0;
 	let development_domain = 1;
 	let security_domain = 2;
 

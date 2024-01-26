@@ -27,8 +27,8 @@ message TermResult {
 }
 
 enum Form {
-    Trust = 0;
-    Distrust = 1;
+    Distrust = 0;
+    Trust = 1;
 }
 
 message TermObject {
