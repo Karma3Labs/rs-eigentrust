@@ -1,9 +1,8 @@
 use super::{Domain, IntoTerm, Proof, Validation};
 use crate::{
-	did::{Did, Schema},
+	did::Did,
 	error::AttTrError,
-	term::Term,
-	utils::address_from_ecdsa_key,
+	term::{Term, TermForm},
 };
 use serde_derive::{Deserialize, Serialize};
 
@@ -83,7 +82,7 @@ impl IntoTerm for TrustSchema {
 
 		let mut terms = Vec::new();
 		for trust_arc in &self.credential_subject.trustworthiness {
-			let form = trust_arc.level >= 0.;
+			let form = if trust_arc.level >= 0. { TermForm::Trust } else { TermForm::Distrust };
 			let term_group = match trust_arc.scope {
 				Domain::SoftwareDevelopment => vec![Term::new(
 					self.issuer.clone(),
@@ -110,7 +109,7 @@ impl IntoTerm for TrustSchema {
 							self.credential_subject.id.clone(),
 							trust_arc.level.abs() * 1.,
 							Domain::SoftwareDevelopment.into(),
-							form,
+							form.clone(),
 							timestamp,
 						),
 						Term::new(

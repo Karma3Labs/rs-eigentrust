@@ -2,7 +2,7 @@ use crate::error::AttTrError;
 use proto_buf::transformer::{Form, TermObject};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum TermForm {
+pub enum TermForm {
 	Trust,
 	Distrust,
 }
@@ -10,8 +10,8 @@ enum TermForm {
 impl From<u8> for TermForm {
 	fn from(value: u8) -> Self {
 		match value {
-			0 => Self::Trust,
-			1 => Self::Distrust,
+			1 => Self::Trust,
+			0 => Self::Distrust,
 			_ => panic!("Invalid Term form"),
 		}
 	}
@@ -20,8 +20,8 @@ impl From<u8> for TermForm {
 impl Into<u8> for TermForm {
 	fn into(self) -> u8 {
 		match self {
-			Self::Trust => 0,
-			Self::Distrust => 1,
+			Self::Trust => 1,
+			Self::Distrust => 0,
 		}
 	}
 }
@@ -41,22 +41,15 @@ pub struct Term {
 	to: String,
 	weight: f32,
 	domain: u32,
-	form: TermForm,
+	pub(crate) form: TermForm,
 	timestamp: u64,
 }
 
 impl Term {
 	pub fn new(
-		from: String, to: String, weight: f32, domain: u32, is_trust: bool, timestamp: u64,
+		from: String, to: String, weight: f32, domain: u32, form: TermForm, timestamp: u64,
 	) -> Term {
-		Term {
-			from,
-			to,
-			weight,
-			domain,
-			form: if is_trust { TermForm::Trust } else { TermForm::Distrust },
-			timestamp,
-		}
+		Term { from, to, weight, domain, form, timestamp }
 	}
 
 	pub fn into_bytes(self) -> Result<Vec<u8>, AttTrError> {

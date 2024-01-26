@@ -1,10 +1,10 @@
-use crate::did::Schema;
-use crate::{did::Did, error::AttTrError, term::Term, utils::address_from_ecdsa_key};
+use crate::term::TermForm;
+use crate::{did::Did, error::AttTrError, term::Term};
 use serde_derive::{Deserialize, Serialize};
 
 use super::{Domain, IntoTerm, Proof, Validation};
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum CurrentStatus {
 	Endorsed,
 	Disputed,
@@ -94,8 +94,8 @@ impl IntoTerm for StatusSchema {
 		let weight = 50.;
 		let domain = Domain::SoftwareSecurity;
 		let form = match self.credential_subject.current_status {
-			CurrentStatus::Endorsed => true,
-			CurrentStatus::Disputed => false,
+			CurrentStatus::Endorsed => TermForm::Trust,
+			CurrentStatus::Disputed => TermForm::Distrust,
 		};
 
 		let term = Term::new(

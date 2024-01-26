@@ -190,7 +190,7 @@ mod test {
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
 	};
 	use crate::schemas::{Domain, Proof};
-	use crate::term::Term;
+	use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
 	use proto_buf::indexer::IndexerEvent;
@@ -326,7 +326,7 @@ mod test {
 				recipient,
 				50.,
 				Domain::SoftwareSecurity.into(),
-				true,
+				TermForm::Trust,
 				timestamp,
 			)]
 		)
@@ -422,6 +422,192 @@ mod test {
 
 		let trust_arcs = [p_x1, p_x2, q_y, x_z, p_y, q_x, y_z];
 		let status_arcs = [q_s2, p_s1, x_s1, y_s2, z_s1, z_s2];
+
+		println!("num attestations: {}", trust_arcs.len() + status_arcs.len());
+
+		let mut timestamp = 2397848;
+		let mut id = 1;
+		let trust_schema_id = 2;
+		let status_schema_id = 1;
+
+		println!("id;timestamp;schema_id;schema_value");
+
+		for schema_value in trust_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: trust_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				trust_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+
+		for schema_value in status_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: status_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				status_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+	}
+
+	#[test]
+	fn generate_sybil_attack_test_schemas() {
+		let x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
+		let x = "did:pkh:eth:0xa9572220348b1080264e81c0779f77c144790cd6".to_owned();
+
+		let y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
+		let y = "did:pkh:eth:0xba9090181312bd0e40254a3dc29841980dd392d2".to_owned();
+
+		let z_sk = "ac7f0d9eaea4d4bf5438b887e34d0cf87e7f98d97da70eff001850487b2cae23".to_owned();
+		let z = "did:pkh:eth:0x9a2954b87d8745df0b1010291c51d68ae9269d43".to_owned();
+
+		let p_sk = "bbb7d40b7bb8e41c550696fdef78fff6f013bb34627ba50ca2d63b6e84cffa6c".to_owned();
+		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
+
+		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
+		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+
+		// Trust - Direct
+		// x => y - Trust Credential - Software security - trust
+		// x => z - Trust Credential - Software security - trust
+		// y => x - Trust Credential - Software security - trust
+		// y => z - Trust Credential - Software security - trust
+		// z => x - Trust Credential - Software security - trust
+		// z => y - Trust Credential - Software security - trust
+		// q => y - Trust Credential - Software security - trust
+		let x_y = TrustSchema::generate_from_sk(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			x_sk.clone(),
+		);
+		let x_z = TrustSchema::generate_from_sk(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			x_sk.clone(),
+		);
+		let y_x = TrustSchema::generate_from_sk(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			y_sk.clone(),
+		);
+		let y_z = TrustSchema::generate_from_sk(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			y_sk.clone(),
+		);
+		let z_x = TrustSchema::generate_from_sk(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			z_sk.clone(),
+		);
+		let z_y = TrustSchema::generate_from_sk(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			z_sk.clone(),
+		);
+		let q_y = TrustSchema::generate_from_sk(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			q_sk.clone(),
+		);
+
+		// Trust - Snap
+		// x => s1 - Status Credential - Endorse
+		// y => s1 - Status Credential - Endorse
+		// z => s1 - Status Credential - Endorse
+		// p => s2 - Status Credential - Endorse
+		// q => s2 - Status Credential - Endorse
+		let x_s1 =
+			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Endorsed, x_sk.clone());
+		let y_s1 =
+			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Endorsed, y_sk.clone());
+		let z_s1 =
+			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Endorsed, z_sk.clone());
+		let p_s2 =
+			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Endorsed, p_sk.clone());
+		let q_s2 =
+			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Endorsed, q_sk.clone());
+
+		// Distrust - Direct
+		// p => x - Trust Credential - Software security - distrust
+		// p => y - Trust Credential - Software security - distrust
+		// p => z - Trust Credential - Software security - distrust
+		// x => p - Trust Credential - Software security - distrust
+		// y => p - Trust Credential - Software security - distrust
+		// z => p - Trust Credential - Software security - distrust
+		let p_x = TrustSchema::generate_from_sk(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let p_y = TrustSchema::generate_from_sk(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let p_z = TrustSchema::generate_from_sk(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let x_p = TrustSchema::generate_from_sk(
+			p.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			x_sk.clone(),
+		);
+		let y_p = TrustSchema::generate_from_sk(
+			p.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			y_sk.clone(),
+		);
+		let z_p = TrustSchema::generate_from_sk(
+			p.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			z_sk.clone(),
+		);
+
+		// Distrust - Snap
+		// p => s1 - Status Credential - Dispute
+		// q => s1 - Status Credential - Dispute
+		let p_s1 =
+			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Disputed, p_sk.clone());
+		let q_s1 =
+			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Disputed, q_sk.clone());
+
+		let trust_arcs = [x_y, x_z, y_x, y_z, z_x, z_y, q_y, p_x, p_y, p_z, x_p, y_p, z_p];
+		let status_arcs = [x_s1, y_s1, z_s1, p_s2, q_s2, p_s1, q_s1];
 
 		println!("num attestations: {}", trust_arcs.len() + status_arcs.len());
 
