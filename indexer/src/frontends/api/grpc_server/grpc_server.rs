@@ -42,7 +42,7 @@ impl Indexer for IndexerService {
 		let inner = request.into_inner();
 
 		let start = SystemTime::now();
-		let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
+		// let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
 		let limit = cmp::min(
 			inner.offset + inner.count,
 			self.data.len().try_into().unwrap(),

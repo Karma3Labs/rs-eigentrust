@@ -3,11 +3,10 @@ use futures::stream::iter;
 use managers::checkpoint::CheckpointManager;
 use managers::term::TermManager;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
-use proto_buf::common::Void;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
-use proto_buf::transformer::TermBatch;
+use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
 use rocksdb::{Options, DB};
 use schemas::security::SecurityReportSchema;
 use schemas::status::StatusSchema;
@@ -28,7 +27,6 @@ mod term;
 mod utils;
 
 const MAX_TERM_BATCH_SIZE: u32 = 1000;
-const MAX_ATT_BATCH_SIZE: u32 = 1000;
 const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";
 const AUDIT_APPROVE_SCHEMA_ID: &str = "0x2";
 const AUDIT_DISAPPROVE_SCHEMA_ID: &str = "0x3";
@@ -62,17 +60,17 @@ impl TransformerService {
 			SchemaType::SecurityCredential => {
 				let parsed_att: SecurityReportSchema =
 					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
-				parsed_att.into_term()?
+				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::StatusCredential => {
 				let parsed_att: StatusSchema =
 					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
-				parsed_att.into_term()?
+				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::TrustCredential => {
 				let parsed_att: TrustSchema =
 					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
-				parsed_att.into_term()?
+				parsed_att.into_term(event.timestamp)?
 			},
 		};
 
@@ -82,7 +80,14 @@ impl TransformerService {
 
 #[tonic::async_trait]
 impl Transformer for TransformerService {
-	async fn sync_indexer(&self, _: Request<Void>) -> Result<Response<Void>, Status> {
+	async fn sync_indexer(
+		&self, req: Request<EventBatch>,
+	) -> Result<Response<EventResult>, Status> {
+		let event_batch = req.into_inner();
+		if event_batch.size == 0 {
+			return Err(Status::invalid_argument("Invalid `size`."));
+		}
+
 		let db = DB::open_cf(
 			&Options::default(),
 			&self.db_url,
@@ -90,9 +95,8 @@ impl Transformer for TransformerService {
 		)
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		// let (ch_offset, ct_offset) = Self::read_checkpoint(&db).map_err(|e| e.into_status())?;
-		let ch_offset = 0;
-		let ct_offset = 0;
+		let (ch_offset, ct_offset) =
+			CheckpointManager::read_checkpoint(&db).map_err(|e| e.into_status())?;
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
@@ -101,8 +105,8 @@ impl Transformer for TransformerService {
 				AUDIT_DISAPPROVE_SCHEMA_ID.to_owned(),
 				STATUS_SCHEMA_ID.to_owned(),
 			],
-			offset: 0,
-			count: MAX_ATT_BATCH_SIZE,
+			offset: ch_offset,
+			count: event_batch.size,
 		};
 
 		let mut client = IndexerClient::new(self.indexer_channel.clone());
@@ -127,10 +131,13 @@ impl Transformer for TransformerService {
 		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)
 			.map_err(|e| e.into_status())?;
 
-		Ok(Response::new(Void::default()))
+		let event_result = EventResult { num_terms: new_count - ct_offset, total_count: new_count };
+		Ok(Response::new(event_result))
 	}
 
-	async fn term_stream(&self, request: Request<TermBatch>) -> Result<Response<Void>, Status> {
+	async fn term_stream(
+		&self, request: Request<TermBatch>,
+	) -> Result<Response<TermResult>, Status> {
 		let inner = request.into_inner();
 		if inner.size > MAX_TERM_BATCH_SIZE {
 			return Result::Err(Status::invalid_argument(format!(
@@ -147,11 +154,16 @@ impl Transformer for TransformerService {
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let terms = TermManager::read_terms(&db, inner).map_err(|e| e.into_status())?;
+		let num_terms = terms.len();
 
 		let mut client = LinearCombinerClient::new(self.lt_channel.clone());
-		let res = client.sync_transformer(Request::new(iter(terms))).await?;
+		client.sync_transformer(Request::new(iter(terms))).await?;
 
-		Ok(res)
+		let term_size =
+			u32::try_from(num_terms).map_err(|_| AttTrError::SerialisationError.into_status())?;
+		let res = TermResult { size: term_size };
+
+		Ok(Response::new(res))
 	}
 }
 
@@ -183,7 +195,7 @@ mod test {
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
-			let did = Did::parse_pkh_eth(id.clone()).unwrap();
+			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
 			keccak.update(&did.key);
 			keccak.update(&[current_status.clone().into()]);
@@ -205,7 +217,7 @@ mod test {
 
 			let kind = "StatusCredential".to_string();
 			let addr = address_from_ecdsa_key(&pk);
-			let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
+			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
 			let cs = CredentialSubject::new(id, current_status);
 			let proof = Proof::new(encoded_sig);
 
@@ -215,13 +227,14 @@ mod test {
 
 	#[test]
 	fn should_parse_event() {
-		let recipient = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let recipient = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let status_schema = StatusSchema::generate(recipient.clone(), CurrentStatus::Endorsed);
+		let timestamp = 2397848;
 		let indexed_event = IndexerEvent {
 			id: 0,
-			schema_id: 4,
+			schema_id: 1,
 			schema_value: to_string(&status_schema).unwrap(),
-			timestamp: 2397848,
+			timestamp,
 		};
 		let terms = TransformerService::parse_event(indexed_event).unwrap();
 		assert_eq!(
@@ -231,7 +244,8 @@ mod test {
 				recipient,
 				25.,
 				Domain::SoftwareSecurity.into(),
-				true
+				true,
+				timestamp,
 			)]
 		)
 	}

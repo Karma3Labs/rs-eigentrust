@@ -31,7 +31,6 @@ pub trait Validation {
 	fn validate(&self) -> Result<PublicKey, AttTrError> {
 		let sig_bytes =
 			hex::decode(self.get_trimmed_signature()).map_err(|e| AttTrError::HexError(e))?;
-
 		let mut rs_bytes = [0; 64];
 		rs_bytes.copy_from_slice(&sig_bytes[..64]);
 		let rec_id: i32 = match i32::from(sig_bytes[64]) {
@@ -66,7 +65,7 @@ pub trait Validation {
 }
 
 pub trait IntoTerm: Validation {
-	fn into_term(self) -> Result<Vec<Term>, AttTrError>;
+	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError>;
 }
 
 pub enum SchemaType {
@@ -78,9 +77,9 @@ pub enum SchemaType {
 impl From<u32> for SchemaType {
 	fn from(value: u32) -> Self {
 		match value {
-			2 => Self::SecurityCredential,
-			4 => Self::StatusCredential,
-			5 => Self::TrustCredential,
+			0 => Self::SecurityCredential,
+			1 => Self::StatusCredential,
+			2 => Self::TrustCredential,
 			_ => panic!("Invalid Schema type"),
 		}
 	}
@@ -89,7 +88,9 @@ impl From<u32> for SchemaType {
 #[derive(Deserialize, Serialize, Clone)]
 pub enum Domain {
 	Honesty,
+	#[serde(alias = "Software development")]
 	SoftwareDevelopment,
+	#[serde(alias = "Software security")]
 	SoftwareSecurity,
 }
 

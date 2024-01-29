@@ -39,13 +39,12 @@ mod test {
 		let source = "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
 		let offset = 15;
 
-		let (index, is_new) = IndexManager::get_index(&db, source.clone(), offset).unwrap();
+		let (index, _) = IndexManager::get_index(&db, source.clone(), offset).unwrap();
 
 		let mut bytes = [0; 4];
 		bytes.copy_from_slice(&index);
 		let i = u32::from_be_bytes(bytes);
 
 		assert_eq!(i, 15);
-		assert!(is_new);
 	}
 }

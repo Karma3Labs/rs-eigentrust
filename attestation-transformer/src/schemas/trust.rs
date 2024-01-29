@@ -56,7 +56,7 @@ impl Validation for TrustSchema {
 	}
 
 	fn get_message(&self) -> Result<Vec<u8>, AttTrError> {
-		let did = Did::parse_snap(self.credential_subject.id.clone())?;
+		let did = Did::parse_pkh_eth(self.credential_subject.id.clone())?;
 
 		let mut bytes = Vec::new();
 		bytes.extend_from_slice(&did.key);
@@ -71,7 +71,7 @@ impl Validation for TrustSchema {
 }
 
 impl IntoTerm for TrustSchema {
-	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
+	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
@@ -87,6 +87,7 @@ impl IntoTerm for TrustSchema {
 					trust_arc.level.abs() * 10.,
 					1,
 					form,
+					timestamp,
 				)],
 				Domain::SoftwareSecurity => {
 					vec![Term::new(
@@ -95,6 +96,7 @@ impl IntoTerm for TrustSchema {
 						trust_arc.level.abs() * 10.,
 						2,
 						form,
+						timestamp,
 					)]
 				},
 				Domain::Honesty => {
@@ -105,6 +107,7 @@ impl IntoTerm for TrustSchema {
 							trust_arc.level.abs() * 1.,
 							1,
 							form,
+							timestamp,
 						),
 						Term::new(
 							from_did.clone(),
@@ -112,6 +115,7 @@ impl IntoTerm for TrustSchema {
 							trust_arc.level.abs() * 1.,
 							2,
 							form,
+							timestamp,
 						),
 					]
 				},
@@ -141,8 +145,8 @@ mod test {
 
 	#[test]
 	fn should_validate_trust_schema() {
-		let did_string = "snap://90f8bf6a47".to_owned();
-		let did = Did::parse_snap(did_string.clone()).unwrap();
+		let did_string = "did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 		let trust_arc = DomainTrust::new(Domain::SoftwareSecurity, 0.5, Vec::new());
 
 		let mut keccak = Keccak256::default();
@@ -168,7 +172,7 @@ mod test {
 
 		let kind = "AuditReportApproveCredential".to_string();
 		let addr = address_from_ecdsa_key(&pk);
-		let issuer = format!("did:pkh:eth:{}", hex::encode(addr));
+		let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
 		let cs = CredentialSubject { id: did_string, trustworthiness: vec![trust_arc] };
 		let proof = Proof { signature: sig_string };
 

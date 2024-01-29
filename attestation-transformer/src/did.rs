@@ -44,7 +44,7 @@ impl Did {
 	pub fn parse_snap(value: String) -> Result<Self, AttTrError> {
 		let parts = value.split("://");
 		let part_slices: Vec<&str> = parts.into_iter().collect();
-		// 4 parts: did, pkh, eth, [public key hash]
+		// 2 parts: snap, [key]
 		if part_slices.len() != 2 {
 			return Err(AttTrError::ParseError);
 		}
@@ -65,8 +65,8 @@ impl Into<String> for Did {
 	fn into(self) -> String {
 		let key = hex::encode(self.key);
 		match self.schema {
-			Schema::PkhEth => format!("did:pkh:eth:{}", key),
-			Schema::Snap => format!("snap://{}", key),
+			Schema::PkhEth => format!("did:pkh:eth:0x{}", key),
+			Schema::Snap => format!("snap://0x{}", key),
 		}
 	}
 }
@@ -79,7 +79,7 @@ mod test {
 
 	#[test]
 	fn test_did_parsing() {
-		let did_string = "did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
+		let did_string = "did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
 		let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 		assert_eq!(did.schema, Schema::PkhEth);
 		assert_eq!(

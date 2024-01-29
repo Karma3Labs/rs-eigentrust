@@ -92,7 +92,7 @@ impl Validation for SecurityReportSchema {
 }
 
 impl IntoTerm for SecurityReportSchema {
-	fn into_term(self) -> Result<Vec<Term>, AttTrError> {
+	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
 		let pk = self.validate()?;
 
 		let from_address = address_from_ecdsa_key(&pk);
@@ -112,6 +112,7 @@ impl IntoTerm for SecurityReportSchema {
 				weight,
 				Domain::SoftwareSecurity.into(),
 				form,
+				timestamp,
 			);
 			terms.push(term);
 		} else {
@@ -122,6 +123,7 @@ impl IntoTerm for SecurityReportSchema {
 					finding.criticality * weight,
 					Domain::SoftwareSecurity.into(),
 					form,
+					timestamp,
 				);
 				terms.push(term);
 			}

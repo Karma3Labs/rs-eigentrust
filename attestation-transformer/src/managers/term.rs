@@ -12,14 +12,13 @@ impl TermManager {
 		let cf = db.cf_handle("term").ok_or_else(|| AttTrError::NotFoundError)?;
 
 		let mut terms = Vec::new();
-		for i in batch.start..batch.size {
+		for i in batch.start..batch.start + batch.size {
 			let id_bytes = i.to_be_bytes();
 			let res_opt = db.get_cf(&cf, id_bytes).map_err(|e| AttTrError::DbError(e))?;
 			if let Some(res) = res_opt {
-				if let Ok(term) = Term::from_bytes(res) {
-					let term_obj: TermObject = term.into();
-					terms.push(term_obj);
-				}
+				let term = Term::from_bytes(res)?;
+				let term_obj: TermObject = term.into();
+				terms.push(term_obj);
 			}
 		}
 		Ok(terms)
@@ -74,11 +73,12 @@ mod test {
 		let db = DB::open_cf(&opts, "att-wrt-test-storage", vec!["term"]).unwrap();
 
 		let org_terms = vec![Term::new(
-			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string(),
-			"did:pkh:eth:90f8bf6a479f320ead074411a4b0e7944ea8c9c3".to_string(),
+			"did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string(),
+			"did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c3".to_string(),
 			25.,
 			Domain::SoftwareSecurity.into(),
 			true,
+			0,
 		)];
 		let indexed_terms =
 			org_terms.clone().into_iter().enumerate().map(|(i, x)| (i as u32, x)).collect_vec();
