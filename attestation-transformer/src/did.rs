@@ -8,10 +8,19 @@ pub enum Schema {
 	Snap,
 }
 
+impl Into<u8> for Schema {
+	fn into(self) -> u8 {
+		match self {
+			Self::PkhEth => 0,
+			Self::Snap => 1,
+		}
+	}
+}
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Did {
-	schema: Schema,
-	pub key: Vec<u8>,
+	pub(crate) schema: Schema,
+	pub(crate) key: Vec<u8>,
 }
 
 impl Did {

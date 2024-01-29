@@ -9,13 +9,13 @@ use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct DomainTrust {
-	scope: Domain,
-	level: f32,
+	pub(crate) scope: Domain,
+	pub(crate) level: f32,
 	reason: Vec<String>,
 }
 
 impl DomainTrust {
-	fn new(scope: Domain, level: f32, reason: Vec<String>) -> Self {
+	pub fn new(scope: Domain, level: f32, reason: Vec<String>) -> Self {
 		Self { scope, level, reason }
 	}
 }
@@ -59,6 +59,7 @@ impl Validation for TrustSchema {
 		let did = Did::parse_pkh_eth(self.credential_subject.id.clone())?;
 
 		let mut bytes = Vec::new();
+		bytes.push(did.schema.into());
 		bytes.extend_from_slice(&did.key);
 		for arc in &self.credential_subject.trustworthiness {
 			bytes.push(arc.scope.clone().into());
@@ -76,6 +77,9 @@ impl IntoTerm for TrustSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		if from_did != self.issuer {
+			return Err(AttTrError::VerificationError);
+		}
 
 		let mut terms = Vec::new();
 		for trust_arc in &self.credential_subject.trustworthiness {
@@ -85,7 +89,7 @@ impl IntoTerm for TrustSchema {
 					from_did.clone(),
 					self.credential_subject.id.clone(),
 					trust_arc.level.abs() * 10.,
-					1,
+					Domain::SoftwareDevelopment.into(),
 					form,
 					timestamp,
 				)],
@@ -94,7 +98,7 @@ impl IntoTerm for TrustSchema {
 						from_did.clone(),
 						self.credential_subject.id.clone(),
 						trust_arc.level.abs() * 10.,
-						2,
+						Domain::SoftwareSecurity.into(),
 						form,
 						timestamp,
 					)]
@@ -105,7 +109,7 @@ impl IntoTerm for TrustSchema {
 							from_did.clone(),
 							self.credential_subject.id.clone(),
 							trust_arc.level.abs() * 1.,
-							1,
+							Domain::SoftwareDevelopment.into(),
 							form,
 							timestamp,
 						),
@@ -113,7 +117,7 @@ impl IntoTerm for TrustSchema {
 							from_did.clone(),
 							self.credential_subject.id.clone(),
 							trust_arc.level.abs() * 1.,
-							2,
+							Domain::SoftwareSecurity.into(),
 							form,
 							timestamp,
 						),
@@ -150,6 +154,7 @@ mod test {
 		let trust_arc = DomainTrust::new(Domain::SoftwareSecurity, 0.5, Vec::new());
 
 		let mut keccak = Keccak256::default();
+		keccak.update(&[did.schema.into()]);
 		keccak.update(&did.key);
 		keccak.update(&[trust_arc.scope.clone().into()]);
 		// keccak.update(&trust_arc.level.to_be_bytes());

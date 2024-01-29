@@ -81,6 +81,7 @@ impl Validation for SecurityReportSchema {
 	fn get_message(&self) -> Result<Vec<u8>, AttTrError> {
 		let did = Did::parse_snap(self.credential_subject.id.clone())?;
 		let mut bytes = Vec::new();
+		bytes.push(did.schema.into());
 		bytes.extend_from_slice(&did.key);
 		bytes.push(self.credential_subject.security_status.clone().into());
 		for finding in &self.credential_subject.security_findings {
@@ -97,6 +98,9 @@ impl IntoTerm for SecurityReportSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		if from_did != self.issuer {
+			return Err(AttTrError::VerificationError);
+		}
 
 		let form = match self.credential_subject.security_status {
 			SecurityStatus::Unsecure => false,
@@ -149,12 +153,13 @@ mod test {
 
 	#[test]
 	fn should_validate_audit_report_schema() {
-		let did_string = "snap://90f8bf6a47".to_owned();
+		let did_string = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let did = Did::parse_snap(did_string.clone()).unwrap();
 		let security_status = SecurityStatus::Unsecure;
 		let finding = SecurityFinding::new(0.5, None, None, None);
 
 		let mut keccak = Keccak256::default();
+		keccak.update(&[did.schema.into()]);
 		keccak.update(&did.key);
 		keccak.update(&[security_status.clone().into()]);
 		keccak.update(&finding.criticality.to_be_bytes());

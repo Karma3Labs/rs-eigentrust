@@ -24,6 +24,7 @@ pub struct CSVPOCTask {
 const CSV_COLUMN_INDEX_DATA: usize = 3;
 const CSV_COLUMN_SCHEMA_ID: usize = 2;
 const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
+const CSV_COLUMN_INDEX: usize = 0;
 
 impl CSVPOCTask {
 	pub fn new(client: CSVClient) -> Self {
@@ -64,7 +65,7 @@ impl BaseTask for CSVPOCTask {
 				let schema_id = r.get(CSV_COLUMN_SCHEMA_ID).unwrap().parse::<usize>().unwrap_or(0);
 				TaskResponse {
 					timestamp: r.get(CSV_COLUMN_INDEX_TIMESTAMP).unwrap().to_string(),
-					id: 1,
+					id: r.get(CSV_COLUMN_INDEX).unwrap().parse::<usize>().unwrap_or(0),
 					job_id: "0".to_string(),
 					schema_id,
 					data: r.get(CSV_COLUMN_INDEX_DATA).unwrap().to_string(),

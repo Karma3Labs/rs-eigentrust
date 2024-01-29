@@ -34,17 +34,21 @@ impl ItemManager {
 	) -> Result<Vec<LtItem>, LcError> {
 		let cf = db.cf_handle("item").ok_or_else(|| LcError::NotFoundError)?;
 		let mut items = Vec::new();
-		(p0.0..=p1.0).zip(p0.1..=p1.1).into_iter().for_each(|(x, y)| {
-			let mut key = Vec::new();
-			key.extend_from_slice(&prefix);
-			key.extend_from_slice(&x.to_be_bytes());
-			key.extend_from_slice(&y.to_be_bytes());
+		(p0.0..=p1.0).into_iter().for_each(|x| {
+			(p0.1..=p1.1).into_iter().for_each(|y| {
+				let mut key = Vec::new();
+				key.extend_from_slice(&prefix);
+				key.extend_from_slice(&x.to_be_bytes());
+				key.extend_from_slice(&y.to_be_bytes());
 
-			let item_res = db.get_cf(&cf, key.clone());
-			if let Ok(Some(value)) = item_res {
-				let let_item = LtItem::from_raw(key, value);
-				items.push(let_item);
-			}
+				println!("Looking for {} {}", x, y);
+
+				let item_res = db.get_cf(&cf, key.clone());
+				if let Ok(Some(value)) = item_res {
+					let let_item = LtItem::from_raw(key, value);
+					items.push(let_item);
+				}
+			});
 		});
 		Ok(items)
 	}

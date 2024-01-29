@@ -42,21 +42,21 @@ pub trait Validation {
 		};
 
 		let rec_id_p =
-			RecoveryId::from_i32(rec_id).map_err(|x| AttTrError::VerificationError(x))?;
+			RecoveryId::from_i32(rec_id).map_err(|x| AttTrError::SigVerificationError(x))?;
 
 		let signature = RecoverableSignature::from_compact(&rs_bytes, rec_id_p)
-			.map_err(|x| AttTrError::VerificationError(x))?;
+			.map_err(|x| AttTrError::SigVerificationError(x))?;
 
 		let mut keccak = Keccak256::default();
 		keccak.update(&self.get_message()?);
 		let digest = keccak.finalize();
 		let message = Message::from_digest_slice(digest.as_ref())
-			.map_err(|x| AttTrError::VerificationError(x))?;
-		let pk = signature.recover(&message).map_err(|x| AttTrError::VerificationError(x))?;
+			.map_err(|x| AttTrError::SigVerificationError(x))?;
+		let pk = signature.recover(&message).map_err(|x| AttTrError::SigVerificationError(x))?;
 
 		let secp = Secp256k1::verification_only();
 		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
-			.map_err(|x| AttTrError::VerificationError(x))?;
+			.map_err(|x| AttTrError::SigVerificationError(x))?;
 
 		Ok(pk)
 	}

@@ -62,6 +62,7 @@ impl Validation for StatusSchema {
 	fn get_message(&self) -> Result<Vec<u8>, AttTrError> {
 		let did = Did::parse_snap(self.credential_subject.id.clone())?;
 		let mut bytes = Vec::new();
+		bytes.push(did.schema.into());
 		bytes.extend_from_slice(&did.key);
 		bytes.push(self.credential_subject.current_status.clone().into());
 
@@ -75,7 +76,11 @@ impl IntoTerm for StatusSchema {
 
 		let from_address = address_from_ecdsa_key(&pk);
 		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		let weight = 25.;
+		if from_did != self.issuer {
+			return Err(AttTrError::VerificationError);
+		}
+
+		let weight = 50.;
 		let domain = Domain::SoftwareSecurity;
 		let form = match self.credential_subject.current_status {
 			CurrentStatus::Endorsed => true,
@@ -110,6 +115,7 @@ mod test {
 		let current_status = CurrentStatus::Endorsed;
 
 		let mut keccak = Keccak256::default();
+		keccak.update(&[did.schema.into()]);
 		keccak.update(&did.key);
 		keccak.update(&[current_status.clone().into()]);
 		let digest = keccak.finalize();
