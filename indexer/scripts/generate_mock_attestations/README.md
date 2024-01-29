@@ -3,6 +3,7 @@ nodejs version used v21.5.0
 generate mock attestations according to the spec
 https://hackmd.io/@VT6Lc8FNQL2AllbBc32ERg/H1akxxBrT#Abstract
 
+install the deps
 ```
 npm i 
 ```

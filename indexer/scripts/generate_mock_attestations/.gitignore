@@ -109,6 +109,6 @@ db*
 *.env
 *.csv
 package-lock.json
-
+output
 
 
