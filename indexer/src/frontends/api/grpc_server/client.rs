@@ -37,7 +37,7 @@ impl GRPCServerClient {
 		let mut client = IndexerClient::new(indexer_channel.clone());
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
 		let mut count = 0;
-		while let Ok(Some(res)) = response.message().await {
+		while let Ok(Some(_res)) = response.message().await {
 			// info!("{:?}", res);
 			count = count + 1;
 		}

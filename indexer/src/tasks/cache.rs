@@ -77,10 +77,8 @@ impl CacheService {
 		//    csv_reader.records().next();
 		//}
 
-		let records: Vec<Result<StringRecord, csv::Error>> = csv_reader
-			.into_records()
-			.take(limit) 
-			.collect();
+		let records: Vec<Result<StringRecord, csv::Error>> =
+			csv_reader.into_records().take(limit).collect();
 
 		records
 	}

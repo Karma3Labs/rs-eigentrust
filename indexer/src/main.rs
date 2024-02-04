@@ -7,7 +7,6 @@ mod tasks;
 
 use tokio::time::Duration;
 
-use crate::frontends::api::rest::server;
 use crate::frontends::api::grpc_server::client::GRPCServerClient;
 use crate::frontends::api::grpc_server::grpc_server::GRPCServer;
 use crate::logger::global::AppLogger;
@@ -60,8 +59,6 @@ async fn main() {
 
 	let mut server = GRPCServer::new(grpc_server_config, task_service);
 
-
-	
 	tokio::spawn(async {
 		crate::frontends::api::rest::server::serve().await;
 	});
