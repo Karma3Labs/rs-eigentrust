@@ -31,7 +31,7 @@ impl CacheService {
 		file_path
 	}
 
-	// gaps in syncing
+	// todo gaps in syncing?
 	pub async fn append(&self, records: Vec<TaskRecord>) -> Result<(), Box<dyn Error>> {
 		let file_path = self.get_file_path();
 		let _file_exists = File::open(&file_path).is_ok();
@@ -79,7 +79,7 @@ impl CacheService {
 
 		let records: Vec<Result<StringRecord, csv::Error>> = csv_reader
 			.into_records()
-			.take(limit) // todo
+			.take(limit) 
 			.collect();
 
 		records
