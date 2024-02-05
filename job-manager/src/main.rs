@@ -1,6 +1,6 @@
 use proto_buf;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
-use proto_buf::combiner::LtHistoryBatch;
+use proto_buf::combiner::{LtBatch, LtHistoryBatch};
 use proto_buf::transformer::transformer_client::TransformerClient;
 use proto_buf::transformer::{EventBatch, TermBatch};
 use std::error::Error;
@@ -137,6 +137,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	lt3.map(|x| println!("{:?}", x));
 	println!("SoftwareDevelopment - Distrust:");
 	lt4.map(|x| println!("{:?}", x));
+
+	let batch_new = LtBatch { domain: security_domain, form: trust_form, size: 100 };
+	let mut res_new = lc_client.get_new_data(Request::new(batch_new)).await?.into_inner();
+	while let Ok(Some(res)) = res_new.message().await {
+		println!("SoftwareSecurity - Trust - LT items: {:?}", res);
+	}
 
 	Ok(())
 }
