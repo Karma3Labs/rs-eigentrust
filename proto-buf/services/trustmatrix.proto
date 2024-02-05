@@ -1,0 +1,82 @@
+syntax = "proto3";
+package trustmatrix;
+
+option go_package =
+    "k3l.io/go-eigentrust/pkg/api/pb/trustmatrix;trustmatrixpb";
+
+message Header {
+  optional string id = 1;
+  repeated uint64 timestamp_qwords = 2;
+}
+
+message Entry {
+  string truster = 1;
+  string trustee = 2;
+  double value = 3;
+}
+
+message CreateRequest {
+}
+
+message CreateResponse {
+  string id = 1;
+}
+
+message GetRequest {
+  string id = 1;
+}
+
+message GetResponse {
+  oneof part {
+    Header header = 1;
+    Entry entry = 2;
+  }
+}
+
+message UpdateRequest {
+  Header header = 1;
+  repeated Entry entries = 2;
+}
+
+message UpdateResponse {
+}
+
+message FlushRequest {
+  string id = 1;
+}
+
+message FlushResponse {
+}
+
+message DeleteRequest {
+  string id = 1;
+}
+
+message DeleteResponse {
+}
+
+service Service {
+  // Create a new trust matrix (for local trust), return its ID.
+  rpc Create(CreateRequest) returns (CreateResponse) {}
+
+  // Get the full contents of a trust matrix.
+  // The header is sent first (includes metadata such as timestamp),
+  // followed by non-zero entries.
+  rpc Get(GetRequest) returns (stream GetResponse) {}
+
+  // Update a trust matrix.
+  // Entries for the same matrix with the same timestamp can be batched
+  // in the same request.
+  // Updates cannot go back in time:
+  // An update older than the target matrix is rejected.
+  // Updates can be empty (have zero entries):
+  // This can be used to force-update the timestamp of the trust matrix
+  // and trigger periodic re-compute of a compute job.
+  rpc Update(UpdateRequest) returns (UpdateResponse) {}
+
+  // Flush a trust matrix, i.e. remove (zero out) all its entries.
+  rpc Flush(FlushRequest) returns (FlushResponse) {}
+
+  // Delete a trust matrix altogether.
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+}

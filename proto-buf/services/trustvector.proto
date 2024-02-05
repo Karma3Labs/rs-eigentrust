@@ -1,0 +1,89 @@
+syntax = "proto3";
+package trustvector;
+
+import "google/protobuf/any.proto";
+
+option go_package =
+    "k3l.io/go-eigentrust/pkg/api/pb/trustvector;trustvectorpb";
+
+message Header {
+  optional string id = 1;
+  repeated uint64 timestamp_qwords = 2;
+}
+
+message Entry {
+  string trustee = 1;
+  double value = 2;
+}
+
+// Trust vector destination, i.e. where to publish.
+message Destination {
+  // Destination location scheme.
+  string scheme = 1;
+
+  // Scheme-specific parameters.
+  google.protobuf.Any params = 2;
+}
+
+message CreateRequest {
+}
+
+message CreateResponse {
+  string id = 1;
+}
+
+message GetRequest {
+  string id = 1;
+}
+
+message GetResponse {
+  oneof part {
+    Header header = 1;
+    Entry entry = 2;
+  }
+}
+
+message UpdateRequest {
+  Header header = 1;
+  repeated Entry entries = 2;
+}
+
+message UpdateResponse {
+}
+
+message FlushRequest {
+  string id = 1;
+}
+
+message FlushResponse {
+}
+
+message DeleteRequest {
+  string id = 1;
+}
+
+message DeleteResponse {
+}
+
+service Service {
+  // Create a new trust vector (for pre-trust and global trust), return its ID.
+  rpc Create(CreateRequest) returns (CreateResponse) {}
+
+  // Get the full contents of a trust vector.
+  // The header is setn first (includes metadata such as timestamp),
+  // followed by non-zero entries.
+  rpc Get(GetRequest) returns (stream GetResponse) {}
+
+  // Update a trust vector.
+  // Entries for the same vector with the same timestamp can be batched
+  // in the same request.
+  // Updates cannot go back in time:
+  // An update older than the target vector is rejected.
+  rpc Update(UpdateRequest) returns (UpdateResponse) {}
+
+  // Flush a trust vector, i.e. remove (zero out) all its entries.
+  rpc Flush(FlushRequest) returns (FlushResponse) {}
+
+  // Delete a trust vector altogether.
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+}
