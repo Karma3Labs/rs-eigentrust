@@ -93,6 +93,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res1.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt1[x][y] = res.value;
 	}
 
@@ -100,6 +103,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res2.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt2[x][y] = res.value;
 	}
 
@@ -107,6 +113,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res3.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt3[x][y] = res.value;
 	}
 
@@ -114,6 +123,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res4.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt4[x][y] = res.value;
 	}
 
