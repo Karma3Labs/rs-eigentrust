@@ -19,12 +19,12 @@ use term::Term;
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
 
-mod did;
-mod error;
-mod managers;
-mod schemas;
-mod term;
-mod utils;
+pub mod did;
+pub mod error;
+pub mod managers;
+pub mod schemas;
+pub mod term;
+pub mod utils;
 
 const MAX_TERM_BATCH_SIZE: u32 = 1000;
 const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";

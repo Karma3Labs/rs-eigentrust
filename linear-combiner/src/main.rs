@@ -17,9 +17,9 @@ use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
-mod error;
-mod item;
-mod managers;
+pub mod error;
+pub mod item;
+pub mod managers;
 
 #[derive(Clone)]
 struct LinearCombinerService {

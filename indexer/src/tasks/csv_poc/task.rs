@@ -75,7 +75,7 @@ impl BaseTask for CSVPOCTask {
 
 		let global = BaseTaskState { is_synced: is_finished, is_finished, records_total };
 
-		let from_new = self.state.from + self.state.range;
+		let _from_new = self.state.from + self.state.range;
 		let new_state = CSVPOCTaskState {
 			// from: from_new,
 			global,

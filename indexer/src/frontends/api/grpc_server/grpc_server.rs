@@ -4,10 +4,7 @@ use proto_buf::indexer::{
 	indexer_server::{Indexer, IndexerServer},
 	IndexerEvent, Query,
 };
-use std::{
-	error::Error,
-	time::{SystemTime, UNIX_EPOCH},
-};
+use std::{error::Error, time::SystemTime};
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
@@ -16,7 +13,6 @@ use super::types::GRPCServerConfig;
 use crate::tasks::service::TaskService;
 use crate::tasks::types::TaskResponse;
 use std::cmp;
-use std::sync::{Arc, Mutex};
 
 pub struct IndexerService {
 	data: Vec<TaskResponse>,
@@ -41,7 +37,7 @@ impl Indexer for IndexerService {
 	) -> Result<Response<Self::SubscribeStream>, Status> {
 		let inner = request.into_inner();
 
-		let start = SystemTime::now();
+		let _start = SystemTime::now();
 		// let current_secs = start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
 		let limit = cmp::min(
 			inner.offset + inner.count,

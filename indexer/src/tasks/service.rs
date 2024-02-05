@@ -52,7 +52,7 @@ impl TaskService {
 		thread::sleep(duration);
 	}
 
-	async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {
+	pub async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {
 		println!("{:?}", data);
 		data
 	}

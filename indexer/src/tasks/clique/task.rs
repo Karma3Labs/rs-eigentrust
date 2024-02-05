@@ -50,7 +50,7 @@ impl CliqueTask {
 
 #[tonic::async_trait]
 impl BaseTask for CliqueTask {
-	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse> {
+	async fn run(&mut self, _offset: Option<u64>, _limit: Option<u64>) -> Vec<TaskResponse> {
 		info!(
 			"Indexing logs in [{}..{}] block range",
 			self.state.from_block,
