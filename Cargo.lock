@@ -2756,6 +2756,7 @@ name = "proto-buf"
 version = "0.1.0"
 dependencies = [
  "prost",
+ "prost-types",
  "tonic",
  "tonic-build",
 ]
