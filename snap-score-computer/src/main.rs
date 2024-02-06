@@ -49,7 +49,12 @@ struct Args {
 	)]
 	go_eigentrust_grpc: String,
 
-	#[arg(long = "domain", value_name = "DOMAIN", help = "domain number to process")]
+	#[arg(
+		long = "domain",
+		value_name = "DOMAIN",
+		help = "domain number to process",
+		default_values = ["2"],
+	)]
 	domains: Vec<DomainId>,
 
 	#[arg(long = "lt-id", value_name = "DOMAIN>=<ID", help = "local trust matrix ID for domain")]
@@ -64,7 +69,8 @@ struct Args {
 	#[arg(
 		long = "status-schema",
 		value_name = "DOMAIN>=<SCHEMA",
-		help = "status schema for domain"
+		help = "status schema for domain",
+		default_values = ["2=4"],
 	)]
 	status_schemas: Vec<String>,
 
