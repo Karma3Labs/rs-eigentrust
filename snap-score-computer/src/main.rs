@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
-use log::{error, info};
+use log::{as_debug, as_display, as_error, debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
 use serde_jcs;
 use sha3::Digest;
@@ -80,6 +80,9 @@ struct Args {
 		default_value = "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0"
 	)]
 	issuer_id: String,
+
+	#[arg(long, default_value = "info")]
+	log_level: String,
 }
 
 type DomainId = u32;
@@ -155,9 +158,9 @@ struct StatusCredentialProof {
 }
 
 fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<dyn Error>> {
-	// println!("{}", vc_json);
+	// trace!(source = vc_json; "parsing StatusCredential");
 	let vc: StatusCredential = serde_json::from_str(vc_json)?;
-	// println!("{:?}", vc);
+	trace!(parsed = as_debug!(vc); "parsed StatusCredential");
 	if vc.type_ != "StatusCredential" {
 		return Err(SnapStatusError::InvalidType(vc.type_).into());
 	}
@@ -279,9 +282,11 @@ impl Domain {
 				self.last_update_ts = ts;
 				let ts_window = ts / interval * interval;
 				if self.last_compute_ts < ts_window {
-					println!(
-						"performing core compute for window [{}, {}) (triggering timestamp {})",
-						self.last_compute_ts, ts_window, ts
+					info!(
+						window_from = self.last_compute_ts,
+						window_to = ts_window,
+						triggering_timestamp = ts;
+						"performing core compute"
 					);
 					self.last_compute_ts = ts_window;
 					match self.run_et(et_client, tv_client, alpha).await {
@@ -289,7 +294,10 @@ impl Domain {
 							self.gt = gt1;
 						},
 						Err(e) => {
-							println!("compute failed: {}", e);
+							error!(
+								err = as_debug!(e);
+								"compute failed, Snap scores will be based on old peer scores",
+							);
 						},
 					}
 					self.fetch_did_mapping(lc_client).await?;
@@ -326,9 +334,9 @@ impl Domain {
 						let manifest_file = std::fs::File::create(&manifest_path)?;
 						serde_jcs::to_writer(manifest_file, &manifest)?;
 					}
-					// println!("finished performing core compute");
+					// trace!("finished performing core compute");
 				}
-				// println!("domain {} update {:?}", self.domain_id, update);
+				trace!(domain = self.domain_id, update = as_debug!(update); "processing update");
 				match update.body {
 					UpdateBody::LocalTrust(lt) => {
 						if !lt.is_empty() {
@@ -429,20 +437,17 @@ impl Domain {
 							self.peer_id_to_did.insert(entry.id, did.clone());
 						},
 						Err(e) => {
-							println!("invalid UTF-8 DID encountered: {}", e);
+							error!(err = as_error!(e); "invalid UTF-8 DID encountered");
 						},
 					},
 					Err(e) => {
-						println!("invalid hex DID encountered: {:?}", e);
+						error!(err = as_debug!(e); "invalid hex DID encountered");
 					},
 				}
 				start = entry.id + 1;
 				more = true;
 			}
 		}
-		// for (id, did) in &self.peer_id_to_did {
-		// 	println!("{} -> {}", id, did);
-		// }
 		Ok(())
 	}
 
@@ -486,7 +491,7 @@ impl Domain {
 							.insert(issuer_id, value);
 					},
 					Err(_err) => {
-						// println!("cannot process entry: {}", _err);
+						warn!(err = as_display!(_err); "cannot process entry");
 					},
 				}
 			}
@@ -515,11 +520,7 @@ impl Domain {
 				value: *value,
 			});
 		}
-		println!(
-			"copied {} LT entries for timestamp {}",
-			update_req.entries.len(),
-			timestamp,
-		);
+		info!(count = update_req.entries.len(), ts = timestamp; "copied LT entries");
 		tm_client.update(update_req).await?;
 		Ok(())
 	}
@@ -560,7 +561,9 @@ impl Domain {
 								gt.insert(trustee, entry.value);
 							},
 							Err(error) => {
-								println!("cannot parse gt trustee {:?}: {}", entry.trustee, error);
+								error!(
+									err = as_error!(error), trustee = entry.trustee;
+									"cannot parse gt trustee");
 							},
 						}
 					},
@@ -571,36 +574,35 @@ impl Domain {
 	}
 
 	async fn compute_snap_scores(&mut self) -> Result<(), Box<dyn Error>> {
-		// println!("snap_statuses={:?}", self.snap_statuses);
 		self.snap_scores.clear();
 		for (snap_id, opinions) in &self.snap_statuses {
-			// println!("computing snap score for {}", snap_id);
+			trace!(snap = snap_id; "computing snap score");
 			let (score_value, score_confidence) =
 				self.snap_scores.entry(snap_id.clone()).or_default();
 			for (issuer_did, opinion) in opinions {
 				let issuer_did = issuer_did.clone();
-				// println!("{} said {}", issuer_did, opinion);
+				trace!(issuer = issuer_did, opinion = opinion; "one opinion");
 				if let Some(id) = self.peer_did_to_id.get(&issuer_did) {
-					// println!("{} is a valid issuer -> {}", issuer_did, id);
+					trace!(did = issuer_did, id = id; "issuer mapping");
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
+					trace!(issuer = issuer_did, weight = weight; "issuer score (weight)");
 					if weight > 0.0 {
-						// println!("{} is a trusted issuer -> {}", issuer_did, weight);
 						*score_value = opinion * weight;
 						*score_confidence += weight;
-					} else {
-						// println!("{} is not a trusted issuer -> {}", issuer_did, weight);
 					}
 				} else {
-					println!("unknown ID for issuer DID {}", issuer_did);
+					warn!(did = issuer_did; "unknown issuer");
 				}
 			}
 			if *score_confidence != 0.0 {
 				*score_value /= *score_confidence;
 			}
-			// println!(
-			// 	"snap {} has score {} (confidence {})",
-			// 	snap_id, *score_value, *score_confidence
-			// );
+			trace!(
+				snap = snap_id,
+				value = *score_value,
+				confidence = *score_confidence;
+				"snap score",
+			);
 		}
 		Ok(())
 	}
@@ -671,7 +673,6 @@ impl Domain {
 			.map_err(|e| MainError::CannotConvertToHex(e))?;
 		vc.id = "0x".to_owned() + &String::from_utf8(Vec::from(vc_hash_hex))?;
 		let vc_jcs = serde_jcs::to_string(&vc)?;
-		// println!("{}", vc_jcs);
 		Ok(vc_jcs)
 	}
 
@@ -763,8 +764,7 @@ impl Main {
 		Ok(m)
 	}
 
-	pub fn new() -> Result<Box<Self>, Box<dyn Error>> {
-		let args = Args::parse();
+	pub fn new(args: Args) -> Result<Box<Self>, Box<dyn Error>> {
 		let mut lt_ids = Self::parse_domain_params(&args.lt_ids)?;
 		let mut pt_ids = Self::parse_domain_params(&args.pt_ids)?;
 		let mut gt_ids = Self::parse_domain_params(&args.gt_ids)?;
@@ -806,22 +806,25 @@ impl Main {
 	}
 
 	pub async fn main(&mut self) -> Result<(), Box<dyn Error>> {
-		// println!("indexer_grpc={}", self.args.indexer_grpc);
-		// println!("linear_combiner_grpc={}", self.args.linear_combiner_grpc);
-		// println!("go_eigentrust_grpc={}", self.args.go_eigentrust_grpc)
+		info!(
+			idx = self.args.indexer_grpc,
+			lc = self.args.linear_combiner_grpc,
+			et = self.args.go_eigentrust_grpc;
+			"gRPC endpoints",
+		);
 
 		let mut interval = tokio::time::interval(Duration::from_secs(10));
 		info!("initializing go-eigentrust");
 		self.init_et().await?;
 		loop {
-			println!("scheduling next run");
+			debug!("scheduling next run");
 			interval.tick().await;
 			match self.run_once().await {
 				Ok(_) => {
-					// println!("finished run");
+					trace!("finished run");
 				},
 				Err(err) => {
-					println!("failed run: {0}", err);
+					error!(err = as_display!(err); "failed run");
 				},
 			}
 		}
@@ -870,11 +873,11 @@ impl Main {
 					let res = tm_client.create(trustmatrix::CreateRequest {}).await?.into_inner();
 					let lt_id = res.id;
 					domain.lt_id = Some(lt_id.clone());
-					println!("created local trust {} for domain {}", lt_id, domain_id,);
+					info!(id = lt_id, domain = domain_id; "created local trust");
 				},
 				Some(lt_id) => {
 					tm_client.flush(trustmatrix::FlushRequest { id: lt_id.clone() }).await?;
-					println!("flushed local trust {} for domain {}", lt_id, domain_id);
+					info!(id = lt_id, domain = domain_id; "flushed local trust");
 				},
 			}
 			match &domain.pt_id {
@@ -882,11 +885,11 @@ impl Main {
 					let res = tv_client.create(trustvector::CreateRequest {}).await?.into_inner();
 					let pt_id = res.id;
 					domain.pt_id = Some(pt_id.clone());
-					println!("created pre-trust {} for domain {}", pt_id, domain_id,);
+					info!(id = pt_id, domain = domain_id; "created pre-trust");
 				},
 				Some(pt_id) => {
 					tv_client.flush(trustvector::FlushRequest { id: pt_id.clone() }).await?;
-					println!("flushed pre-trust {} for domain {}", pt_id, domain_id);
+					info!(id = pt_id, domain = domain_id; "flushed pre-trust");
 				},
 			}
 			match &domain.gt_id {
@@ -894,11 +897,11 @@ impl Main {
 					let res = tv_client.create(trustvector::CreateRequest {}).await?.into_inner();
 					let gt_id = res.id;
 					domain.gt_id = Some(gt_id.clone());
-					println!("created global trust {} for domain {}", gt_id, domain_id,);
+					info!(id = gt_id, domain = domain_id; "created global trust");
 				},
 				Some(gt_id) => {
 					tv_client.flush(trustvector::FlushRequest { id: gt_id.clone() }).await?;
-					println!("flushed global trust {} for domain {}", gt_id, domain_id);
+					info!(id = gt_id, domain = domain_id; "flushed global trust");
 				},
 			}
 		}
@@ -912,7 +915,7 @@ impl Main {
 		let tv_client = &mut self.tv_client().await?;
 		let et_client = &mut self.et_client().await?;
 		for (&domain_id, domain) in &mut self.domains {
-			// println!("processing domain {}", domain_id);
+			// trace!(id = domain_id; "processing domain");
 			if let Err(e) = domain
 				.run_once(
 					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
@@ -920,7 +923,7 @@ impl Main {
 				)
 				.await
 			{
-				println!("cannot process domain {}: {}", domain_id, e);
+				error!(err = as_display!(&e), id = domain_id; "cannot process domain");
 			}
 		}
 		Ok(())
@@ -929,11 +932,18 @@ impl Main {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let mut m = Main::new().map_err(|e| MainError::CannotInit(e))?;
+	let args = Args::parse();
+	{
+		let log_writer = structured_logger::async_json::new_writer(tokio::io::stdout());
+		structured_logger::Builder::with_level(args.log_level.as_str())
+			.with_target_writer("*", log_writer)
+			.init();
+	}
+	let mut m = Main::new(args).map_err(|e| MainError::CannotInit(e))?;
 	match m.main().await {
 		Ok(()) => Ok(()),
 		Err(e) => {
-			println!("Server error: {}", e);
+			error!(err = as_display!(&e); "server error");
 			Err(e)
 		},
 	}
