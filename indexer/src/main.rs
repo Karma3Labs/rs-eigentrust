@@ -1,3 +1,4 @@
+mod cli;
 pub mod clients;
 pub mod config;
 pub mod frontends;
@@ -5,6 +6,7 @@ pub mod logger;
 pub mod storage;
 pub mod tasks;
 
+use clap::Parser;
 use tracing::info;
 
 use crate::frontends::api::grpc_server::grpc_server::GRPCServer;
@@ -21,6 +23,7 @@ use crate::config::dotenv::Config;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let config = Config::from_env();
+	let args = cli::Args::parse();
 
 	let logger_config = config.logger_config.clone();
 	let logger: AppLogger = AppLogger::new(logger_config);
@@ -32,10 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let lm_db_config = config.lm_db_config;
 	let db = LMDBClient::new(lm_db_config);
 
-	let csv_client_config = CSVClientConfig {
-		// path: "./assets/csv/mock.csv".to_string(),
-		path: "./scripts/generate_mock_attestations/output/output.csv".to_string(),
-	};
+	let csv_client_config = CSVClientConfig { path: args.csv.clone() };
 	let csv_client = CSVClient::new(csv_client_config);
 	let csv_poc_task = CSVPOCTask::new(csv_client);
 
