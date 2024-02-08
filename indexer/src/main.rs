@@ -9,10 +9,10 @@ pub mod tasks;
 use clap::Parser;
 use tracing::info;
 
-use crate::frontends::api::grpc_server::grpc_server::GRPCServer;
 use crate::logger::global::AppLogger;
-use crate::storage::lm_db::lm_db::LMDBClient;
 use crate::tasks::service::TaskService;
+use frontends::api::grpc_server::GRPCServer;
+use storage::lm_db::LMDBClient;
 
 use crate::clients::csv::{client::CSVClient, types::CSVClientConfig};
 

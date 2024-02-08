@@ -37,7 +37,7 @@ impl TaskService {
 
 			let state = self.task.get_state();
 
-			if state.is_finished == true {
+			if state.is_finished {
 				info!("Job id={} is finished", task_id);
 				break;
 			}
@@ -59,8 +59,6 @@ impl TaskService {
 
 	// todo tmp shortcut for poc
 	pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskResponse> {
-		let res = self.task.run(Some(offset), Some(limit)).await;
-
-		res
+		self.task.run(Some(offset), Some(limit)).await
 	}
 }
