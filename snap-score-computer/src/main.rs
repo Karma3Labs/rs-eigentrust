@@ -23,68 +23,67 @@ use proto_buf::{combiner, compute};
 
 #[derive(ClapParser)]
 struct Args {
-	#[arg(
-		long,
-		value_name = "URL",
-		help = "indexer gRPC endpoint",
-		default_value = "http://[::1]:50050"
-	)]
+	/// Indexer gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50050")]
 	indexer_grpc: String,
 
-	#[arg(
-		long,
-		value_name = "URL",
-		help = "linear combiner gRPC endpoint",
-		default_value = "http://[::1]:50052"
-	)]
+	/// Linear combiner gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50052")]
 	linear_combiner_grpc: String,
 
-	#[arg(
-		long,
-		value_name = "URL",
-		help = "go-eigentrust gRPC endpoint",
-		default_value = "http://[::1]:8080"
-	)]
+	/// go-eigentrust gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:8080")]
 	go_eigentrust_grpc: String,
 
-	#[arg(
-    long = "domain",
-    value_name = "DOMAIN",
-    help = "domain number to process",
-    default_values = ["2"],
-    )]
+	/// Domain number to process.
+	///
+	/// May be repeated.
+	#[arg(long = "domain", value_name = "DOMAIN", default_values = ["2"])]
 	domains: Vec<DomainId>,
 
-	#[arg(long = "lt-id", value_name = "DOMAIN>=<ID", help = "local trust matrix ID for domain")]
+	/// Local trust matrix ID for domain.
+	///
+	/// May be repeated.
+	/// If not specified (for a domain), a new one is created and its ID logged.
+	#[arg(long = "lt-id", value_name = "DOMAIN=ID")]
 	lt_ids: Vec<String>,
 
-	#[arg(long = "pt-id", value_name = "DOMAIN>=<ID", help = "pre-trust vector ID for domain")]
+	/// Pre-trust vector ID for domain.
+	///
+	/// May be repeated.
+	/// If not specified (for a domain), a new one is created and its ID logged.
+	#[arg(long = "pt-id", value_name = "DOMAIN=ID")]
 	pt_ids: Vec<String>,
 
-	#[arg(long = "gt-id", value_name = "DOMAIN>=<ID", help = "global trust vector ID for domain")]
+	/// Global trust vector ID for domain.
+	///
+	/// May be repeated.
+	/// If not specified (for a domain), a new one is created and its ID logged.
+	#[arg(long = "gt-id", value_name = "DOMAIN=ID")]
 	gt_ids: Vec<String>,
 
-	#[arg(
-    long = "status-schema",
-    value_name = "DOMAIN>=<SCHEMA",
-    help = "status schema for domain",
-    default_values = ["2=4"],
-    )]
+	/// Status schema for domain.
+	///
+	/// May be repeated.
+	/// Specifying this enables StatusCredential processing for the domain.
+	#[arg(long = "status-schema", value_name = "DOMAIN=SCHEMA-ID", default_values = ["2=4"])]
 	status_schemas: Vec<String>,
 
-	#[arg(long, help = "interval at which to recompute scores", default_value = "600000")]
+	/// Interval at which to recompute scores.
+	#[arg(long, default_value = "600000")]
 	interval: u64,
 
-	#[arg(long, help = "EigenTrust alpha value")]
+	/// EigenTrust alpha value.
+	///
+	/// If not specified, uses the go-eigentrust default.
+	#[arg(long)]
 	alpha: Option<f64>,
 
-	#[arg(
-		long,
-		help = "issuer DID",
-		default_value = "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0"
-	)]
+	/// Score credential issuer DID.
+	#[arg(long, default_value = "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0")]
 	issuer_id: String,
 
+	/// Minimum log level.
 	#[arg(long, default_value = "info")]
 	log_level: String,
 }
