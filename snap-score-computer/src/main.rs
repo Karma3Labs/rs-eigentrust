@@ -612,6 +612,12 @@ impl Domain {
 		&mut self, et_client: &mut ComputeClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, alpha: Option<f64>,
 	) -> Result<TrustVector, Box<dyn Error>> {
+		Self::copy_vector(
+			tv_client,
+			self.pt_id.as_ref().unwrap(),
+			self.gt_id.as_ref().unwrap(),
+		)
+		.await?;
 		et_client
 			.basic_compute(compute::BasicComputeRequest {
 				params: Some(compute::Params {
@@ -626,12 +632,6 @@ impl Domain {
 			})
 			.await?;
 		let mut gt = TrustVector::new();
-		Self::copy_vector(
-			tv_client,
-			self.pt_id.as_ref().unwrap(),
-			self.gt_id.as_ref().unwrap(),
-		)
-		.await?;
 		let mut stream = tv_client
 			.get(trustvector::GetRequest { id: self.gt_id.as_ref().unwrap().clone() })
 			.await?
