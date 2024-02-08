@@ -1,10 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Debug;
 use std::io::IsTerminal;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha3::Digest;
 use thiserror::Error as ThisError;
@@ -92,6 +93,13 @@ struct Args {
 	/// Score credential issuer DID.
 	#[arg(long, default_value = "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0")]
 	issuer_id: String,
+
+	/// Pre-trusted peer.
+	///
+	/// May be repeated.
+	/// If not specified, a uniform trust is used for pre-trust.
+	#[arg(long, value_name = "DID")]
+	pre_trusted: Vec<String>,
 
 	/// Minimum log level.
 	#[arg(long, default_value = "info")]
@@ -246,7 +254,7 @@ impl Domain {
 		&mut self, idx_client: &mut IndexerClient<Channel>,
 		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
-		interval: Timestamp, alpha: Option<f64>, issuer_id: &str,
+		interval: Timestamp, alpha: Option<f64>, issuer_id: &str, pending_pt: &mut HashSet<String>,
 	) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
 		Self::fetch_local_trust(
@@ -305,6 +313,37 @@ impl Domain {
 						"performing core compute"
 					);
 					self.last_compute_ts = ts_window;
+					self.fetch_did_mapping(lc_client).await?;
+					{
+						let new_pt_entries = pending_pt
+							.iter()
+							.cloned()
+							.filter_map(|did| self.peer_did_to_id.get(&did).map(|id| (did, id)))
+							.collect_vec();
+						if !new_pt_entries.is_empty() {
+							debug!(?new_pt_entries, "adding pre-trusted peers");
+							let req = trustvector::UpdateRequest {
+								header: Some(trustvector::Header {
+									id: self.pt_id.clone(),
+									timestamp_qwords: vec![ts],
+								}),
+								entries: new_pt_entries
+									.iter()
+									.map(|(_, id)| trustvector::Entry {
+										trustee: id.to_string(),
+										value: 1.0,
+									})
+									.collect(),
+							};
+							tv_client.update(req).await?.into_inner();
+							let before = pending_pt.len();
+							for (did, _) in new_pt_entries {
+								pending_pt.remove(&did);
+							}
+							let after = pending_pt.len();
+							info!(before, after, "added pre-trusted peers");
+						}
+					}
 					match self.run_et(et_client, tv_client, alpha).await {
 						Ok(gt1) => {
 							self.gt = gt1;
@@ -316,7 +355,6 @@ impl Domain {
 							);
 						},
 					}
-					self.fetch_did_mapping(lc_client).await?;
 					let manifest = self.make_manifest(issuer_id, ts_window).await?;
 					let manifest_path = std::path::Path::new("spd_scores.json");
 					let zip_path = std::path::Path::new("spd_scores.zip");
@@ -758,6 +796,7 @@ struct ManifestProof {}
 
 struct Main {
 	args: Args,
+	pending_pre_trusted: HashSet<String>,
 	domains: BTreeMap<DomainId, Domain>,
 }
 
@@ -795,7 +834,9 @@ impl Main {
 		domain_ids.extend(pt_ids.keys());
 		domain_ids.extend(gt_ids.keys());
 		domain_ids.extend(status_schemas.keys());
-		let mut main = Box::new(Self { args, domains: BTreeMap::new() });
+		let domains = BTreeMap::new();
+		let remaining_pre_trust = args.pre_trusted.iter().cloned().collect();
+		let mut main = Box::new(Self { args, domains, pending_pre_trusted: remaining_pre_trust });
 		for domain_id in domain_ids {
 			main.domains.insert(
 				domain_id,
@@ -926,7 +967,7 @@ impl Main {
 			if let Err(e) = domain
 				.run_once(
 					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
-					self.args.alpha, &self.args.issuer_id,
+					self.args.alpha, &self.args.issuer_id, &mut self.pending_pre_trusted,
 				)
 				.await
 			{

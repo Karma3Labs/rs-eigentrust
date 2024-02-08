@@ -9,7 +9,7 @@ members = [
     "snap-score-computer",
     "job-manager",
     "proto-buf",
-    "spd-tv"
+    "spd-tv",
 ]
 
 [workspace.package]
