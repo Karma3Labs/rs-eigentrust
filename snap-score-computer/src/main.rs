@@ -1,14 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt::Debug;
+use std::io::IsTerminal;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
-use log::{as_debug, as_display, as_error, debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
 use sha3::Digest;
 use thiserror::Error as ThisError;
 use tonic::transport::Channel;
+use tracing::{debug, error, info, trace, warn};
 
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
@@ -20,6 +21,15 @@ use proto_buf::trustmatrix::service_client::ServiceClient as TrustMatrixClient;
 use proto_buf::trustvector;
 use proto_buf::trustvector::service_client::ServiceClient as TrustVectorClient;
 use proto_buf::{combiner, compute};
+
+/// Log format and destination.
+#[derive(Clone, Debug, clap::ValueEnum)]
+enum LogFormatArg {
+	/// JSON onto stdout (default if stderr is not a terminal).
+	Json,
+	/// ANSI terminal onto stderr (default if stderr is a terminal).
+	Ansi,
+}
 
 #[derive(ClapParser)]
 struct Args {
@@ -85,7 +95,11 @@ struct Args {
 
 	/// Minimum log level.
 	#[arg(long, default_value = "info")]
-	log_level: String,
+	log_level: tracing_subscriber::filter::LevelFilter,
+
+	/// Log format (and destination).
+	#[arg(long)]
+	log_format: Option<LogFormatArg>,
 }
 
 type DomainId = u32;
@@ -161,9 +175,9 @@ struct StatusCredentialProof {
 }
 
 fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<dyn Error>> {
-	// trace!(source = vc_json; "parsing StatusCredential");
+	// trace!(source = vc_json, "parsing StatusCredential");
 	let vc: StatusCredential = serde_json::from_str(vc_json)?;
-	trace!(parsed = as_debug!(vc); "parsed StatusCredential");
+	trace!(parsed = ?vc, "parsed StatusCredential");
 	if vc.type_ != "StatusCredential" {
 		return Err(SnapStatusError::InvalidType(vc.type_).into());
 	}
@@ -287,7 +301,7 @@ impl Domain {
 					info!(
 						window_from = self.last_compute_ts,
 						window_to = ts_window,
-						triggering_timestamp = ts;
+						triggering_timestamp = ts,
 						"performing core compute"
 					);
 					self.last_compute_ts = ts_window;
@@ -297,7 +311,7 @@ impl Domain {
 						},
 						Err(e) => {
 							error!(
-								err = as_debug!(e);
+								err = ?e,
 								"compute failed, Snap scores will be based on old peer scores",
 							);
 						},
@@ -338,7 +352,7 @@ impl Domain {
 					}
 					// trace!("finished performing core compute");
 				}
-				trace!(domain = self.domain_id, update = as_debug!(update); "processing update");
+				trace!(domain = self.domain_id, ?update, "processing update");
 				match update.body {
 					UpdateBody::LocalTrust(lt) => {
 						if !lt.is_empty() {
@@ -437,11 +451,11 @@ impl Domain {
 							self.peer_id_to_did.insert(entry.id, did.clone());
 						},
 						Err(e) => {
-							error!(err = as_error!(e); "invalid UTF-8 DID encountered");
+							error!(err = %e, "invalid UTF-8 DID encountered");
 						},
 					},
 					Err(e) => {
-						error!(err = as_debug!(e); "invalid hex DID encountered");
+						error!(err = ?e, "invalid hex DID encountered");
 					},
 				}
 				start = entry.id + 1;
@@ -491,7 +505,7 @@ impl Domain {
 							.insert(issuer_id, value);
 					},
 					Err(_err) => {
-						warn!(err = as_display!(_err); "cannot process entry");
+						warn!(err = %_err, "cannot process entry");
 					},
 				}
 			}
@@ -520,7 +534,11 @@ impl Domain {
 				value: *value,
 			});
 		}
-		info!(count = update_req.entries.len(), ts = timestamp; "copied LT entries");
+		info!(
+			count = update_req.entries.len(),
+			ts = timestamp,
+			"copied LT entries"
+		);
 		tm_client.update(update_req).await?;
 		Ok(())
 	}
@@ -562,7 +580,7 @@ impl Domain {
 							},
 							Err(error) => {
 								error!(
-									err = as_error!(error), trustee = entry.trustee;
+									err = ?error, trustee = entry.trustee,
 									"cannot parse gt trustee");
 							},
 						}
@@ -576,22 +594,22 @@ impl Domain {
 	async fn compute_snap_scores(&mut self) -> Result<(), Box<dyn Error>> {
 		self.snap_scores.clear();
 		for (snap_id, opinions) in &self.snap_statuses {
-			trace!(snap = snap_id; "computing snap score");
+			trace!(snap = snap_id, "computing snap score");
 			let (score_value, score_confidence) =
 				self.snap_scores.entry(snap_id.clone()).or_default();
 			for (issuer_did, opinion) in opinions {
 				let issuer_did = issuer_did.clone();
-				trace!(issuer = issuer_did, opinion = opinion; "one opinion");
+				trace!(issuer = issuer_did, opinion, "one opinion");
 				if let Some(id) = self.peer_did_to_id.get(&issuer_did) {
-					trace!(did = issuer_did, id = id; "issuer mapping");
+					trace!(did = issuer_did, id, "issuer mapping");
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
-					trace!(issuer = issuer_did, weight = weight; "issuer score (weight)");
+					trace!(issuer = issuer_did, weight, "issuer score (weight)");
 					if weight > 0.0 {
 						*score_value = opinion * weight;
 						*score_confidence += weight;
 					}
 				} else {
-					warn!(did = issuer_did; "unknown issuer");
+					warn!(did = issuer_did, "unknown issuer");
 				}
 			}
 			if *score_confidence != 0.0 {
@@ -600,7 +618,7 @@ impl Domain {
 			trace!(
 				snap = snap_id,
 				value = *score_value,
-				confidence = *score_confidence;
+				confidence = *score_confidence,
 				"snap score",
 			);
 		}
@@ -810,7 +828,7 @@ impl Main {
 		info!(
 			idx = self.args.indexer_grpc.uri().to_string(),
 			lc = self.args.linear_combiner_grpc.uri().to_string(),
-			et = self.args.go_eigentrust_grpc.uri().to_string();
+			et = self.args.go_eigentrust_grpc.uri().to_string(),
 			"gRPC endpoints",
 		);
 
@@ -825,7 +843,7 @@ impl Main {
 					trace!("finished run");
 				},
 				Err(err) => {
-					error!(err = as_display!(err); "failed run");
+					error!(err = ?err, "failed run");
 				},
 			}
 		}
@@ -862,11 +880,11 @@ impl Main {
 					let res = tm_client.create(trustmatrix::CreateRequest {}).await?.into_inner();
 					let lt_id = res.id;
 					domain.lt_id = Some(lt_id.clone());
-					info!(id = lt_id, domain = domain_id; "created local trust");
+					info!(id = lt_id, domain = domain_id, "created local trust");
 				},
 				Some(lt_id) => {
 					tm_client.flush(trustmatrix::FlushRequest { id: lt_id.clone() }).await?;
-					info!(id = lt_id, domain = domain_id; "flushed local trust");
+					info!(id = lt_id, domain = domain_id, "flushed local trust");
 				},
 			}
 			match &domain.pt_id {
@@ -874,11 +892,11 @@ impl Main {
 					let res = tv_client.create(trustvector::CreateRequest {}).await?.into_inner();
 					let pt_id = res.id;
 					domain.pt_id = Some(pt_id.clone());
-					info!(id = pt_id, domain = domain_id; "created pre-trust");
+					info!(id = pt_id, domain = domain_id, "created pre-trust");
 				},
 				Some(pt_id) => {
 					tv_client.flush(trustvector::FlushRequest { id: pt_id.clone() }).await?;
-					info!(id = pt_id, domain = domain_id; "flushed pre-trust");
+					info!(id = pt_id, domain = domain_id, "flushed pre-trust");
 				},
 			}
 			match &domain.gt_id {
@@ -886,11 +904,11 @@ impl Main {
 					let res = tv_client.create(trustvector::CreateRequest {}).await?.into_inner();
 					let gt_id = res.id;
 					domain.gt_id = Some(gt_id.clone());
-					info!(id = gt_id, domain = domain_id; "created global trust");
+					info!(id = gt_id, domain = domain_id, "created global trust");
 				},
 				Some(gt_id) => {
 					tv_client.flush(trustvector::FlushRequest { id: gt_id.clone() }).await?;
-					info!(id = gt_id, domain = domain_id; "flushed global trust");
+					info!(id = gt_id, domain = domain_id, "flushed global trust");
 				},
 			}
 		}
@@ -904,7 +922,7 @@ impl Main {
 		let tv_client = &mut self.tv_client().await?;
 		let et_client = &mut self.et_client().await?;
 		for (&domain_id, domain) in &mut self.domains {
-			// trace!(id = domain_id; "processing domain");
+			// trace!(id = domain_id, "processing domain");
 			if let Err(e) = domain
 				.run_once(
 					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
@@ -912,7 +930,7 @@ impl Main {
 				)
 				.await
 			{
-				error!(err = as_display!(&e), id = domain_id; "cannot process domain");
+				error!(err = %e, id = domain_id, "cannot process domain");
 			}
 		}
 		Ok(())
@@ -931,16 +949,32 @@ fn write_full(w: &mut dyn std::io::Write, buf: &[u8]) -> std::io::Result<()> {
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
 	{
-		let log_writer = structured_logger::async_json::new_writer(tokio::io::stdout());
-		structured_logger::Builder::with_level(args.log_level.as_str())
-			.with_target_writer("*", log_writer)
-			.init();
+		let log_format = args.log_format.clone().unwrap_or_else(|| {
+			if std::io::stderr().is_terminal() {
+				LogFormatArg::Ansi
+			} else {
+				LogFormatArg::Json
+			}
+		});
+		let builder = tracing_subscriber::FmtSubscriber::builder().with_max_level(args.log_level);
+		match log_format {
+			LogFormatArg::Ansi => {
+				tracing::subscriber::set_global_default(
+					builder.with_writer(std::io::stderr).with_ansi(true).finish(),
+				)?;
+			},
+			LogFormatArg::Json => {
+				tracing::subscriber::set_global_default(
+					builder.with_writer(std::io::stdout).with_ansi(false).json().finish(),
+				)?;
+			},
+		}
 	}
 	let mut m = Main::new(args).map_err(|e| MainError::Init(e))?;
 	match m.main().await {
 		Ok(()) => Ok(()),
 		Err(e) => {
-			error!(err = as_display!(&e); "server error");
+			error!(err = %e, "server error");
 			Err(e)
 		},
 	}
