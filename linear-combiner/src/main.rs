@@ -36,7 +36,7 @@ impl LinearCombinerService {
 			db_url,
 			vec!["checkpoint", "index", "item", "mapping", "update"],
 		)
-		.map_err(|e| LcError::DbError(e))?;
+		.map_err(LcError::DbError)?;
 		CheckpointManager::init(&db)?;
 
 		Ok(Self { db_url: db_url.to_string() })
@@ -45,10 +45,6 @@ impl LinearCombinerService {
 
 #[tonic::async_trait]
 impl LinearCombiner for LinearCombinerService {
-	type GetNewDataStream = ReceiverStream<Result<LtObject, Status>>;
-	type GetHistoricDataStream = ReceiverStream<Result<LtObject, Status>>;
-	type GetDidMappingStream = ReceiverStream<Result<Mapping, Status>>;
-
 	async fn sync_transformer(
 		&self, request: Request<Streaming<TermObject>>,
 	) -> Result<Response<Void>, Status> {
@@ -115,7 +111,7 @@ impl LinearCombiner for LinearCombinerService {
 
 		Ok(Response::new(Void {}))
 	}
-
+	type GetDidMappingStream = ReceiverStream<Result<Mapping, Status>>;
 	async fn get_did_mapping(
 		&self, request: Request<MappingQuery>,
 	) -> Result<Response<Self::GetDidMappingStream>, Status> {
@@ -137,6 +133,8 @@ impl LinearCombiner for LinearCombinerService {
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
+
+	type GetNewDataStream = ReceiverStream<Result<LtObject, Status>>;
 
 	async fn get_new_data(
 		&self, request: Request<LtBatch>,
@@ -168,6 +166,8 @@ impl LinearCombiner for LinearCombinerService {
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
+
+	type GetHistoricDataStream = ReceiverStream<Result<LtObject, Status>>;
 
 	async fn get_historic_data(
 		&self, request: Request<LtHistoryBatch>,

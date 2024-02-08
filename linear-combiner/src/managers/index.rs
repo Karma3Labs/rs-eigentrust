@@ -6,17 +6,17 @@ pub struct IndexManager;
 
 impl IndexManager {
 	pub fn get_index(db: &DB, source: String, offset: u32) -> Result<([u8; 4], bool), LcError> {
-		let cf = db.cf_handle("index").ok_or_else(|| LcError::NotFoundError)?;
+		let cf = db.cf_handle("index").ok_or(LcError::NotFoundError)?;
 
 		let key = source.as_bytes();
-		let source_index = db.get_cf(&cf, key).map_err(|e| LcError::DbError(e))?;
+		let source_index = db.get_cf(&cf, key).map_err(LcError::DbError)?;
 
 		let x = if let Some(from_i) = source_index {
 			let from_bytes: [u8; 4] = from_i.try_into().map_err(|_| LcError::ParseError)?;
 			(from_bytes, false)
 		} else {
 			let curr_offset = offset.to_be_bytes();
-			db.put_cf(&cf, key, curr_offset).map_err(|e| LcError::DbError(e))?;
+			db.put_cf(&cf, key, curr_offset).map_err(LcError::DbError)?;
 			(curr_offset, true)
 		};
 
