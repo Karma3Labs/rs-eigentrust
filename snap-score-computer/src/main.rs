@@ -936,8 +936,7 @@ impl Main {
 					info!(id = pt_id, domain = domain_id, "created pre-trust");
 				},
 				Some(pt_id) => {
-					tv_client.flush(trustvector::FlushRequest { id: pt_id.clone() }).await?;
-					info!(id = pt_id, domain = domain_id, "flushed pre-trust");
+					info!(id = pt_id, domain = domain_id, "using existing pre-trust");
 				},
 			}
 			match &domain.gt_id {
@@ -948,8 +947,11 @@ impl Main {
 					info!(id = gt_id, domain = domain_id, "created global trust");
 				},
 				Some(gt_id) => {
-					tv_client.flush(trustvector::FlushRequest { id: gt_id.clone() }).await?;
-					info!(id = gt_id, domain = domain_id, "flushed global trust");
+					info!(
+						id = gt_id,
+						domain = domain_id,
+						"using existing global trust (as the initial vector)"
+					);
 				},
 			}
 		}
