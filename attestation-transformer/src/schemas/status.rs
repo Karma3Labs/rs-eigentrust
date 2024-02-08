@@ -10,11 +10,11 @@ pub enum CurrentStatus {
 	Disputed,
 }
 
-impl Into<u8> for CurrentStatus {
-	fn into(self) -> u8 {
-		match self {
-			Self::Endorsed => 1,
-			Self::Disputed => 0,
+impl From<CurrentStatus> for u8 {
+	fn from(value: CurrentStatus) -> Self {
+		match value {
+			CurrentStatus::Endorsed => 1,
+			CurrentStatus::Disputed => 0,
 		}
 	}
 }
@@ -126,9 +126,9 @@ mod test {
 		let current_status = CurrentStatus::Endorsed;
 
 		let mut keccak = Keccak256::default();
-		keccak.update(&[did.schema.into()]);
+		keccak.update([did.schema.into()]);
 		keccak.update(&did.key);
-		keccak.update(&[current_status.clone().into()]);
+		keccak.update([current_status.clone().into()]);
 		let digest = keccak.finalize();
 
 		let message = Message::from_digest_slice(digest.as_ref()).unwrap();

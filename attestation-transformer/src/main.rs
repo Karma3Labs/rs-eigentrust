@@ -46,8 +46,8 @@ impl TransformerService {
 		let mut opts = Options::default();
 		opts.create_missing_column_families(true);
 		opts.create_if_missing(true);
-		let db = DB::open_cf(&opts, db_url, vec!["checkpoint", "term"])
-			.map_err(|e| AttTrError::DbError(e))?;
+		let db =
+			DB::open_cf(&opts, db_url, vec!["checkpoint", "term"]).map_err(AttTrError::DbError)?;
 		CheckpointManager::init(&db)?;
 
 		Ok(Self { indexer_channel, lt_channel, db_url: db_url.to_string() })
@@ -59,17 +59,17 @@ impl TransformerService {
 		let terms = match schema_type {
 			SchemaType::SecurityCredential => {
 				let parsed_att: SecurityReportSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::StatusCredential => {
 				let parsed_att: StatusSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::TrustCredential => {
 				let parsed_att: TrustSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				parsed_att.into_term(event.timestamp)?
 			},
 		};
@@ -143,7 +143,7 @@ impl Transformer for TransformerService {
 	) -> Result<Response<TermResult>, Status> {
 		let inner = request.into_inner();
 		if inner.size > MAX_TERM_BATCH_SIZE {
-			return Result::Err(Status::invalid_argument(format!(
+			return Err(Status::invalid_argument(format!(
 				"Batch size too big. Max size: {}",
 				MAX_TERM_BATCH_SIZE
 			)));
@@ -203,9 +203,9 @@ mod test {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[current_status.clone().into()]);
+			keccak.update([current_status.clone().into()]);
 			let digest = keccak.finalize();
 
 			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
@@ -234,9 +234,9 @@ mod test {
 		pub fn generate_from_sk(id: String, current_status: CurrentStatus, sk: SecretKey) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[current_status.clone().into()]);
+			keccak.update([current_status.clone().into()]);
 			let digest = keccak.finalize();
 
 			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
@@ -267,9 +267,9 @@ mod test {
 		) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[current_status.clone().into()]);
+			keccak.update([current_status.clone().into()]);
 			let digest = keccak.finalize();
 
 			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
@@ -303,9 +303,9 @@ mod test {
 			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[trust_arc.scope.clone().into()]);
+			keccak.update([trust_arc.scope.clone().into()]);
 			// keccak.update(&trust_arc.level.to_be_bytes());
 
 			let digest = keccak.finalize();
@@ -339,9 +339,9 @@ mod test {
 			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[trust_arc.scope.clone().into()]);
+			keccak.update([trust_arc.scope.clone().into()]);
 			// keccak.update(&trust_arc.level.to_be_bytes());
 
 			let digest = keccak.finalize();

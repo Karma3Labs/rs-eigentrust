@@ -29,8 +29,7 @@ pub trait Validation {
 	fn get_trimmed_signature(&self) -> String;
 
 	fn validate(&self) -> Result<PublicKey, AttTrError> {
-		let sig_bytes =
-			hex::decode(self.get_trimmed_signature()).map_err(|e| AttTrError::HexError(e))?;
+		let sig_bytes = hex::decode(self.get_trimmed_signature()).map_err(AttTrError::HexError)?;
 		let mut rs_bytes = [0; 64];
 		rs_bytes.copy_from_slice(&sig_bytes[..64]);
 		let rec_id: i32 = match i32::from(sig_bytes[64]) {
@@ -41,22 +40,21 @@ pub trait Validation {
 			_ => return Err(AttTrError::ParseError),
 		};
 
-		let rec_id_p =
-			RecoveryId::from_i32(rec_id).map_err(|x| AttTrError::SigVerificationError(x))?;
+		let rec_id_p = RecoveryId::from_i32(rec_id).map_err(AttTrError::SigVerificationError)?;
 
 		let signature = RecoverableSignature::from_compact(&rs_bytes, rec_id_p)
-			.map_err(|x| AttTrError::SigVerificationError(x))?;
+			.map_err(AttTrError::SigVerificationError)?;
 
 		let mut keccak = Keccak256::default();
 		keccak.update(&self.get_message()?);
 		let digest = keccak.finalize();
 		let message = Message::from_digest_slice(digest.as_ref())
-			.map_err(|x| AttTrError::SigVerificationError(x))?;
-		let pk = signature.recover(&message).map_err(|x| AttTrError::SigVerificationError(x))?;
+			.map_err(AttTrError::SigVerificationError)?;
+		let pk = signature.recover(&message).map_err(AttTrError::SigVerificationError)?;
 
 		let secp = Secp256k1::verification_only();
 		secp.verify_ecdsa(&message, &signature.to_standard(), &pk)
-			.map_err(|x| AttTrError::SigVerificationError(x))?;
+			.map_err(AttTrError::SigVerificationError)?;
 
 		Ok(pk)
 	}
@@ -94,22 +92,22 @@ pub enum Domain {
 	SoftwareSecurity,
 }
 
-impl Into<u8> for Domain {
-	fn into(self) -> u8 {
-		match self {
-			Self::Honesty => 0,
-			Self::SoftwareDevelopment => 1,
-			Self::SoftwareSecurity => 2,
+impl From<Domain> for u8 {
+	fn from(domain: Domain) -> u8 {
+		match domain {
+			Domain::Honesty => 0,
+			Domain::SoftwareDevelopment => 1,
+			Domain::SoftwareSecurity => 2,
 		}
 	}
 }
 
-impl Into<u32> for Domain {
-	fn into(self) -> u32 {
-		match self {
-			Self::Honesty => 0,
-			Self::SoftwareDevelopment => 1,
-			Self::SoftwareSecurity => 2,
+impl From<Domain> for u32 {
+	fn from(domain: Domain) -> u32 {
+		match domain {
+			Domain::Honesty => 0,
+			Domain::SoftwareDevelopment => 1,
+			Domain::SoftwareSecurity => 2,
 		}
 	}
 }
