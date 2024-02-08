@@ -19,8 +19,7 @@ impl CheckpointManager {
 
 	pub fn read_checkpoint(db: &DB) -> Result<u32, LcError> {
 		let cf = db.cf_handle("checkpoint").ok_or(LcError::NotFoundError)?;
-		let offset_bytes_opt =
-			db.get_cf(&cf, b"participant_count").map_err(LcError::DbError)?;
+		let offset_bytes_opt = db.get_cf(&cf, b"participant_count").map_err(LcError::DbError)?;
 		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
 			bytes.copy_from_slice(&x);
@@ -32,8 +31,7 @@ impl CheckpointManager {
 
 	pub fn write_checkpoint(db: &DB, count: u32) -> Result<(), LcError> {
 		let cf = db.cf_handle("checkpoint").ok_or(LcError::NotFoundError)?;
-		db.put_cf(&cf, b"participant_count", count.to_be_bytes())
-			.map_err(LcError::DbError)?;
+		db.put_cf(&cf, b"participant_count", count.to_be_bytes()).map_err(LcError::DbError)?;
 		Ok(())
 	}
 }
