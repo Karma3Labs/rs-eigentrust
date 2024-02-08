@@ -25,15 +25,15 @@ use proto_buf::{combiner, compute};
 struct Args {
 	/// Indexer gRPC endpoint.
 	#[arg(long, value_name = "URL", default_value = "http://[::1]:50050")]
-	indexer_grpc: String,
+	indexer_grpc: tonic::transport::Endpoint,
 
 	/// Linear combiner gRPC endpoint.
 	#[arg(long, value_name = "URL", default_value = "http://[::1]:50052")]
-	linear_combiner_grpc: String,
+	linear_combiner_grpc: tonic::transport::Endpoint,
 
 	/// go-eigentrust gRPC endpoint.
 	#[arg(long, value_name = "URL", default_value = "http://[::1]:8080")]
-	go_eigentrust_grpc: String,
+	go_eigentrust_grpc: tonic::transport::Endpoint,
 
 	/// Domain number to process.
 	///
@@ -808,9 +808,9 @@ impl Main {
 
 	pub async fn main(&mut self) -> Result<(), Box<dyn Error>> {
 		info!(
-			idx = self.args.indexer_grpc,
-			lc = self.args.linear_combiner_grpc,
-			et = self.args.go_eigentrust_grpc;
+			idx = self.args.indexer_grpc.uri().to_string(),
+			lc = self.args.linear_combiner_grpc.uri().to_string(),
+			et = self.args.go_eigentrust_grpc.uri().to_string();
 			"gRPC endpoints",
 		);
 
@@ -831,36 +831,24 @@ impl Main {
 		}
 	}
 
-	async fn lc_channel(&self) -> Result<Channel, Box<dyn Error>> {
-		Ok(Channel::from_shared(self.args.linear_combiner_grpc.clone())?.connect().await?)
-	}
-
 	async fn lc_client(&self) -> Result<LinearCombinerClient<Channel>, Box<dyn Error>> {
-		Ok(LinearCombinerClient::new(self.lc_channel().await?))
-	}
-
-	async fn idx_channel(&self) -> Result<Channel, Box<dyn Error>> {
-		Ok(Channel::from_shared(self.args.indexer_grpc.clone())?.connect().await?)
+		Ok(LinearCombinerClient::connect(self.args.linear_combiner_grpc.clone()).await?)
 	}
 
 	async fn idx_client(&self) -> Result<IndexerClient<Channel>, Box<dyn Error>> {
-		Ok(IndexerClient::new(self.idx_channel().await?))
-	}
-
-	async fn et_channel(&self) -> Result<Channel, Box<dyn Error>> {
-		Ok(Channel::from_shared(self.args.go_eigentrust_grpc.clone())?.connect().await?)
+		Ok(IndexerClient::connect(self.args.indexer_grpc.clone()).await?)
 	}
 
 	async fn tm_client(&self) -> Result<TrustMatrixClient<Channel>, Box<dyn Error>> {
-		Ok(TrustMatrixClient::new(self.et_channel().await?))
+		Ok(TrustMatrixClient::connect(self.args.go_eigentrust_grpc.clone()).await?)
 	}
 
 	async fn tv_client(&self) -> Result<TrustVectorClient<Channel>, Box<dyn Error>> {
-		Ok(TrustVectorClient::new(self.et_channel().await?))
+		Ok(TrustVectorClient::connect(self.args.go_eigentrust_grpc.clone()).await?)
 	}
 
 	async fn et_client(&self) -> Result<ComputeClient<Channel>, Box<dyn Error>> {
-		Ok(ComputeClient::new(self.et_channel().await?))
+		Ok(ComputeClient::connect(self.args.go_eigentrust_grpc.clone()).await?)
 	}
 
 	async fn init_et(&mut self) -> Result<(), Box<dyn Error>> {
