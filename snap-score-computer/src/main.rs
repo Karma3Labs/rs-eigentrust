@@ -8,6 +8,7 @@ use clap::Parser as ClapParser;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha3::Digest;
+use simple_error::SimpleError;
 use thiserror::Error as ThisError;
 use tonic::transport::Channel;
 use tracing::{debug, error, info, trace, warn};
@@ -581,6 +582,32 @@ impl Domain {
 		Ok(())
 	}
 
+	async fn copy_vector(
+		tv_client: &mut TrustVectorClient<Channel>, from: &str, to: &str,
+	) -> Result<(), Box<dyn Error>> {
+		let mut stream =
+			tv_client.get(trustvector::GetRequest { id: String::from(from) }).await?.into_inner();
+		let mut update_request = trustvector::UpdateRequest::default();
+		while let Some(msg) = stream.message().await? {
+			if let Some(part) = msg.part {
+				match part {
+					trustvector::get_response::Part::Header(h) => update_request.header = Some(h),
+					trustvector::get_response::Part::Entry(e) => update_request.entries.push(e),
+				}
+			}
+		}
+		match update_request.header.as_mut() {
+			Some(h) => h.id = Some(String::from(to)),
+			None => {
+				return Err(SimpleError::new("source vector has no header while copying").into());
+			},
+		}
+		update_request.header.as_mut().unwrap().id = Some(String::from(to));
+		tv_client.flush(trustvector::FlushRequest { id: String::from(to) }).await?;
+		tv_client.update(update_request).await?;
+		Ok(())
+	}
+
 	async fn run_et(
 		&mut self, et_client: &mut ComputeClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, alpha: Option<f64>,
@@ -599,6 +626,12 @@ impl Domain {
 			})
 			.await?;
 		let mut gt = TrustVector::new();
+		Self::copy_vector(
+			tv_client,
+			self.pt_id.as_ref().unwrap(),
+			self.gt_id.as_ref().unwrap(),
+		)
+		.await?;
 		let mut stream = tv_client
 			.get(trustvector::GetRequest { id: self.gt_id.as_ref().unwrap().clone() })
 			.await?
