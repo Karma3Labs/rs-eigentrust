@@ -215,8 +215,6 @@ struct Domain {
 	// Timestamp of the latest LT entry fetched from LC.
 	lt_fetch_ts_form1: Timestamp,
 	lt_fetch_ts_form0: Timestamp,
-	// Timestamp of the latest LT entry sent to ET.
-	lt_send_ts: Timestamp,
 	// Timestamp of the latest snap status update fetched from indexer.
 	ss_fetch_offset: u32,
 	// Timestamp of the latest snap status update merged into the master copy.
@@ -796,7 +794,6 @@ impl Main {
 					peer_id_to_did: BTreeMap::new(),
 					lt_fetch_ts_form1: 0,
 					lt_fetch_ts_form0: 0,
-					lt_send_ts: 0,
 					ss_fetch_offset: 0,
 					ss_update_ts: 0,
 					last_update_ts: 0,
