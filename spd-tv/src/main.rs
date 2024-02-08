@@ -1,10 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 use std::io::IsTerminal;
-use std::str::FromStr;
 
 use clap::{Parser as ClapParser, Subcommand as ClapSubcommand};
 use num::{BigUint, Zero};
-use tonic::codegen::http::uri::InvalidUri;
 use tonic::transport::{Channel, Endpoint};
 use tracing_subscriber::filter::LevelFilter;
 
@@ -125,22 +123,6 @@ fn unhexlify(s: &str) -> Result<String, BoxedError> {
 fn now_ms() -> Result<BigUint, BoxedError> {
 	use std::time::{SystemTime, UNIX_EPOCH};
 	Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis().into())
-}
-
-struct EndpointArg(Endpoint);
-
-impl FromStr for EndpointArg {
-	type Err = InvalidUri;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		Channel::from_shared(s.to_string()).map(Self)
-	}
-}
-
-impl From<EndpointArg> for Endpoint {
-	fn from(value: EndpointArg) -> Self {
-		value.0
-	}
 }
 
 #[derive(ClapSubcommand)]
