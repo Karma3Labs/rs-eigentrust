@@ -162,7 +162,8 @@ impl LinearCombiner for LinearCombinerService {
 			}
 		});
 
-		UpdateManager::delete_batch(&db, prefix, items).map_err(|e| e.into_status())?;
+		// TODO: Uncomment when fixed
+		// UpdateManager::delete_batch(&db, prefix, items).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
