@@ -6,12 +6,10 @@ use std::time::Duration;
 use clap::Parser as ClapParser;
 use log::{as_debug, as_display, as_error, debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
-use serde_jcs;
 use sha3::Digest;
 use thiserror::Error as ThisError;
 use tonic::transport::Channel;
 
-use proto_buf;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
 use proto_buf::compute::service_client::ServiceClient as ComputeClient;
@@ -50,11 +48,11 @@ struct Args {
 	go_eigentrust_grpc: String,
 
 	#[arg(
-		long = "domain",
-		value_name = "DOMAIN",
-		help = "domain number to process",
-		default_values = ["2"],
-	)]
+    long = "domain",
+    value_name = "DOMAIN",
+    help = "domain number to process",
+    default_values = ["2"],
+    )]
 	domains: Vec<DomainId>,
 
 	#[arg(long = "lt-id", value_name = "DOMAIN>=<ID", help = "local trust matrix ID for domain")]
@@ -67,11 +65,11 @@ struct Args {
 	gt_ids: Vec<String>,
 
 	#[arg(
-		long = "status-schema",
-		value_name = "DOMAIN>=<SCHEMA",
-		help = "status schema for domain",
-		default_values = ["2=4"],
-	)]
+    long = "status-schema",
+    value_name = "DOMAIN>=<SCHEMA",
+    help = "status schema for domain",
+    default_values = ["2=4"],
+    )]
 	status_schemas: Vec<String>,
 
 	#[arg(long, help = "interval at which to recompute scores", default_value = "600000")]
@@ -188,17 +186,17 @@ fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<d
 #[derive(Debug, ThisError)]
 enum MainError {
 	#[error("cannot initialize the program: {0}")]
-	CannotInit(Box<dyn Error>),
+	Init(Box<dyn Error>),
 	#[error("cannot connect to trust matrix server: {0}")]
-	CannotConnectToTrustMatrixServer(Box<dyn Error>),
+	ConnectToTrustMatrixServer(Box<dyn Error>),
 	#[error("cannot connect to trust vector server: {0}")]
-	CannotConnectToTrustVectorServer(Box<dyn Error>),
+	ConnectToTrustVectorServer(Box<dyn Error>),
 	#[error("cannot load local trust: {0}")]
-	CannotLoadLocalTrust(Box<dyn Error>),
+	LoadLocalTrust(Box<dyn Error>),
 	#[error("cannot load Snap statuses: {0}")]
-	CannotLoadSnapStatuses(Box<dyn Error>),
+	LoadSnapStatuses(Box<dyn Error>),
 	#[error("cannot convert binary to hex: {0:?}")]
-	CannotConvertToHex(binascii::ConvertError),
+	ConvertToHex(binascii::ConvertError),
 }
 
 struct Domain {
@@ -230,11 +228,12 @@ struct Domain {
 }
 
 impl Domain {
+	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn run_once(
 		&mut self, idx_client: &mut IndexerClient<Channel>,
 		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
-		interval: Timestamp, alpha: Option<f64>, issuer_id: &String,
+		interval: Timestamp, alpha: Option<f64>, issuer_id: &str,
 	) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
 		Self::fetch_local_trust(
@@ -242,14 +241,14 @@ impl Domain {
 			&mut local_trust_updates,
 		)
 		.await
-		.map_err(|e| MainError::CannotLoadLocalTrust(e))?;
+		.map_err(|e| MainError::LoadLocalTrust(e))?;
 		let mut snap_status_updates = self.snap_status_updates.clone();
 		if let Some(status_schema) = &self.status_schema {
 			Self::fetch_snap_statuses(
 				idx_client, &mut self.ss_fetch_offset, status_schema, &mut snap_status_updates,
 			)
 			.await
-			.map_err(|e| MainError::CannotLoadSnapStatuses(e))?;
+			.map_err(|e| MainError::LoadSnapStatuses(e))?;
 		}
 		let mut fetch_next_lt_update = || {
 			local_trust_updates.pop_first().map(|(timestamp, trust_matrix)| Update {
@@ -309,7 +308,7 @@ impl Domain {
 					let manifest_path = std::path::Path::new("spd_scores.json");
 					let zip_path = std::path::Path::new("spd_scores.zip");
 					{
-						let zip_file = std::fs::File::create(&zip_path)?;
+						let zip_file = std::fs::File::create(zip_path)?;
 						let mut zip = zip::ZipWriter::new(zip_file);
 						let options = zip::write::FileOptions::default();
 						zip.start_file("peer_scores.jsonl", options)?;
@@ -335,7 +334,7 @@ impl Domain {
 					// };
 					// locations.push("ipfs://".to_owned() + &cid);
 					{
-						let manifest_file = std::fs::File::create(&manifest_path)?;
+						let manifest_file = std::fs::File::create(manifest_path)?;
 						serde_jcs::to_writer(manifest_file, &manifest)?;
 					}
 					// trace!("finished performing core compute");
@@ -366,16 +365,14 @@ impl Domain {
 			}
 		}
 		// Return unconsumed ones back to the pending list.
-		for update in vec![next_lt_update, next_ss_update] {
-			if let Some(update) = update {
-				match update.body {
-					UpdateBody::LocalTrust(tm) => {
-						self.local_trust_updates.insert(update.timestamp, tm);
-					},
-					UpdateBody::SnapStatuses(ss) => {
-						self.snap_status_updates.insert(update.timestamp, ss);
-					},
-				}
+		for update in vec![next_lt_update, next_ss_update].into_iter().flatten() {
+			match update.body {
+				UpdateBody::LocalTrust(tm) => {
+					self.local_trust_updates.insert(update.timestamp, tm);
+				},
+				UpdateBody::SnapStatuses(ss) => {
+					self.snap_status_updates.insert(update.timestamp, ss);
+				},
 			}
 		}
 		self.local_trust_updates = local_trust_updates;
@@ -456,7 +453,7 @@ impl Domain {
 	}
 
 	async fn fetch_snap_statuses(
-		idx_client: &mut IndexerClient<Channel>, fetch_offset: &mut u32, schema_id: &String,
+		idx_client: &mut IndexerClient<Channel>, fetch_offset: &mut u32, schema_id: &str,
 		updates: &mut BTreeMap<Timestamp, SnapStatuses>,
 	) -> Result<(), Box<dyn Error>> {
 		let mut last_timestamp = None; // TODO(ek): Hack due to no heartbeat
@@ -465,7 +462,7 @@ impl Domain {
 			let mut stream = idx_client
 				.subscribe(IndexerQuery {
 					source_address: "".to_string(),
-					schema_id: vec![schema_id.clone()],
+					schema_id: vec![String::from(schema_id)],
 					offset: *fetch_offset,
 					count: 1000000,
 				})
@@ -557,7 +554,7 @@ impl Domain {
 				match part {
 					trustvector::get_response::Part::Header(header) => {
 						_gt_timestamp =
-							Some(header.timestamp_qwords.last().map(|&ts| ts)).unwrap_or_default();
+							Some(header.timestamp_qwords.last().copied()).unwrap_or_default();
 					},
 					trustvector::get_response::Part::Entry(entry) => {
 						match entry.trustee.as_str().parse() {
@@ -612,53 +609,55 @@ impl Domain {
 	}
 
 	async fn write_peer_vcs(
-		&mut self, issuer_id: &String, timestamp: Timestamp, output: &mut impl std::io::Write,
+		&mut self, issuer_id: &str, timestamp: Timestamp, output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		for (peer_id, score_value) in &self.gt {
-			if let Some(peer_did) = self.peer_id_to_did.get(&peer_id) {
-				output.write(
-					self.make_trust_score_vc(
-						issuer_id, timestamp, peer_did, "EigenTrust", *score_value, None,
-					)
-					.await?
-					.as_bytes(),
+			if let Some(peer_did) = self.peer_id_to_did.get(peer_id) {
+				write_full(
+					output,
+					(self
+						.make_trust_score_vc(
+							issuer_id, timestamp, peer_did, "EigenTrust", *score_value, None,
+						)
+						.await? + "\n")
+						.as_bytes(),
 				)?;
-				output.write("\n".as_bytes())?;
 			}
 		}
 		Ok(())
 	}
 
 	async fn write_snap_vcs(
-		&mut self, issuer_id: &String, timestamp: Timestamp, output: &mut impl std::io::Write,
+		&mut self, issuer_id: &str, timestamp: Timestamp, output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		for (snap_id, (score_value, score_confidence)) in &self.snap_scores {
-			output.write(
-				self.make_trust_score_vc(
-					issuer_id,
-					timestamp,
-					snap_id,
-					"IssuerTrustWeightedAverage",
-					*score_value,
-					Some(*score_confidence),
-				)
-				.await?
-				.as_bytes(),
+			write_full(
+				output,
+				(self
+					.make_trust_score_vc(
+						issuer_id,
+						timestamp,
+						snap_id,
+						"IssuerTrustWeightedAverage",
+						*score_value,
+						Some(*score_confidence),
+					)
+					.await? + "\n")
+					.as_bytes(),
 			)?;
-			output.write("\n".as_bytes())?;
 		}
 		Ok(())
 	}
 
 	async fn make_trust_score_vc(
-		&self, issuer_id: &String, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
+		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
 		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidenceLevel>,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
 			id: "".to_string(), // to be replaced with real hash URI
 			type_: vec!["VerifiableCredential".to_string(), "TrustScoreCredential".to_string()],
-			issuer: issuer_id.clone(),
+			issuer: String::from(issuer_id),
 			issuance_date: format!(
 				"{:?}",
 				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
@@ -674,17 +673,17 @@ impl Domain {
 		let vc_hash = sha3::Keccak256::digest(vc_jcs);
 		let mut vc_hash_hex_buf = vec![0u8; 2 * vc_hash.len()];
 		let vc_hash_hex = binascii::bin2hex(vc_hash.as_slice(), vc_hash_hex_buf.as_mut_slice())
-			.map_err(|e| MainError::CannotConvertToHex(e))?;
+			.map_err(MainError::ConvertToHex)?;
 		vc.id = "0x".to_owned() + &String::from_utf8(Vec::from(vc_hash_hex))?;
 		let vc_jcs = serde_jcs::to_string(&vc)?;
 		Ok(vc_jcs)
 	}
 
 	async fn make_manifest(
-		&self, issuer_id: &String, timestamp: Timestamp,
+		&self, issuer_id: &str, timestamp: Timestamp,
 	) -> Result<Manifest, Box<dyn Error>> {
 		Ok(Manifest {
-			issuer: issuer_id.clone(),
+			issuer: String::from(issuer_id),
 			issuance_date: format!(
 				"{:?}",
 				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
@@ -867,9 +866,9 @@ impl Main {
 
 	async fn init_et(&mut self) -> Result<(), Box<dyn Error>> {
 		let mut tm_client =
-			self.tm_client().await.map_err(|e| MainError::CannotConnectToTrustMatrixServer(e))?;
+			self.tm_client().await.map_err(|e| MainError::ConnectToTrustMatrixServer(e))?;
 		let mut tv_client =
-			self.tv_client().await.map_err(|e| MainError::CannotConnectToTrustVectorServer(e))?;
+			self.tv_client().await.map_err(|e| MainError::ConnectToTrustVectorServer(e))?;
 		for (&domain_id, domain) in &mut self.domains {
 			match &domain.lt_id {
 				None => {
@@ -933,6 +932,14 @@ impl Main {
 	}
 }
 
+fn write_full(w: &mut dyn std::io::Write, buf: &[u8]) -> std::io::Result<()> {
+	let mut written = 0;
+	while written < buf.len() {
+		written += w.write(&buf[written..])?;
+	}
+	Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
@@ -942,7 +949,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			.with_target_writer("*", log_writer)
 			.init();
 	}
-	let mut m = Main::new(args).map_err(|e| MainError::CannotInit(e))?;
+	let mut m = Main::new(args).map_err(|e| MainError::Init(e))?;
 	match m.main().await {
 		Ok(()) => Ok(()),
 		Err(e) => {
