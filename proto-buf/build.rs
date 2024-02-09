@@ -4,8 +4,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	tonic_build::configure().compile_with_config(
 		config,
 		&[
-			"common.proto", "indexer.proto", "transformer.proto", "combiner.proto",
-			"trustmatrix.proto", "compute.proto",
+			"services/common.proto", "services/indexer.proto", "services/transformer.proto",
+			"services/combiner.proto", "services/trustmatrix.proto", "services/compute.proto",
 		],
 		&["services", "../trustvector/api/pb"],
 	)?;
