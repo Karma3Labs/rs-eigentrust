@@ -375,30 +375,32 @@ mod test {
 		}
 	}
 
-	#[test]
-	fn should_parse_event() {
-		let recipient = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let status_schema = StatusSchema::generate(recipient.clone(), CurrentStatus::Endorsed);
-		let timestamp = 2397848;
-		let indexed_event = IndexerEvent {
-			id: 0,
-			schema_id: 1,
-			schema_value: to_string(&status_schema).unwrap(),
-			timestamp,
-		};
-		let terms = TransformerService::parse_event(indexed_event).unwrap();
-		assert_eq!(
-			terms,
-			vec![Term::new(
-				status_schema.get_issuer(),
-				recipient,
-				50.,
-				Domain::SoftwareSecurity.into(),
-				TermForm::Trust,
-				timestamp,
-			)]
-		)
-	}
+	// TODO(ek): Reinstate with an instance of TrustSchema,
+	//   or when we re-enable StatusSchema for security reports.
+	// #[test]
+	// fn should_parse_event() {
+	// 	let recipient = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+	// 	let status_schema = StatusSchema::generate(recipient.clone(), CurrentStatus::Endorsed);
+	// 	let timestamp = 2397848;
+	// 	let indexed_event = IndexerEvent {
+	// 		id: 0,
+	// 		schema_id: 1,
+	// 		schema_value: to_string(&status_schema).unwrap(),
+	// 		timestamp,
+	// 	};
+	// 	let terms = TransformerService::parse_event(indexed_event).unwrap();
+	// 	assert_eq!(
+	// 		terms,
+	// 		vec![Term::new(
+	// 			status_schema.get_issuer(),
+	// 			recipient,
+	// 			50.,
+	// 			Domain::SoftwareSecurity.into(),
+	// 			TermForm::Trust,
+	// 			timestamp,
+	// 		)]
+	// 	)
+	// }
 
 	#[test]
 	fn generate_functional_test_schemas() {
