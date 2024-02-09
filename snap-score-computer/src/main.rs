@@ -845,6 +845,7 @@ struct TrustScoreCredentialSubject {
 #[derive(Serialize, Deserialize)]
 struct TrustScore {
 	value: f64,
+	#[serde(skip_serializing_if = "Option::is_none")]
 	confidence: Option<f64>,
 }
 
