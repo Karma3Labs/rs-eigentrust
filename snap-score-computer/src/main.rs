@@ -490,7 +490,7 @@ impl Domain {
 							self.peer_id_to_did.insert(entry.id, did.clone());
 						},
 						Err(e) => {
-							error!(err = %e, "invalid UTF-8 DID encountered");
+							error!(err = ?e, "invalid UTF-8 DID encountered");
 						},
 					},
 					Err(e) => {
@@ -544,7 +544,7 @@ impl Domain {
 							.insert(issuer_id, value);
 					},
 					Err(_err) => {
-						warn!(err = %_err, "cannot process entry");
+						warn!(err = ?_err, "cannot process entry");
 					},
 				}
 			}
@@ -1006,7 +1006,7 @@ impl Main {
 				)
 				.await
 			{
-				error!(err = %e, id = domain_id, "cannot process domain");
+				error!(err = ?e, id = domain_id, "cannot process domain");
 			}
 		}
 		Ok(())
@@ -1050,7 +1050,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	match m.main().await {
 		Ok(()) => Ok(()),
 		Err(e) => {
-			error!(err = %e, "server error");
+			error!(err = ?e, "server error");
 			Err(e)
 		},
 	}
