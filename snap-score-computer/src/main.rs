@@ -1,4 +1,3 @@
-use aws_config::meta::region::RegionProviderChain;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Debug;

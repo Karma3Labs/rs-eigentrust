@@ -8,8 +8,7 @@ use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
 use rocksdb::{Options, DB};
-use schemas::security::SecurityReportSchema;
-use schemas::status::StatusSchema;
+
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
 use serde_json::from_str;
@@ -413,10 +412,10 @@ mod test {
 		let z = "did:pkh:eth:0x9a2954b87d8745df0b1010291c51d68ae9269d43".to_owned();
 
 		let p_sk = "bbb7d40b7bb8e41c550696fdef78fff6f013bb34627ba50ca2d63b6e84cffa6c".to_owned();
-		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
+		let _p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
 
 		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
-		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+		let _q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
 
 		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
@@ -581,7 +580,7 @@ mod test {
 		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
 
 		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
-		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+		let _q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
 
 		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
@@ -775,10 +774,10 @@ mod test {
 
 	#[test]
 	fn generate_sleeping_agent_attack_test_schemas() {
-		let x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
+		let _x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
 		let x = "did:pkh:eth:0xa9572220348b1080264e81c0779f77c144790cd6".to_owned();
 
-		let y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
+		let _y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
 		let y = "did:pkh:eth:0xba9090181312bd0e40254a3dc29841980dd392d2".to_owned();
 
 		let z_sk = "ac7f0d9eaea4d4bf5438b887e34d0cf87e7f98d97da70eff001850487b2cae23".to_owned();
