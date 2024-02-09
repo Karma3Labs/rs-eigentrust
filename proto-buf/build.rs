@@ -1,12 +1,13 @@
-use tonic_build::compile_protos;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-	compile_protos("services/common.proto")?;
-	compile_protos("services/indexer.proto")?;
-	compile_protos("services/transformer.proto")?;
-	compile_protos("services/combiner.proto")?;
-	compile_protos("services/trustmatrix.proto")?;
-	compile_protos("services/trustvector.proto")?;
-	compile_protos("services/compute.proto")?;
+	let mut config = prost_build::Config::new();
+	config.extern_path(".trustvector", "::trustvector");
+	tonic_build::configure().compile_with_config(
+		config,
+		&[
+			"common.proto", "indexer.proto", "transformer.proto", "combiner.proto",
+			"trustmatrix.proto", "compute.proto",
+		],
+		&["services", "../trustvector/api/pb"],
+	)?;
 	Ok(())
 }
