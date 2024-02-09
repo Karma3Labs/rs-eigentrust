@@ -17,9 +17,9 @@ use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
-mod error;
-mod item;
-mod managers;
+pub mod error;
+pub mod item;
+pub mod managers;
 
 #[derive(Clone)]
 struct LinearCombinerService {
@@ -36,7 +36,7 @@ impl LinearCombinerService {
 			db_url,
 			vec!["checkpoint", "index", "item", "mapping", "update"],
 		)
-		.map_err(|e| LcError::DbError(e))?;
+		.map_err(LcError::DbError)?;
 		CheckpointManager::init(&db)?;
 
 		Ok(Self { db_url: db_url.to_string() })

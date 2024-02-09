@@ -13,11 +13,11 @@ pub enum SecurityStatus {
 	Secure,
 }
 
-impl Into<u8> for SecurityStatus {
-	fn into(self) -> u8 {
-		match self {
-			Self::Unsecure => 0,
-			Self::Secure => 1,
+impl From<SecurityStatus> for u8 {
+	fn from(value: SecurityStatus) -> Self {
+		match value {
+			SecurityStatus::Unsecure => 0,
+			SecurityStatus::Secure => 1,
 		}
 	}
 }
@@ -159,10 +159,10 @@ mod test {
 		let finding = SecurityFinding::new(0.5, None, None, None);
 
 		let mut keccak = Keccak256::default();
-		keccak.update(&[did.schema.into()]);
+		keccak.update([did.schema.into()]);
 		keccak.update(&did.key);
-		keccak.update(&[security_status.clone().into()]);
-		keccak.update(&finding.criticality.to_be_bytes());
+		keccak.update([security_status.clone().into()]);
+		keccak.update(finding.criticality.to_be_bytes());
 		let digest = keccak.finalize();
 
 		let message = Message::from_digest_slice(digest.as_ref()).unwrap();

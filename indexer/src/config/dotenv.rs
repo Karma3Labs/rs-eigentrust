@@ -40,7 +40,7 @@ impl Config {
 		let from_block = env::var("CLIQUE_EVM_INDEXER_FROM_BLOCK")
 			.expect("CLIQUE_EVM_INDEXER_FROM_BLOCK not found in .env")
 			.parse::<u64>()
-			.unwrap_or_else(|_| 0);
+			.unwrap_or(0);
 
 		let master_registry_contract = env::var("CLIQUE_EVM_INDEXER_MASTER_REGISTRY_ADDRESS")
 			.expect("CLIQUE_EVM_INDEXER_MASTER_REGISTRY_ADDRESS not found in .env");

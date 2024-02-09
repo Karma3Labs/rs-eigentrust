@@ -54,9 +54,9 @@ impl LtItem {
 	}
 }
 
-impl Into<LtObject> for LtItem {
-	fn into(self) -> LtObject {
-		LtObject { x: self.x, y: self.y, value: self.value, timestamp: self.timestamp }
+impl From<LtItem> for LtObject {
+	fn from(value: LtItem) -> Self {
+		Self { x: value.x, y: value.y, value: value.value, timestamp: value.timestamp }
 	}
 }
 
@@ -82,8 +82,8 @@ impl MappingItem {
 	}
 }
 
-impl Into<Mapping> for MappingItem {
-	fn into(self) -> Mapping {
-		Mapping { id: self.id, did: self.did }
+impl From<MappingItem> for Mapping {
+	fn from(value: MappingItem) -> Self {
+		Self { id: value.id, did: value.did }
 	}
 }

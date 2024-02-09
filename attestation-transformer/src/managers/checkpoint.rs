@@ -7,11 +7,11 @@ pub struct CheckpointManager;
 impl CheckpointManager {
 	pub fn init(db: &DB) -> Result<(), AttTrError> {
 		let cf = db.cf_handle("checkpoint").ok_or_else(|| AttTrError::NotFoundError)?;
-		let checkpoint = db.get_cf(&cf, b"event_count").map_err(|x| AttTrError::DbError(x))?;
-		if let None = checkpoint {
+		let checkpoint = db.get_cf(&cf, b"event_count").map_err(AttTrError::DbError)?;
+		if checkpoint.is_none() {
 			let zero = 0u32.to_be_bytes();
-			db.put_cf(&cf, "event_count", zero).map_err(|e| AttTrError::DbError(e))?;
-			db.put_cf(&cf, b"term_count", zero).map_err(|e| AttTrError::DbError(e))?;
+			db.put_cf(&cf, "event_count", zero).map_err(AttTrError::DbError)?;
+			db.put_cf(&cf, b"term_count", zero).map_err(AttTrError::DbError)?;
 		}
 		Ok(())
 	}
@@ -19,10 +19,8 @@ impl CheckpointManager {
 	pub fn read_checkpoint(db: &DB) -> Result<(u32, u32), AttTrError> {
 		let cf = db.cf_handle("checkpoint").ok_or_else(|| AttTrError::NotFoundError)?;
 
-		let event_offset_bytes_opt =
-			db.get_cf(&cf, b"event_count").map_err(|e| AttTrError::DbError(e))?;
-		let term_offset_bytes_opt =
-			db.get_cf(&cf, b"term_count").map_err(|e| AttTrError::DbError(e))?;
+		let event_offset_bytes_opt = db.get_cf(&cf, b"event_count").map_err(AttTrError::DbError)?;
+		let term_offset_bytes_opt = db.get_cf(&cf, b"term_count").map_err(AttTrError::DbError)?;
 
 		let checkpoint_offset_bytes = event_offset_bytes_opt.map_or([0; 4], |x| {
 			let mut bytes: [u8; 4] = [0; 4];
@@ -42,9 +40,8 @@ impl CheckpointManager {
 
 	pub fn write_checkpoint(db: &DB, checkpoint: u32, count: u32) -> Result<(), AttTrError> {
 		let cf = db.cf_handle("checkpoint").ok_or_else(|| AttTrError::NotFoundError)?;
-		db.put_cf(&cf, b"event_count", checkpoint.to_be_bytes())
-			.map_err(|e| AttTrError::DbError(e))?;
-		db.put_cf(&cf, b"term_count", count.to_be_bytes()).map_err(|e| AttTrError::DbError(e))?;
+		db.put_cf(&cf, b"event_count", checkpoint.to_be_bytes()).map_err(AttTrError::DbError)?;
+		db.put_cf(&cf, b"term_count", count.to_be_bytes()).map_err(AttTrError::DbError)?;
 		Ok(())
 	}
 }
