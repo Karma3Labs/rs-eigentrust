@@ -1,3 +1,4 @@
+use aws_config::meta::region::RegionProviderChain;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Debug;
@@ -12,6 +13,7 @@ use simple_error::SimpleError;
 use thiserror::Error as ThisError;
 use tonic::transport::Channel;
 use tracing::{debug, error, info, trace, warn};
+use url::Url;
 
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
@@ -109,6 +111,10 @@ struct Args {
 	/// Log format (and destination).
 	#[arg(long)]
 	log_format: Option<LogFormatArg>,
+
+	/// S3 URI to emit scores to.
+	#[arg(long)]
+	s3_output_url: Option<Url>,
 }
 
 type DomainId = u32;
@@ -256,6 +262,7 @@ impl Domain {
 		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
 		interval: Timestamp, alpha: Option<f64>, issuer_id: &str, pending_pt: &mut HashSet<String>,
+		s3_output_url: &Option<Url>,
 	) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
 		Self::fetch_local_trust(
@@ -388,6 +395,35 @@ impl Domain {
 					{
 						let manifest_file = std::fs::File::create(manifest_path)?;
 						serde_jcs::to_writer(manifest_file, &manifest)?;
+					}
+					if let Some(url) = s3_output_url {
+						use aws_config::meta::region::RegionProviderChain;
+						use aws_config::BehaviorVersion;
+						use aws_sdk_s3::{primitives::ByteStream, Client};
+						let region_provider =
+							RegionProviderChain::default_provider().or_else("us-east-1");
+						let config = aws_config::defaults(BehaviorVersion::latest())
+							.region(region_provider)
+							.load()
+							.await;
+						let client = Client::new(&config);
+						let mut path = url.path().trim_matches('/').to_string();
+						if !path.is_empty() {
+							path += "/";
+						}
+						let path = format!("{}{}.zip", path, ts_window);
+						client
+							.put_object()
+							.body(ByteStream::from_path(zip_path).await?)
+							.bucket(url.host().unwrap().to_string())
+							.key(&path)
+							.send()
+							.await?;
+						info!(
+							bucket = url.host().unwrap().to_string(),
+							path = &path,
+							"uploaded to S3"
+						);
 					}
 					// trace!("finished performing core compute");
 				}
@@ -1003,6 +1039,7 @@ impl Main {
 				.run_once(
 					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
 					self.args.alpha, &self.args.issuer_id, &mut self.pending_pre_trusted,
+					&self.args.s3_output_url,
 				)
 				.await
 			{
@@ -1021,9 +1058,18 @@ fn write_full(w: &mut dyn std::io::Write, buf: &[u8]) -> std::io::Result<()> {
 	Ok(())
 }
 
+fn boxed_err_msg<T>(msg: &str) -> Result<T, Box<dyn Error>> {
+	Err(Box::new(SimpleError::new(msg)))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
+	if let Some(url) = &args.s3_output_url {
+		if url.scheme() != "s3" || !url.has_host() {
+			return boxed_err_msg("invalid S3 URL");
+		}
+	}
 	{
 		let log_format = args.log_format.clone().unwrap_or_else(|| {
 			if std::io::stderr().is_terminal() {
