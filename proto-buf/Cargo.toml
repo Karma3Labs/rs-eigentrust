@@ -9,6 +9,8 @@ edition = "2021"
 tonic.workspace = true
 prost.workspace = true
 prost-types.workspace = true
+trustvector.workspace = true
 
 [build-dependencies]
+prost-build.workspace = true
 tonic-build.workspace = true

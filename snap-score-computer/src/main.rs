@@ -21,9 +21,8 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query as IndexerQuery;
 use proto_buf::trustmatrix;
 use proto_buf::trustmatrix::service_client::ServiceClient as TrustMatrixClient;
-use proto_buf::trustvector;
-use proto_buf::trustvector::service_client::ServiceClient as TrustVectorClient;
 use proto_buf::{combiner, compute};
+use trustvector::service_client::ServiceClient as TrustVectorClient;
 
 /// Log format and destination.
 #[derive(Clone, Debug, clap::ValueEnum)]

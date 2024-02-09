@@ -6,12 +6,12 @@ use num::{BigUint, Zero};
 use tonic::transport::{Channel, Endpoint};
 use tracing_subscriber::filter::LevelFilter;
 
+use proto_buf::combiner;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
-use proto_buf::trustvector::service_client::ServiceClient as TrustVectorClient;
-use proto_buf::trustvector::Entry;
-use proto_buf::{combiner, trustvector};
 use thiserror::Error as ThisError;
 use tracing::error;
+use trustvector::service_client::ServiceClient as TrustVectorClient;
+use trustvector::Entry;
 
 type BoxedError = Box<dyn std::error::Error>;
 

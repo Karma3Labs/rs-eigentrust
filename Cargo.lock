@@ -3470,9 +3470,11 @@ name = "proto-buf"
 version = "0.1.0"
 dependencies = [
  "prost",
+ "prost-build",
  "prost-types",
  "tonic",
  "tonic-build",
+ "trustvector",
 ]
 
 [[package]]
@@ -4214,6 +4216,7 @@ dependencies = [
  "tonic",
  "tracing",
  "tracing-subscriber",
+ "trustvector",
  "url",
  "zip",
 ]
@@ -4257,6 +4260,7 @@ dependencies = [
  "tonic",
  "tracing",
  "tracing-subscriber",
+ "trustvector",
 ]
 
 [[package]]
@@ -4840,6 +4844,16 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "trustvector"
+version = "0.0.1"
+dependencies = [
+ "prost",
+ "prost-types",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]

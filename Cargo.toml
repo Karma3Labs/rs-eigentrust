@@ -8,6 +8,7 @@ members = [
     "core-computer",
     "snap-score-computer",
     "job-manager",
+    "trustvector",
     "proto-buf",
     "spd-tv",
 ]
@@ -25,5 +26,7 @@ edition = "2021"
 tonic = "0.10"
 tonic-build = "0.10"
 prost = "0.12"
+prost-build = "0.12"
 prost-types = "0.12"
-proto-buf = { path = "proto-buf" }
+proto-buf.path = "proto-buf"
+trustvector.path = "trustvector"
