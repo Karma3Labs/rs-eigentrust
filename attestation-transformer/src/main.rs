@@ -193,7 +193,7 @@ mod test {
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
 	};
 	use crate::schemas::{Domain, Proof};
-	use crate::term::{Term, TermForm};
+	// use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
 	use proto_buf::indexer::IndexerEvent;
