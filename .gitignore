@@ -21,6 +21,17 @@ target/
 # MacOS
 .DS_Store
 
+# symlink for running indexer in workspace root
+/scripts
+
+# .env files, usually sensitive (API keys, etc.)
+.env
+
+# snap-score-computer outputs
+spd_scores/
+spd_scores.json
+spd_scores.zip
+
 ### JetBrains template
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
