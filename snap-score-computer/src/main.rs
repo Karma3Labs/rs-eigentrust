@@ -938,7 +938,7 @@ impl Main {
 					info!(id = lt_id, domain = domain_id, "created local trust");
 				},
 				Some(lt_id) => {
-					tm_client.flush(&lt_id).await?;
+					tm_client.flush(lt_id).await?;
 					info!(id = lt_id, domain = domain_id, "flushed local trust");
 				},
 			}
