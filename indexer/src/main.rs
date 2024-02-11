@@ -47,8 +47,9 @@ async fn main() {
 	   let mut task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
 	*/
 
-	let metamask_connector_client_config =
-		MetamaskConnectorClientConfig { url: "https://vfkvr9cph1.execute-api.us-east-1.amazonaws.com/api".to_string() };
+	let metamask_connector_client_config = MetamaskConnectorClientConfig {
+		url: "https://vfkvr9cph1.execute-api.us-east-1.amazonaws.com/api".to_string(),
+	};
 
 	let metamask_connector_client = MetamaskConnectorClient::new(metamask_connector_client_config);
 	let metamask_connector_task = MetamaskConnectorTask::new(metamask_connector_client);

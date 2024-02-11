@@ -1,7 +1,7 @@
 use hyper::service::service_fn;
+use hyper::{Request, Response};
 use hyper_staticfile::{Body, Static};
 use hyper_util::rt::TokioIo;
-use hyper::{Request, Response};
 
 use tracing::{error, info};
 
@@ -10,8 +10,8 @@ use tokio::net::TcpListener;
 use http::response::Builder as ResponseBuilder;
 use http::{header, StatusCode};
 
-use std::net::SocketAddr;
 use std::io::Error as IoError;
+use std::net::SocketAddr;
 
 // http://localhost:3003/metamask-connector:4b806b14cba28b3ae4cda3d09b0f42640d3bf15bc2ebcd6c6e1a97c4da10212a.csv
 async fn handle_request<B>(req: Request<B>, static_: Static) -> Result<Response<Body>, IoError> {
