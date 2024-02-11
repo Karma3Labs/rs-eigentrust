@@ -13,6 +13,7 @@
       <sourceFolder url="file://$MODULE_DIR$/spd-tv/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/trustvector/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/trustmatrix/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/compute/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
