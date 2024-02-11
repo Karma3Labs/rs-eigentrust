@@ -4201,9 +4201,12 @@ dependencies = [
  "binascii",
  "chrono",
  "clap",
+ "futures",
+ "futures-util",
  "http 0.2.11",
  "itertools 0.12.0",
  "json",
+ "num",
  "proto-buf",
  "serde",
  "serde_jcs",
@@ -4850,8 +4853,16 @@ dependencies = [
 name = "trustvector"
 version = "0.0.1"
 dependencies = [
+ "async-stream",
+ "futures",
+ "futures-core",
+ "futures-util",
+ "http-body",
+ "num",
  "prost",
  "prost-types",
+ "simple-error",
+ "tokio-stream",
  "tonic",
  "tonic-build",
 ]

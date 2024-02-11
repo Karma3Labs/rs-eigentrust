@@ -5,7 +5,10 @@ use std::io::IsTerminal;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
+use futures::pin_mut;
+use futures::stream::StreamExt;
 use itertools::Itertools;
+use num::BigUint;
 use serde::{Deserialize, Serialize};
 use sha3::Digest;
 use simple_error::SimpleError;
@@ -22,7 +25,7 @@ use proto_buf::indexer::Query as IndexerQuery;
 use proto_buf::trustmatrix;
 use proto_buf::trustmatrix::service_client::ServiceClient as TrustMatrixClient;
 use proto_buf::{combiner, compute};
-use trustvector::service_client::ServiceClient as TrustVectorClient;
+use trustvector::TrustVectorClient;
 
 /// Log format and destination.
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -328,20 +331,11 @@ impl Domain {
 							.collect_vec();
 						if !new_pt_entries.is_empty() {
 							debug!(?new_pt_entries, "adding pre-trusted peers");
-							let req = trustvector::UpdateRequest {
-								header: Some(trustvector::Header {
-									id: self.pt_id.clone(),
-									timestamp_qwords: vec![ts],
-								}),
-								entries: new_pt_entries
-									.iter()
-									.map(|(_, id)| trustvector::Entry {
-										trustee: id.to_string(),
-										value: 1.0,
-									})
-									.collect(),
-							};
-							tv_client.update(req).await?.into_inner();
+							let entries = futures::stream::iter(&new_pt_entries)
+								.map(|(_, id)| Ok((id.to_string(), 1.0f64)));
+							tv_client
+								.update(self.pt_id.as_ref().unwrap(), &BigUint::from(ts), entries)
+								.await?;
 							let before = pending_pt.len();
 							for (did, _) in new_pt_entries {
 								pending_pt.remove(&did);
@@ -619,26 +613,9 @@ impl Domain {
 	async fn copy_vector(
 		tv_client: &mut TrustVectorClient<Channel>, from: &str, to: &str,
 	) -> Result<(), Box<dyn Error>> {
-		let mut stream =
-			tv_client.get(trustvector::GetRequest { id: String::from(from) }).await?.into_inner();
-		let mut update_request = trustvector::UpdateRequest::default();
-		while let Some(msg) = stream.message().await? {
-			if let Some(part) = msg.part {
-				match part {
-					trustvector::get_response::Part::Header(h) => update_request.header = Some(h),
-					trustvector::get_response::Part::Entry(e) => update_request.entries.push(e),
-				}
-			}
-		}
-		match update_request.header.as_mut() {
-			Some(h) => h.id = Some(String::from(to)),
-			None => {
-				return Err(SimpleError::new("source vector has no header while copying").into());
-			},
-		}
-		update_request.header.as_mut().unwrap().id = Some(String::from(to));
-		tv_client.flush(trustvector::FlushRequest { id: String::from(to) }).await?;
-		tv_client.update(update_request).await?;
+		let (timestamp, entries) = tv_client.get(from).await?;
+		tv_client.flush(to).await?;
+		tv_client.update(to, &timestamp, entries).await?;
 		Ok(())
 	}
 
@@ -665,32 +642,13 @@ impl Domain {
 				}),
 			})
 			.await?;
+		let (_timestamp, entries) = tv_client.get(self.gt_id.as_ref().unwrap()).await?;
+		pin_mut!(entries);
 		let mut gt = TrustVector::new();
-		let mut stream = tv_client
-			.get(trustvector::GetRequest { id: self.gt_id.as_ref().unwrap().clone() })
-			.await?
-			.into_inner();
-		let mut _gt_timestamp = None;
-		while let Some(res) = stream.message().await? {
-			if let Some(part) = res.part {
-				match part {
-					trustvector::get_response::Part::Header(header) => {
-						_gt_timestamp =
-							Some(header.timestamp_qwords.last().copied()).unwrap_or_default();
-					},
-					trustvector::get_response::Part::Entry(entry) => {
-						match entry.trustee.as_str().parse() {
-							Ok(trustee) => {
-								gt.insert(trustee, entry.value);
-							},
-							Err(error) => {
-								error!(
-									err = ?error, trustee = entry.trustee,
-									"cannot parse gt trustee");
-							},
-						}
-					},
-				}
+		while let Some(result) = entries.next().await {
+			let (did, value) = result?;
+			if let Some(&id) = self.peer_did_to_id.get(&did) {
+				gt.insert(id, value);
 			}
 		}
 		Ok(gt)
@@ -998,8 +956,7 @@ impl Main {
 			}
 			match &domain.pt_id {
 				None => {
-					let res = tv_client.create(trustvector::CreateRequest {}).await?.into_inner();
-					let pt_id = res.id;
+					let pt_id = tv_client.create().await?;
 					domain.pt_id = Some(pt_id.clone());
 					info!(id = pt_id, domain = domain_id, "created pre-trust");
 				},
@@ -1009,8 +966,7 @@ impl Main {
 			}
 			match &domain.gt_id {
 				None => {
-					let res = tv_client.create(trustvector::CreateRequest {}).await?.into_inner();
-					let gt_id = res.id;
+					let gt_id = tv_client.create().await?;
 					domain.gt_id = Some(gt_id.clone());
 					info!(id = gt_id, domain = domain_id, "created global trust");
 				},
