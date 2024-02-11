@@ -1058,6 +1058,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
+name = "compute"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "http-body",
+ "num",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "simple-error",
+ "tonic",
+ "tonic-build",
+ "trustvector",
+]
+
+[[package]]
 name = "const-hex"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3474,7 +3490,6 @@ dependencies = [
  "prost-types",
  "tonic",
  "tonic-build",
- "trustvector",
 ]
 
 [[package]]
@@ -4201,6 +4216,7 @@ dependencies = [
  "binascii",
  "chrono",
  "clap",
+ "compute",
  "futures",
  "http 0.2.11",
  "itertools 0.12.0",

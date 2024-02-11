@@ -13,7 +13,3 @@ pub mod transformer {
 pub mod combiner {
 	tonic::include_proto!("combiner");
 }
-
-pub mod compute {
-	tonic::include_proto!("compute");
-}

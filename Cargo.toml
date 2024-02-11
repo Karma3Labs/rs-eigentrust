@@ -10,6 +10,7 @@ members = [
     "job-manager",
     "trustvector",
     "trustmatrix",
+    "compute",
     "proto-buf",
     "spd-tv",
 ]
@@ -32,3 +33,4 @@ prost-types = "0.12"
 proto-buf.path = "proto-buf"
 trustvector.path = "trustvector"
 trustmatrix.path = "trustmatrix"
+compute.path = "compute"

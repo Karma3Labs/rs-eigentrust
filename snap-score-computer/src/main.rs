@@ -17,12 +17,12 @@ use tonic::transport::Channel;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
+use compute::ComputeClient;
+use proto_buf::combiner;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
-use proto_buf::compute::service_client::ServiceClient as ComputeClient;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query as IndexerQuery;
-use proto_buf::{combiner, compute};
 use trustmatrix::{TrustMatrixClient, TrustMatrixEntry};
 use trustvector::TrustVectorClient;
 
@@ -621,16 +621,14 @@ impl Domain {
 		)
 		.await?;
 		et_client
-			.basic_compute(compute::BasicComputeRequest {
-				params: Some(compute::Params {
-					local_trust_id: self.lt_id.as_ref().unwrap().clone(),
-					pre_trust_id: self.pt_id.as_ref().unwrap().clone(),
-					alpha,
-					epsilon: None,
-					global_trust_id: self.gt_id.as_ref().unwrap().clone(),
-					max_iterations: 0,
-					destinations: vec![],
-				}),
+			.basic_compute(compute::Params {
+				local_trust_id: self.lt_id.as_ref().unwrap().clone(),
+				pre_trust_id: self.pt_id.as_ref().unwrap().clone(),
+				alpha,
+				epsilon: None,
+				global_trust_id: self.gt_id.as_ref().unwrap().clone(),
+				max_iterations: 0,
+				destinations: vec![],
 			})
 			.await?;
 		let (_timestamp, entries) = tv_client.get(self.gt_id.as_ref().unwrap()).await?;
