@@ -229,10 +229,10 @@ enum MainError {
 
 struct Domain {
 	domain_id: DomainId,
-	lt_id: Option<String>,
-	pt_id: Option<String>,
-	gt_id: Option<String>,
-	status_schema: Option<String>,
+	lt_id: String,
+	pt_id: String,
+	gt_id: String,
+	status_schema: String,
 	// Local trust updates received from LC but not sent to ET yet.
 	local_trust_updates: BTreeMap<Timestamp, TrustMatrix>,
 	// Peer index (x/y/i/j) <-> peer ID mappings.
@@ -272,9 +272,10 @@ impl Domain {
 		.await
 		.map_err(|e| MainError::LoadLocalTrust(e))?;
 		let mut snap_status_updates = self.snap_status_updates.clone();
-		if let Some(status_schema) = &self.status_schema {
+		if !self.status_schema.is_empty() {
 			Self::fetch_snap_statuses(
-				idx_client, &mut self.ss_fetch_offset, status_schema, &mut snap_status_updates,
+				idx_client, &mut self.ss_fetch_offset, &self.status_schema,
+				&mut snap_status_updates,
 			)
 			.await
 			.map_err(|e| MainError::LoadSnapStatuses(e))?;
@@ -332,9 +333,7 @@ impl Domain {
 							debug!(?new_pt_entries, "adding pre-trusted peers");
 							let entries = futures::stream::iter(&new_pt_entries)
 								.map(|(_, id)| Ok((id.to_string(), 1.0f64)));
-							tv_client
-								.update(self.pt_id.as_ref().unwrap(), &BigUint::from(ts), entries)
-								.await?;
+							tv_client.update(&self.pt_id, &BigUint::from(ts), entries).await?;
 							let before = pending_pt.len();
 							for (did, _) in new_pt_entries {
 								pending_pt.remove(&did);
@@ -595,9 +594,8 @@ impl Domain {
 			})
 			.collect();
 		info!(count = entries.len(), ts = timestamp, "copied LT entries");
-		let lt_id = self.lt_id.as_ref().unwrap();
 		let timestamp = BigUint::from(timestamp);
-		tm_client.update(lt_id, &timestamp, iter(entries.into_iter().map(Ok))).await?;
+		tm_client.update(&self.lt_id, &timestamp, iter(entries.into_iter().map(Ok))).await?;
 		Ok(())
 	}
 
@@ -614,24 +612,19 @@ impl Domain {
 		&mut self, et_client: &mut ComputeClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, alpha: Option<f64>,
 	) -> Result<TrustVector, Box<dyn Error>> {
-		Self::copy_vector(
-			tv_client,
-			self.pt_id.as_ref().unwrap(),
-			self.gt_id.as_ref().unwrap(),
-		)
-		.await?;
+		Self::copy_vector(tv_client, &self.pt_id, &self.gt_id).await?;
 		et_client
 			.basic_compute(compute::Params {
-				local_trust_id: self.lt_id.as_ref().unwrap().clone(),
-				pre_trust_id: self.pt_id.as_ref().unwrap().clone(),
+				local_trust_id: self.lt_id.clone(),
+				pre_trust_id: self.pt_id.clone(),
 				alpha,
 				epsilon: None,
-				global_trust_id: self.gt_id.as_ref().unwrap().clone(),
+				global_trust_id: self.gt_id.clone(),
 				max_iterations: 0,
 				destinations: vec![],
 			})
 			.await?;
-		let (_timestamp, entries) = tv_client.get(self.gt_id.as_ref().unwrap()).await?;
+		let (_timestamp, entries) = tv_client.get(&self.gt_id).await?;
 		pin_mut!(entries);
 		let mut gt = TrustVector::new();
 		while let Some(result) = entries.next().await {
@@ -857,10 +850,10 @@ impl Main {
 				domain_id,
 				Domain {
 					domain_id,
-					lt_id: lt_ids.remove(&domain_id),
-					pt_id: pt_ids.remove(&domain_id),
-					gt_id: gt_ids.remove(&domain_id),
-					status_schema: status_schemas.remove(&domain_id),
+					lt_id: lt_ids.remove(&domain_id).unwrap_or_default(),
+					pt_id: pt_ids.remove(&domain_id).unwrap_or_default(),
+					gt_id: gt_ids.remove(&domain_id).unwrap_or_default(),
+					status_schema: status_schemas.remove(&domain_id).unwrap_or_default(),
 					local_trust_updates: BTreeMap::new(),
 					peer_did_to_id: BTreeMap::new(),
 					peer_id_to_did: BTreeMap::new(),
@@ -931,40 +924,44 @@ impl Main {
 		let mut tv_client =
 			self.tv_client().await.map_err(|e| MainError::ConnectToTrustVectorServer(e))?;
 		for (&domain_id, domain) in &mut self.domains {
-			match &domain.lt_id {
-				None => {
-					let lt_id = tm_client.create().await?;
-					domain.lt_id = Some(lt_id.clone());
-					info!(id = lt_id, domain = domain_id, "created local trust");
-				},
-				Some(lt_id) => {
-					tm_client.flush(lt_id).await?;
-					info!(id = lt_id, domain = domain_id, "flushed local trust");
-				},
+			if domain.lt_id.is_empty() {
+				domain.lt_id = tm_client.create().await?;
+				info!(
+					id = &domain.lt_id,
+					domain = domain_id,
+					"created local trust"
+				);
+			} else {
+				tm_client.flush(&domain.lt_id).await?;
+				info!(
+					id = &domain.lt_id,
+					domain = domain_id,
+					"flushed local trust"
+				);
 			}
-			match &domain.pt_id {
-				None => {
-					let pt_id = tv_client.create().await?;
-					domain.pt_id = Some(pt_id.clone());
-					info!(id = pt_id, domain = domain_id, "created pre-trust");
-				},
-				Some(pt_id) => {
-					info!(id = pt_id, domain = domain_id, "using existing pre-trust");
-				},
+			if domain.pt_id.is_empty() {
+				domain.pt_id = tv_client.create().await?;
+				info!(id = &domain.pt_id, domain = domain_id, "created pre-trust");
+			} else {
+				info!(
+					id = &domain.pt_id,
+					domain = domain_id,
+					"using existing pre-trust"
+				);
 			}
-			match &domain.gt_id {
-				None => {
-					let gt_id = tv_client.create().await?;
-					domain.gt_id = Some(gt_id.clone());
-					info!(id = gt_id, domain = domain_id, "created global trust");
-				},
-				Some(gt_id) => {
-					info!(
-						id = gt_id,
-						domain = domain_id,
-						"using existing global trust (as the initial vector)"
-					);
-				},
+			if domain.gt_id.is_empty() {
+				domain.gt_id = tv_client.create().await?;
+				info!(
+					id = &domain.gt_id,
+					domain = domain_id,
+					"created global trust"
+				);
+			} else {
+				info!(
+					id = &domain.gt_id,
+					domain = domain_id,
+					"using existing global trust (as the initial vector)"
+				);
 			}
 		}
 		Ok(())
