@@ -9,7 +9,6 @@ use futures::stream::iter;
 use futures::{pin_mut, StreamExt};
 use itertools::Itertools;
 use num::BigUint;
-use serde::{Deserialize, Serialize};
 use sha3::Digest;
 use simple_error::SimpleError;
 use thiserror::Error as ThisError;
@@ -25,6 +24,12 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query as IndexerQuery;
 use trustmatrix::{TrustMatrixClient, TrustMatrixEntry};
 use trustvector::TrustVectorClient;
+use vc::{
+	Manifest, ManifestProof, StatusCredential, TrustScore, TrustScoreCredential,
+	TrustScoreCredentialProof, TrustScoreCredentialSubject,
+};
+
+mod vc;
 
 /// Log format and destination.
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -158,35 +163,6 @@ struct Update {
 enum UpdateBody {
 	LocalTrust(TrustMatrix),
 	SnapStatuses(SnapStatuses),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct StatusCredential {
-	#[serde(rename = "@context")]
-	context: Option<Vec<String>>,
-	id: Option<String>,
-	#[serde(rename = "type")]
-	type_: String,
-	issuer: String,
-	#[serde(rename = "issuanceDate")]
-	issuance_date: Option<String>,
-	#[serde(rename = "credentialSubject")]
-	credential_subject: StatusCredentialSubject,
-	proof: StatusCredentialProof,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct StatusCredentialSubject {
-	id: String,
-	#[serde(rename = "currentStatus")]
-	current_status: String,
-	#[serde(rename = "statusReason")]
-	status_reason: Option<Vec<String>>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct StatusCredentialProof {
-	signature: String,
 }
 
 fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<dyn Error>> {
@@ -755,52 +731,6 @@ impl Domain {
 		})
 	}
 }
-
-#[derive(Serialize, Deserialize)]
-struct TrustScoreCredential {
-	#[serde(rename = "@context")]
-	context: Vec<String>,
-	id: String,
-	#[serde(rename = "type")]
-	type_: Vec<String>,
-	issuer: String,
-	#[serde(rename = "issuanceDate")]
-	issuance_date: String,
-	#[serde(rename = "credentialSubject")]
-	credential_subject: TrustScoreCredentialSubject,
-	proof: TrustScoreCredentialProof,
-}
-
-#[derive(Serialize, Deserialize)]
-struct TrustScoreCredentialSubject {
-	id: String,
-	#[serde(rename = "trustScoreType")]
-	trust_score_type: String,
-	#[serde(rename = "trustScore")]
-	trust_score: TrustScore,
-}
-
-#[derive(Serialize, Deserialize)]
-struct TrustScore {
-	value: f64,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	confidence: Option<f64>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct TrustScoreCredentialProof {}
-
-#[derive(Serialize, Deserialize)]
-struct Manifest {
-	issuer: String,
-	#[serde(rename = "issuanceDate")]
-	issuance_date: String,
-	locations: Option<Vec<String>>,
-	proof: ManifestProof,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ManifestProof {}
 
 struct Main {
 	args: Args,
