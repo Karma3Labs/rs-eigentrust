@@ -5,8 +5,8 @@ use std::io::IsTerminal;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
+use futures::stream::iter;
 use futures::{pin_mut, StreamExt};
-use futures_util::stream::iter;
 use itertools::Itertools;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
