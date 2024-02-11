@@ -298,27 +298,17 @@ impl Domain {
 						"performing core compute"
 					);
 					self.last_compute_ts = ts_window;
-					self.fetch_did_mapping(lc_client).await?;
+					self.peer_did_to_id = Self::fetch_did_mapping(lc_client).await?;
+					self.peer_id_to_did =
+						self.peer_did_to_id.iter().map(|(did, id)| (*id, did.clone())).collect();
+					Self::update_pt(ts, &self.pt_id, &self.peer_did_to_id, pending_pt, tv_client)
+						.await?;
+					match Self::run_et(
+						&self.lt_id, &self.pt_id, &self.gt_id, &self.peer_did_to_id, alpha,
+						et_client, tv_client,
+					)
+					.await
 					{
-						let new_pt_entries = pending_pt
-							.iter()
-							.cloned()
-							.filter_map(|did| self.peer_did_to_id.get(&did).map(|id| (did, id)))
-							.collect_vec();
-						if !new_pt_entries.is_empty() {
-							debug!(?new_pt_entries, "adding pre-trusted peers");
-							let entries = futures::stream::iter(&new_pt_entries)
-								.map(|(_, id)| Ok((id.to_string(), 1.0f64)));
-							tv_client.update(&self.pt_id, &BigUint::from(ts), entries).await?;
-							let before = pending_pt.len();
-							for (did, _) in new_pt_entries {
-								pending_pt.remove(&did);
-							}
-							let after = pending_pt.len();
-							info!(before, after, "added pre-trusted peers");
-						}
-					}
-					match self.run_et(et_client, tv_client, alpha).await {
 						Ok(gt1) => {
 							self.gt = gt1;
 						},
@@ -329,69 +319,7 @@ impl Domain {
 							);
 						},
 					}
-					let manifest = self.make_manifest(issuer_id, ts_window).await?;
-					let manifest_path = std::path::Path::new("spd_scores.json");
-					let zip_path = std::path::Path::new("spd_scores.zip");
-					{
-						let zip_file = std::fs::File::create(zip_path)?;
-						let mut zip = zip::ZipWriter::new(zip_file);
-						let options = zip::write::FileOptions::default();
-						zip.start_file("peer_scores.jsonl", options)?;
-						self.write_peer_vcs(issuer_id, ts_window, &mut zip).await?;
-						self.compute_snap_scores().await?;
-						zip.start_file("snap_scores.jsonl", options)?;
-						self.write_snap_vcs(issuer_id, ts_window, &mut zip).await?;
-						zip.start_file("MANIFEST.json", options)?;
-						serde_jcs::to_writer(&mut zip, &manifest)?;
-						zip.finish()?;
-					}
-					// TODO(ek): Read in chunks, not everything
-					// TODO(ek): Fix CID generation
-					// let h = Code::Keccak512.digest(std::fs::read(zip_path)?.as_slice());
-					// let cid = Cid::new_v1(/* Keccak512 */ 0x1d, h).to_string();
-					// let mut locations = match &manifest.locations {
-					// 	Some(locations) => locations,
-					// 	None => {
-					// 		let locations = vec![];
-					// 		manifest.locations = Some(locations);
-					// 		&locations
-					// 	},
-					// };
-					// locations.push("ipfs://".to_owned() + &cid);
-					{
-						let manifest_file = std::fs::File::create(manifest_path)?;
-						serde_jcs::to_writer(manifest_file, &manifest)?;
-					}
-					if let Some(url) = s3_output_url {
-						use aws_config::meta::region::RegionProviderChain;
-						use aws_config::BehaviorVersion;
-						use aws_sdk_s3::{primitives::ByteStream, Client};
-						let region_provider =
-							RegionProviderChain::default_provider().or_else("us-east-1");
-						let config = aws_config::defaults(BehaviorVersion::latest())
-							.region(region_provider)
-							.load()
-							.await;
-						let client = Client::new(&config);
-						let mut path = url.path().trim_matches('/').to_string();
-						if !path.is_empty() {
-							path += "/";
-						}
-						let path = format!("{}{}.zip", path, ts_window);
-						client
-							.put_object()
-							.body(ByteStream::from_path(zip_path).await?)
-							.bucket(url.host().unwrap().to_string())
-							.key(&path)
-							.send()
-							.await?;
-						info!(
-							bucket = url.host().unwrap().to_string(),
-							path = &path,
-							"uploaded to S3"
-						);
-					}
-					// trace!("finished performing core compute");
+					self.publish_scores(ts_window, issuer_id, s3_output_url).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
 				match update.body {
@@ -470,41 +398,6 @@ impl Domain {
 		}
 		Ok(())
 	}
-	async fn fetch_did_mapping(
-		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
-	) -> Result<(), Box<dyn Error>> {
-		let mut start = 0;
-		let mut more = true;
-		self.peer_did_to_id.clear();
-		self.peer_id_to_did.clear();
-		while more {
-			let mut mapping_stream = lc_client
-				.get_did_mapping(combiner::MappingQuery { start, size: 100 })
-				.await?
-				.into_inner();
-			more = false;
-			while let Some(entry) = mapping_stream.message().await? {
-				let mut did_bytes = vec![0u8; (entry.did.len() + 1) / 2];
-				match binascii::hex2bin(entry.did.as_bytes(), did_bytes.as_mut_slice()) {
-					Ok(decoded) => match String::from_utf8(Vec::from(decoded)) {
-						Ok(did) => {
-							self.peer_did_to_id.insert(did.clone(), entry.id);
-							self.peer_id_to_did.insert(entry.id, did.clone());
-						},
-						Err(e) => {
-							error!(err = ?e, "invalid UTF-8 DID encountered");
-						},
-					},
-					Err(e) => {
-						error!(err = ?e, "invalid hex DID encountered");
-					},
-				}
-				start = entry.id + 1;
-				more = true;
-			}
-		}
-		Ok(())
-	}
 
 	async fn fetch_snap_statuses(
 		idx_client: &mut IndexerClient<Channel>, fetch_offset: &mut u32, schema_id: &str,
@@ -557,6 +450,132 @@ impl Domain {
 		Ok(())
 	}
 
+	async fn fetch_did_mapping(
+		lc_client: &mut LinearCombinerClient<Channel>,
+	) -> Result<BTreeMap<String, u32>, Box<dyn Error>> {
+		let mut start = 0;
+		let mut more = true;
+		let mut peer_did_to_id = BTreeMap::new();
+		while more {
+			let mut mapping_stream = lc_client
+				.get_did_mapping(combiner::MappingQuery { start, size: 100 })
+				.await?
+				.into_inner();
+			more = false;
+			while let Some(entry) = mapping_stream.message().await? {
+				let mut did_bytes = vec![0u8; (entry.did.len() + 1) / 2];
+				match binascii::hex2bin(entry.did.as_bytes(), did_bytes.as_mut_slice()) {
+					Ok(decoded) => match String::from_utf8(Vec::from(decoded)) {
+						Ok(did) => {
+							peer_did_to_id.insert(did.clone(), entry.id);
+						},
+						Err(e) => {
+							error!(err = ?e, "invalid UTF-8 DID encountered");
+						},
+					},
+					Err(e) => {
+						error!(err = ?e, "invalid hex DID encountered");
+					},
+				}
+				start = entry.id + 1;
+				more = true;
+			}
+		}
+		Ok(peer_did_to_id)
+	}
+
+	async fn update_pt(
+		ts: Timestamp, pt_id: &str, peer_did_to_id: &BTreeMap<String, u32>,
+		pending_pt: &mut HashSet<String>, tv_client: &mut TrustVectorClient<Channel>,
+	) -> Result<(), Box<dyn Error>> {
+		let new_pt_entries = pending_pt
+			.iter()
+			.cloned()
+			.filter_map(|did| peer_did_to_id.get(&did).map(|id| (did, id)))
+			.collect_vec();
+		if !new_pt_entries.is_empty() {
+			debug!(?new_pt_entries, "adding pre-trusted peers");
+			let entries =
+				futures::stream::iter(&new_pt_entries).map(|(_, id)| Ok((id.to_string(), 1.0f64)));
+			tv_client.update(pt_id, &BigUint::from(ts), entries).await?;
+			let before = pending_pt.len();
+			for (did, _) in new_pt_entries {
+				pending_pt.remove(&did);
+			}
+			let after = pending_pt.len();
+			info!(before, after, "added pre-trusted peers");
+		}
+		Ok(())
+	}
+
+	async fn publish_scores(
+		&mut self, ts_window: Timestamp, issuer_id: &str, s3_output_url: &Option<Url>,
+	) -> Result<(), Box<dyn Error>> {
+		let manifest = Self::make_manifest(issuer_id, ts_window).await?;
+		let manifest_path = std::path::Path::new("spd_scores.json");
+		let zip_path = std::path::Path::new("spd_scores.zip");
+		{
+			let zip_file = std::fs::File::create(zip_path)?;
+			let mut zip = zip::ZipWriter::new(zip_file);
+			let options = zip::write::FileOptions::default();
+			zip.start_file("peer_scores.jsonl", options)?;
+			self.write_peer_vcs(issuer_id, ts_window, &mut zip).await?;
+			self.compute_snap_scores().await?;
+			zip.start_file("snap_scores.jsonl", options)?;
+			self.write_snap_vcs(issuer_id, ts_window, &mut zip).await?;
+			zip.start_file("MANIFEST.json", options)?;
+			serde_jcs::to_writer(&mut zip, &manifest)?;
+			zip.finish()?;
+		}
+		// TODO(ek): Read in chunks, not everything
+		// TODO(ek): Fix CID generation
+		// let h = Code::Keccak512.digest(std::fs::read(zip_path)?.as_slice());
+		// let cid = Cid::new_v1(/* Keccak512 */ 0x1d, h).to_string();
+		// let mut locations = match &manifest.locations {
+		// 	Some(locations) => locations,
+		// 	None => {
+		// 		let locations = vec![];
+		// 		manifest.locations = Some(locations);
+		// 		&locations
+		// 	},
+		// };
+		// locations.push("ipfs://".to_owned() + &cid);
+		{
+			let manifest_file = std::fs::File::create(manifest_path)?;
+			serde_jcs::to_writer(manifest_file, &manifest)?;
+		}
+		if let Some(url) = s3_output_url {
+			use aws_config::meta::region::RegionProviderChain;
+			use aws_config::BehaviorVersion;
+			use aws_sdk_s3::{primitives::ByteStream, Client};
+			let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
+			let config = aws_config::defaults(BehaviorVersion::latest())
+				.region(region_provider)
+				.load()
+				.await;
+			let client = Client::new(&config);
+			let mut path = url.path().trim_matches('/').to_string();
+			if !path.is_empty() {
+				path += "/";
+			}
+			let path = format!("{}{}.zip", path, ts_window);
+			client
+				.put_object()
+				.body(ByteStream::from_path(zip_path).await?)
+				.bucket(url.host().unwrap().to_string())
+				.key(&path)
+				.send()
+				.await?;
+			info!(
+				bucket = url.host().unwrap().to_string(),
+				path = &path,
+				"uploaded to S3"
+			);
+		}
+		// trace!("finished performing core compute");
+		Ok(())
+	}
+
 	async fn upload_lt(
 		&mut self, tm_client: &mut TrustMatrixClient<Channel>, timestamp: Timestamp,
 		lt: &TrustMatrix,
@@ -585,27 +604,28 @@ impl Domain {
 	}
 
 	async fn run_et(
-		&mut self, et_client: &mut ComputeClient<Channel>,
-		tv_client: &mut TrustVectorClient<Channel>, alpha: Option<f64>,
+		lt_id: &str, pt_id: &str, gt_id: &str, did_to_id: &BTreeMap<String, u32>,
+		alpha: Option<f64>, et_client: &mut ComputeClient<Channel>,
+		tv_client: &mut TrustVectorClient<Channel>,
 	) -> Result<TrustVector, Box<dyn Error>> {
-		Self::copy_vector(tv_client, &self.pt_id, &self.gt_id).await?;
+		Self::copy_vector(tv_client, pt_id, gt_id).await?;
 		et_client
 			.basic_compute(compute::Params {
-				local_trust_id: self.lt_id.clone(),
-				pre_trust_id: self.pt_id.clone(),
+				local_trust_id: lt_id.to_string(),
+				pre_trust_id: pt_id.to_string(),
 				alpha,
 				epsilon: None,
-				global_trust_id: self.gt_id.clone(),
+				global_trust_id: gt_id.to_string(),
 				max_iterations: 0,
 				destinations: vec![],
 			})
 			.await?;
-		let (_timestamp, entries) = tv_client.get(&self.gt_id).await?;
+		let (_timestamp, entries) = tv_client.get(gt_id).await?;
 		pin_mut!(entries);
 		let mut gt = TrustVector::new();
 		while let Some(result) = entries.next().await {
 			let (did, value) = result?;
-			if let Some(&id) = self.peer_did_to_id.get(&did) {
+			if let Some(&id) = did_to_id.get(&did) {
 				gt.insert(id, value);
 			}
 		}
@@ -718,7 +738,7 @@ impl Domain {
 	}
 
 	async fn make_manifest(
-		&self, issuer_id: &str, timestamp: Timestamp,
+		issuer_id: &str, timestamp: Timestamp,
 	) -> Result<Manifest, Box<dyn Error>> {
 		Ok(Manifest {
 			issuer: String::from(issuer_id),
