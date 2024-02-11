@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		config,
 		&[
 			"services/common.proto", "services/indexer.proto", "services/transformer.proto",
-			"services/combiner.proto", "services/trustmatrix.proto", "services/compute.proto",
+			"services/combiner.proto", "services/compute.proto",
 		],
 		&["services", "../trustvector/api/pb"],
 	)?;
