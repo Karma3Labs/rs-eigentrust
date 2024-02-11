@@ -1,3 +1,4 @@
+use clap::Parser as ClapParser;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::{LtBatch, LtHistoryBatch};
 use proto_buf::transformer::transformer_client::TransformerClient;
@@ -7,7 +8,6 @@ use std::time::Duration;
 use tokio::time::interval;
 use tokio_stream::wrappers::IntervalStream;
 use tokio_stream::StreamExt;
-use tonic::transport::Channel;
 use tonic::Request;
 
 const BATCH_SIZE: u32 = 1000;
@@ -15,13 +15,22 @@ const INTERVAL_SECS: u64 = 5;
 const NUM_ITERATIONS: usize = 3;
 const MAX_SIZE: u32 = 7;
 
+#[derive(ClapParser)]
+struct Args {
+	/// Attestation transformer gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50051")]
+	transformer_grpc: tonic::transport::Endpoint,
+
+	/// Linear combiner gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50052")]
+	linear_combiner_grpc: tonic::transport::Endpoint,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let tr_channel = Channel::from_static("http://[::1]:50051").connect().await?;
-	let mut tr_client = TransformerClient::new(tr_channel);
-
-	let lc_channel = Channel::from_static("http://[::1]:50052").connect().await?;
-	let mut lc_client = LinearCombinerClient::new(lc_channel);
+	let args = Args::parse();
+	let mut tr_client = TransformerClient::connect(args.transformer_grpc).await?;
+	let mut lc_client = LinearCombinerClient::connect(args.linear_combiner_grpc).await?;
 
 	let interval_size = Duration::from_secs(INTERVAL_SECS);
 	let stream = IntervalStream::new(interval(interval_size));

@@ -179,6 +179,7 @@ dependencies = [
 name = "attestation-transformer"
 version = "0.0.1"
 dependencies = [
+ "clap",
  "futures",
  "hex",
  "itertools 0.12.0",
@@ -2548,6 +2549,7 @@ checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
 name = "job-manager"
 version = "0.0.1"
 dependencies = [
+ "clap",
  "futures",
  "proto-buf",
  "tokio",
@@ -2720,6 +2722,7 @@ dependencies = [
 name = "linear-combiner"
 version = "0.0.1"
 dependencies = [
+ "clap",
  "hex",
  "proto-buf",
  "rocksdb",

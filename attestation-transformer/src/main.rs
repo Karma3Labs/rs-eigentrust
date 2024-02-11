@@ -1,5 +1,13 @@
-use error::AttTrError;
+use std::error::Error;
+
+use clap::Parser as ClapParser;
 use futures::stream::iter;
+use rocksdb::{Options, DB};
+use serde_json::from_str;
+use tonic::transport::Endpoint;
+use tonic::{transport::Server, Request, Response, Status};
+
+use error::AttTrError;
 use managers::checkpoint::CheckpointManager;
 use managers::term::TermManager;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
@@ -7,16 +15,9 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
-use rocksdb::{Options, DB};
-
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
-use serde_json::from_str;
-use std::error::Error;
 use term::Term;
-
-use tonic::transport::Channel;
-use tonic::{transport::Server, Request, Response, Status};
 
 pub mod did;
 pub mod error;
@@ -33,14 +34,14 @@ const STATUS_SCHEMA_ID: &str = "0x4";
 
 #[derive(Debug)]
 struct TransformerService {
-	indexer_channel: Channel,
-	lt_channel: Channel,
+	indexer_endpoint: Endpoint,
+	lt_endpoint: Endpoint,
 	db_url: String,
 }
 
 impl TransformerService {
 	fn new(
-		indexer_channel: Channel, lt_channel: Channel, db_url: &str,
+		indexer_endpoint: Endpoint, lt_endpoint: Endpoint, db_url: &str,
 	) -> Result<Self, AttTrError> {
 		let mut opts = Options::default();
 		opts.create_missing_column_families(true);
@@ -49,7 +50,7 @@ impl TransformerService {
 			DB::open_cf(&opts, db_url, vec!["checkpoint", "term"]).map_err(AttTrError::DbError)?;
 		CheckpointManager::init(&db)?;
 
-		Ok(Self { indexer_channel, lt_channel, db_url: db_url.to_string() })
+		Ok(Self { indexer_endpoint, lt_endpoint, db_url: db_url.to_string() })
 	}
 
 	fn parse_event(event: IndexerEvent) -> Result<Vec<Term>, AttTrError> {
@@ -112,7 +113,9 @@ impl Transformer for TransformerService {
 			count: event_batch.size,
 		};
 
-		let mut client = IndexerClient::new(self.indexer_channel.clone());
+		let mut client = IndexerClient::connect(self.indexer_endpoint.clone())
+			.await
+			.map_err(|e| Status::from_error(Box::new(e)))?;
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
 
 		let mut terms = Vec::new();
@@ -162,7 +165,9 @@ impl Transformer for TransformerService {
 		let terms = TermManager::read_terms(&db, inner).map_err(|e| e.into_status())?;
 		let num_terms = terms.len();
 
-		let mut client = LinearCombinerClient::new(self.lt_channel.clone());
+		let mut client = LinearCombinerClient::connect(self.lt_endpoint.clone())
+			.await
+			.map_err(|e| Status::from_error(Box::new(e)))?;
 		client.sync_transformer(Request::new(iter(terms))).await?;
 
 		let term_size =
@@ -173,34 +178,56 @@ impl Transformer for TransformerService {
 	}
 }
 
+#[derive(ClapParser)]
+struct Args {
+	/// Database (storage) directory.
+	#[arg(long, default_value = "att-tr-storage")]
+	db_dir: String,
+
+	/// gRPC server listen address.
+	#[arg(long, default_value = "[::1]:50051")]
+	listen_address: std::net::SocketAddr,
+
+	/// Indexer gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50050")]
+	indexer_grpc: Endpoint,
+
+	/// Linear combiner gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50052")]
+	linear_combiner_grpc: Endpoint,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let indexer_channel = Channel::from_static("http://localhost:50050").connect().await?;
-	let lc_channel = Channel::from_static("http://localhost:50052").connect().await?;
-	let db_url = "att-tr-storage";
-	let tr_service = TransformerService::new(indexer_channel, lc_channel, db_url)?;
+	let args = Args::parse();
+	let tr_service =
+		TransformerService::new(args.indexer_grpc, args.linear_combiner_grpc, &args.db_dir)?;
 
-	let addr = "[::1]:50051".parse()?;
-	Server::builder().add_service(TransformerServer::new(tr_service)).serve(addr).await?;
+	Server::builder()
+		.add_service(TransformerServer::new(tr_service))
+		.serve(args.listen_address)
+		.await?;
 	Ok(())
 }
 
 #[cfg(test)]
 mod test {
+	use secp256k1::rand::thread_rng;
+	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
+	use serde_json::to_string;
+	use sha3::{Digest, Keccak256};
+
+	use proto_buf::indexer::IndexerEvent;
+
 	use crate::did::{Did, Schema};
 	use crate::schemas::status::{CredentialSubject, CurrentStatus, StatusSchema};
 	use crate::schemas::trust::{
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
 	};
 	use crate::schemas::{Domain, Proof};
+	use crate::TransformerService;
 	// use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
-	use crate::TransformerService;
-	use proto_buf::indexer::IndexerEvent;
-	use secp256k1::rand::thread_rng;
-	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
-	use serde_json::to_string;
-	use sha3::{Digest, Keccak256};
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {

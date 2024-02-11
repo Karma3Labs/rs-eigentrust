@@ -1,3 +1,11 @@
+use std::error::Error;
+
+use clap::Parser as ClapParser;
+use rocksdb::{Options, DB};
+use tokio::sync::mpsc::channel;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{transport::Server, Request, Response, Status, Streaming};
+
 use error::LcError;
 use managers::{
 	checkpoint::CheckpointManager, index::IndexManager, item::ItemManager, mapping::MappingManager,
@@ -11,11 +19,6 @@ use proto_buf::{
 	common::Void,
 	transformer::TermObject,
 };
-use rocksdb::{Options, DB};
-use std::error::Error;
-use tokio::sync::mpsc::channel;
-use tokio_stream::wrappers::ReceiverStream;
-use tonic::{transport::Server, Request, Response, Status, Streaming};
 
 pub mod error;
 pub mod item;
@@ -213,10 +216,24 @@ impl LinearCombiner for LinearCombinerService {
 	}
 }
 
+#[derive(ClapParser)]
+struct Args {
+	/// Database (storage) directory
+	#[arg(long, default_value = "lc-storage")]
+	db_dir: String,
+
+	/// gRPC server listen address
+	#[arg(long, default_value = "[::1]:50052")]
+	listen_address: std::net::SocketAddr,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let addr = "[::1]:50052".parse()?;
-	let service = LinearCombinerService::new("lc-storage")?;
-	Server::builder().add_service(LinearCombinerServer::new(service)).serve(addr).await?;
+	let args = Args::parse();
+	let service = LinearCombinerService::new(&args.db_dir)?;
+	Server::builder()
+		.add_service(LinearCombinerServer::new(service))
+		.serve(args.listen_address)
+		.await?;
 	Ok(())
 }
