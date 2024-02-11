@@ -1,17 +1,16 @@
 use hyper::service::service_fn;
+use hyper_staticfile::{Body, Static};
+use hyper_util::rt::TokioIo;
+use hyper::{Request, Response};
 
 use tracing::{error, info};
 
-use std::net::SocketAddr;
-
-use hyper_util::rt::TokioIo;
-
-use hyper::{Request, Response};
 use tokio::net::TcpListener;
 
 use http::response::Builder as ResponseBuilder;
 use http::{header, StatusCode};
-use hyper_staticfile::{Body, Static};
+
+use std::net::SocketAddr;
 use std::io::Error as IoError;
 
 // http://localhost:3003/metamask-connector:4b806b14cba28b3ae4cda3d09b0f42640d3bf15bc2ebcd6c6e1a97c4da10212a.csv

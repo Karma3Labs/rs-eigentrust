@@ -48,7 +48,7 @@ async fn main() {
 	*/
 
 	let metamask_connector_client_config =
-		MetamaskConnectorClientConfig { url: "http://localhost:3000/output.json".to_string() };
+		MetamaskConnectorClientConfig { url: "https://vfkvr9cph1.execute-api.us-east-1.amazonaws.com/api".to_string() };
 
 	let metamask_connector_client = MetamaskConnectorClient::new(metamask_connector_client_config);
 	let metamask_connector_task = MetamaskConnectorTask::new(metamask_connector_client);

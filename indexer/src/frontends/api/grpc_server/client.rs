@@ -27,7 +27,7 @@ impl GRPCServerClient {
 				AUDIT_DISAPPROVE_SCHEMA_ID.to_owned(),
 				ENDORSE_SCHEMA_ID.to_owned(),
 			],
-			offset: 5,
+			offset: 0,
 			count: 5,
 		};
 
@@ -38,7 +38,7 @@ impl GRPCServerClient {
 		let mut response = client.subscribe(indexer_query).await?.into_inner();
 		let mut count = 0;
 		while let Ok(Some(_res)) = response.message().await {
-			// info!("{:?}", res);
+			// info!("{:?}", _res);
 			count = count + 1;
 		}
 		info!("Got {:?} records", count);

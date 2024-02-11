@@ -6,31 +6,34 @@ use std::error::Error;
 
 use tracing::debug;
 
-use super::types::MetamaskConnectorClientConfig;
+use super::types::{ MetamaskConnectorClientConfig, MetamaskAPIRecord };
 pub use crate::clients::types::EVMLogsClient;
 
 pub struct MetamaskConnectorClient {
-	pub config: MetamaskConnectorClientConfig,
+    pub config: MetamaskConnectorClientConfig,
 }
 
 const DEFAULT_LIMIT: u64 = 1024;
 
 impl MetamaskConnectorClient {
-	pub fn new(config: MetamaskConnectorClientConfig) -> Self {
-		debug!("Metamask connector client created");
-		MetamaskConnectorClient { config }
-	}
+    pub fn new(config: MetamaskConnectorClientConfig) -> Self {
+        debug!("Metamask connector client created");
+        MetamaskConnectorClient { config }
+    }
 
-	pub async fn query(
-		&self, from: Option<u64>, range: Option<u64>,
-	) -> Result<Vec<String>, Box<dyn Error>> {
-		let _offset = from.unwrap_or(0);
-		let _limit = range.unwrap_or(DEFAULT_LIMIT);
-		let url = &self.config.url;
+    pub async fn query(
+        &self,
+        from: Option<u64>,
+        range: Option<u64>
+    ) -> Result<Vec<MetamaskAPIRecord>, Box<dyn Error>> {
+        let from_unwrapped = from.unwrap_or(0);
+        let _offset = from_unwrapped + 1; // starts from 1 not 0
 
-		let response = reqwest::get(url).await?.json::<Vec<Value>>().await?;
-		let records: Vec<String> = response.iter().map(|value| value.to_string()).collect();
+        let _limit = range.unwrap_or(DEFAULT_LIMIT);
+        let url = &self.config.url;
+        let urlPath = format!("{}/assertions/?from={}&to={}", url, _offset, _limit);
 
-		Ok(records)
-	}
+        let records = reqwest::get(urlPath).await?.json::<Vec<MetamaskAPIRecord>>().await?;
+        Ok(records)
+    }
 }
