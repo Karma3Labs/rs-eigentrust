@@ -3476,6 +3476,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "simple-error"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8542b68b8800c3cda649d2c72d688b6907b30f1580043135d61669d4aad1c175"
+
+[[package]]
 name = "simple_asn1"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4117,8 +4123,16 @@ dependencies = [
 name = "trustvector"
 version = "0.0.1"
 dependencies = [
+ "async-stream",
+ "futures",
+ "futures-core",
+ "futures-util",
+ "http-body",
+ "num",
  "prost",
  "prost-types",
+ "simple-error",
+ "tokio-stream",
  "tonic",
  "tonic-build",
 ]
