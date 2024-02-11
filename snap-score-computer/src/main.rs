@@ -5,8 +5,8 @@ use std::io::IsTerminal;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
-use futures::pin_mut;
-use futures::stream::StreamExt;
+use futures::{pin_mut, StreamExt};
+use futures_util::stream::iter;
 use itertools::Itertools;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
@@ -22,9 +22,8 @@ use proto_buf::combiner::LtHistoryBatch;
 use proto_buf::compute::service_client::ServiceClient as ComputeClient;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query as IndexerQuery;
-use proto_buf::trustmatrix;
-use proto_buf::trustmatrix::service_client::ServiceClient as TrustMatrixClient;
 use proto_buf::{combiner, compute};
+use trustmatrix::{TrustMatrixClient, TrustMatrixEntry};
 use trustvector::TrustVectorClient;
 
 /// Log format and destination.
@@ -587,26 +586,18 @@ impl Domain {
 		&mut self, tm_client: &mut TrustMatrixClient<Channel>, timestamp: Timestamp,
 		lt: &TrustMatrix,
 	) -> Result<(), Box<dyn Error>> {
-		let mut update_req = trustmatrix::UpdateRequest {
-			header: Some(trustmatrix::Header {
-				id: Some(self.lt_id.as_ref().unwrap().clone()),
-				timestamp_qwords: vec![timestamp],
-			}),
-			entries: vec![],
-		};
-		for ((truster, trustee), value) in lt {
-			update_req.entries.push(trustmatrix::Entry {
+		let entries: Vec<_> = lt
+			.iter()
+			.map(|((truster, trustee), &value)| TrustMatrixEntry {
 				truster: truster.to_string(),
 				trustee: trustee.to_string(),
-				value: *value,
-			});
-		}
-		info!(
-			count = update_req.entries.len(),
-			ts = timestamp,
-			"copied LT entries"
-		);
-		tm_client.update(update_req).await?;
+				value,
+			})
+			.collect();
+		info!(count = entries.len(), ts = timestamp, "copied LT entries");
+		let lt_id = self.lt_id.as_ref().unwrap();
+		let timestamp = BigUint::from(timestamp);
+		tm_client.update(lt_id, &timestamp, iter(entries.into_iter().map(Ok))).await?;
 		Ok(())
 	}
 
@@ -944,13 +935,12 @@ impl Main {
 		for (&domain_id, domain) in &mut self.domains {
 			match &domain.lt_id {
 				None => {
-					let res = tm_client.create(trustmatrix::CreateRequest {}).await?.into_inner();
-					let lt_id = res.id;
+					let lt_id = tm_client.create().await?;
 					domain.lt_id = Some(lt_id.clone());
 					info!(id = lt_id, domain = domain_id, "created local trust");
 				},
 				Some(lt_id) => {
-					tm_client.flush(trustmatrix::FlushRequest { id: lt_id.clone() }).await?;
+					tm_client.flush(&lt_id).await?;
 					info!(id = lt_id, domain = domain_id, "flushed local trust");
 				},
 			}

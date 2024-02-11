@@ -4219,6 +4219,7 @@ dependencies = [
  "tonic",
  "tracing",
  "tracing-subscriber",
+ "trustmatrix",
  "trustvector",
  "url",
  "zip",
@@ -4847,6 +4848,24 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "trustmatrix"
+version = "0.0.1"
+dependencies = [
+ "async-stream",
+ "futures",
+ "futures-core",
+ "futures-util",
+ "http-body",
+ "num",
+ "prost",
+ "prost-types",
+ "simple-error",
+ "tokio-stream",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]

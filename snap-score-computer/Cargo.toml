@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
+trustmatrix.workspace = true
 trustvector.workspace = true
 proto-buf.workspace = true
 tonic.workspace = true

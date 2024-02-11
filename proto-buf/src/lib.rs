@@ -14,10 +14,6 @@ pub mod combiner {
 	tonic::include_proto!("combiner");
 }
 
-pub mod trustmatrix {
-	tonic::include_proto!("trustmatrix");
-}
-
 pub mod compute {
 	tonic::include_proto!("compute");
 }

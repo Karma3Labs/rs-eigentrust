@@ -9,6 +9,7 @@ members = [
     "snap-score-computer",
     "job-manager",
     "trustvector",
+    "trustmatrix",
     "proto-buf",
     "spd-tv",
 ]
@@ -30,3 +31,4 @@ prost-build = "0.12"
 prost-types = "0.12"
 proto-buf.path = "proto-buf"
 trustvector.path = "trustvector"
+trustmatrix.path = "trustmatrix"
