@@ -13,7 +13,6 @@ futures-core = "0.3"
 num = "0.4"
 simple-error = "0.3"
 http-body = "0.4"
-futures-util = "0.3"
 futures = "0.3"
 tokio-stream = "0.1"
 
