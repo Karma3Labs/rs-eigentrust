@@ -64,7 +64,7 @@ impl Indexer for IndexerService {
 			.await;
 
 			// todo also move to cache layer
-			for (index, record) in records.iter().enumerate() {
+			for (_index, record) in records.iter().enumerate() {
 				let r = record.as_ref().unwrap();
 				let event = IndexerEvent {
 					id: r.get(CSV_COLUMN_INDEX_ID).unwrap().parse::<u32>().unwrap_or(0),

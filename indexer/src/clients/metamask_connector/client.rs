@@ -1,7 +1,7 @@
 use eyre::Result;
 use reqwest;
 
-use serde_json::Value;
+
 use std::error::Error;
 
 use tracing::debug;

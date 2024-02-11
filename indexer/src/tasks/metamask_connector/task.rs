@@ -54,7 +54,7 @@ impl TaskTrait for MetamaskConnectorTask {
 		let results: Vec<TaskRecord> = records
 			.into_iter()
 			.enumerate()
-			.map(|(i, record)| -> TaskRecord {
+			.map(|(_i, record)| -> TaskRecord {
 				let r = record;
 
 				TaskRecord {
