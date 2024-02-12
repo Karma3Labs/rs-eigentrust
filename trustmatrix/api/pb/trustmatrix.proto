@@ -16,6 +16,7 @@ message Entry {
 }
 
 message CreateRequest {
+  string id = 1;
 }
 
 message CreateResponse {
