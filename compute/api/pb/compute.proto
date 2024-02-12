@@ -46,6 +46,9 @@ message Params {
   // Leave empty to disable automatic pushing.
   repeated trustvector.Destination destinations = 7;
 
+  // Positive-only trust vector ID.
+  string positive_global_trust_id = 8;
+
   // TODO(ek): Add flat-tail
 }
 
