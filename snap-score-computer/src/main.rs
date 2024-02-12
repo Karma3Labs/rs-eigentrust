@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Debug;
 use std::io::IsTerminal;
@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use clap::Parser as ClapParser;
 use futures::stream::iter;
-use futures::{pin_mut, StreamExt};
+use futures::{pin_mut, StreamExt, TryStream};
 use num::BigUint;
 use sha3::Digest;
 use simple_error::SimpleError;
@@ -21,7 +21,7 @@ use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query as IndexerQuery;
-use trustmatrix::{TrustMatrixClient, TrustMatrixEntry};
+use trustmatrix::TrustMatrixClient;
 use trustvector::TrustVectorClient;
 use vc::{
 	Manifest, ManifestProof, StatusCredential, TrustScore, TrustScoreCredential,
@@ -127,6 +127,38 @@ type SnapScoreValue = f64;
 type SnapScoreConfidenceLevel = f64;
 type SnapStatuses = HashMap<SnapId, HashMap<IssuerId, Value>>;
 type SnapScores = HashMap<SnapId, (SnapScoreValue, SnapScoreConfidenceLevel)>;
+
+async fn read_tv(
+	entries: impl TryStream<
+		Ok = trustvector::TrustVectorEntry,
+		Error = Box<dyn Error>,
+		Item = Result<trustvector::TrustVectorEntry, Box<dyn Error>>,
+	>,
+) -> Result<TrustVector, Box<dyn Error>> {
+	let mut tv = TrustVector::new();
+	pin_mut!(entries);
+	while let Some(entry) = entries.next().await {
+		let (id, value) = entry?;
+		tv.insert(id.parse()?, value); // TODO(ek): add error context
+	}
+	Ok(tv)
+}
+
+async fn read_trusted(
+	entries: impl TryStream<
+		Ok = trustmatrix::TrustMatrixEntry,
+		Error = Box<dyn Error>,
+		Item = Result<trustmatrix::TrustMatrixEntry, Box<dyn Error>>,
+	>,
+) -> Result<HashMap<Truster, HashSet<Trustee>>, Box<dyn Error>> {
+	let mut trusted = HashMap::<Truster, HashSet<Trustee>>::new();
+	pin_mut!(entries);
+	while let Some(entry) = entries.next().await {
+		let entry = entry?;
+		trusted.entry(entry.truster.parse()?).or_default().insert(entry.trustee.parse()?);
+	}
+	Ok(trusted)
+}
 
 #[derive(Debug, ThisError)]
 enum DomainParamParseError {
@@ -292,6 +324,27 @@ impl Domain {
 					self.peer_did_to_id = Self::fetch_did_mapping(lc_client).await?;
 					self.peer_id_to_did =
 						self.peer_did_to_id.iter().map(|(did, id)| (*id, did.clone())).collect();
+
+					let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
+					let pt = read_tv(pt_ent).await?;
+					let (_lt_ts, lt_ent) = tm_client.get(&self.lt_id).await?;
+					let trusted = read_trusted(lt_ent).await?;
+					let mut ht = HashSet::<u32>::new();
+					for (&pt_peer, _) in pt.iter() {
+						if let Some(trusted_by_pt_peer) = trusted.get(&pt_peer) {
+							for &ht_peer in trusted_by_pt_peer {
+								ht.insert(ht_peer);
+							}
+						}
+					}
+					let ht_dids: Vec<String> = ht
+						.iter()
+						.map(|peer| {
+							self.peer_id_to_did.get(&peer).cloned().unwrap_or(peer.to_string())
+						})
+						.collect();
+					info!(?ht_dids, "highly trusted peers");
+
 					match Self::run_et(
 						&self.lt_id, &self.pt_id, &self.gt_id, &self.peer_did_to_id, alpha,
 						et_client, tv_client,
@@ -428,7 +481,7 @@ impl Domain {
 							.insert(issuer_id, value);
 					},
 					Err(_err) => {
-						warn!(err = ?_err, "cannot process entry");
+						warn!(src = &entry.schema_value, err = ?_err, "cannot process entry");
 					},
 				}
 			}
@@ -547,11 +600,13 @@ impl Domain {
 	) -> Result<(), Box<dyn Error>> {
 		let entries: Vec<_> = lt
 			.iter()
-			.map(|((truster, trustee), &value)| TrustMatrixEntry {
-				truster: truster.to_string(),
-				trustee: trustee.to_string(),
-				value,
-			})
+			.map(
+				|((truster, trustee), &value)| trustmatrix::TrustMatrixEntry {
+					truster: truster.to_string(),
+					trustee: trustee.to_string(),
+					value,
+				},
+			)
 			.collect();
 		info!(count = entries.len(), ts = timestamp, "copied LT entries");
 		let timestamp = BigUint::from(timestamp);
