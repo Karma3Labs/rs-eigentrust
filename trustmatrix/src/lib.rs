@@ -79,10 +79,8 @@ where
 		Ok((
 			timestamp,
 			try_stream! {
-				while let Ok(m) = s.message().await {
-					if let Some(GetResponse { part: Some(get_response::Part::Entry(e)), ..}) = m {
-						yield TrustMatrixEntry{truster: e.truster, trustee: e.trustee, value: e.value};
-					}
+				while let Some(GetResponse { part: Some(get_response::Part::Entry(e)), ..}) = s.message().await? {
+					yield TrustMatrixEntry{truster: e.truster, trustee: e.trustee, value: e.value};
 				}
 			},
 		))
