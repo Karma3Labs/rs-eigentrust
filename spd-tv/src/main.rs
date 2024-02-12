@@ -42,8 +42,11 @@ async fn get_did_mapping(
 	Ok(m)
 }
 
-async fn create_vector(client: &mut TrustVectorClient<Channel>) -> Result<String, BoxedError> {
-	Ok(client.create(trustvector::CreateRequest {}).await?.into_inner().id)
+async fn create_vector(
+	client: &mut TrustVectorClient<Channel>, id: &Option<String>,
+) -> Result<String, BoxedError> {
+	let id = id.as_ref().unwrap_or(&String::new()).to_string();
+	Ok(client.create(trustvector::CreateRequest { id }).await?.into_inner().id)
 }
 
 async fn get_vector(
@@ -139,11 +142,18 @@ enum Command {
 ///
 /// Print the newly created vector's ID onto stdout.
 #[derive(ClapParser)]
-struct CreateCmd {}
+struct CreateCmd {
+	/// Trust vector ID.  If not given, create and return a random ID.
+	#[arg(long)]
+	id: Option<String>,
+}
 
 impl CreateCmd {
 	async fn run(&self, cli: &Cli) -> Result<(), BoxedError> {
-		println!("{}", create_vector(&mut cli.tv_client().await?).await?);
+		println!(
+			"{}",
+			create_vector(&mut cli.tv_client().await?, &self.id).await?
+		);
 		Ok(())
 	}
 }
