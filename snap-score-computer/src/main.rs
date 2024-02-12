@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt::Debug;
 use std::io::IsTerminal;
@@ -7,7 +7,6 @@ use std::time::Duration;
 use clap::Parser as ClapParser;
 use futures::stream::iter;
 use futures::{pin_mut, StreamExt};
-use itertools::Itertools;
 use num::BigUint;
 use sha3::Digest;
 use simple_error::SimpleError;
@@ -70,7 +69,7 @@ struct Args {
 	/// Pre-trust vector ID for domain.
 	///
 	/// May be repeated.
-	/// If not specified (for a domain), a new one is created and its ID logged.
+	/// Every domain must have one.
 	#[arg(long = "pt-id", value_name = "DOMAIN=ID")]
 	pt_ids: Vec<String>,
 
@@ -101,13 +100,6 @@ struct Args {
 	/// Score credential issuer DID.
 	#[arg(long, default_value = "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0")]
 	issuer_id: String,
-
-	/// Pre-trusted peer.
-	///
-	/// May be repeated.
-	/// If not specified, a uniform trust is used for pre-trust.
-	#[arg(long, value_name = "DID")]
-	pre_trusted: Vec<String>,
 
 	/// Minimum log level.
 	#[arg(long, default_value = "info")]
@@ -237,8 +229,7 @@ impl Domain {
 		&mut self, idx_client: &mut IndexerClient<Channel>,
 		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
-		interval: Timestamp, alpha: Option<f64>, issuer_id: &str, pending_pt: &mut HashSet<String>,
-		s3_output_url: &Option<Url>,
+		interval: Timestamp, alpha: Option<f64>, issuer_id: &str, s3_output_url: &Option<Url>,
 	) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
 		Self::fetch_local_trust(
@@ -301,8 +292,6 @@ impl Domain {
 					self.peer_did_to_id = Self::fetch_did_mapping(lc_client).await?;
 					self.peer_id_to_did =
 						self.peer_did_to_id.iter().map(|(did, id)| (*id, did.clone())).collect();
-					Self::update_pt(ts, &self.pt_id, &self.peer_did_to_id, pending_pt, tv_client)
-						.await?;
 					match Self::run_et(
 						&self.lt_id, &self.pt_id, &self.gt_id, &self.peer_did_to_id, alpha,
 						et_client, tv_client,
@@ -482,30 +471,6 @@ impl Domain {
 			}
 		}
 		Ok(peer_did_to_id)
-	}
-
-	async fn update_pt(
-		ts: Timestamp, pt_id: &str, peer_did_to_id: &BTreeMap<String, u32>,
-		pending_pt: &mut HashSet<String>, tv_client: &mut TrustVectorClient<Channel>,
-	) -> Result<(), Box<dyn Error>> {
-		let new_pt_entries = pending_pt
-			.iter()
-			.cloned()
-			.filter_map(|did| peer_did_to_id.get(&did).map(|id| (did, id)))
-			.collect_vec();
-		if !new_pt_entries.is_empty() {
-			debug!(?new_pt_entries, "adding pre-trusted peers");
-			let entries =
-				futures::stream::iter(&new_pt_entries).map(|(_, id)| Ok((id.to_string(), 1.0f64)));
-			tv_client.update(pt_id, &BigUint::from(ts), entries).await?;
-			let before = pending_pt.len();
-			for (did, _) in new_pt_entries {
-				pending_pt.remove(&did);
-			}
-			let after = pending_pt.len();
-			info!(before, after, "added pre-trusted peers");
-		}
-		Ok(())
 	}
 
 	async fn publish_scores(
@@ -754,7 +719,6 @@ impl Domain {
 
 struct Main {
 	args: Args,
-	pending_pre_trusted: HashSet<String>,
 	domains: BTreeMap<DomainId, Domain>,
 }
 
@@ -793,8 +757,7 @@ impl Main {
 		domain_ids.extend(gt_ids.keys());
 		domain_ids.extend(status_schemas.keys());
 		let domains = BTreeMap::new();
-		let remaining_pre_trust = args.pre_trusted.iter().cloned().collect();
-		let mut main = Box::new(Self { args, domains, pending_pre_trusted: remaining_pre_trust });
+		let mut main = Box::new(Self { args, domains });
 		for domain_id in domain_ids {
 			main.domains.insert(
 				domain_id,
@@ -928,8 +891,7 @@ impl Main {
 			if let Err(e) = domain
 				.run_once(
 					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
-					self.args.alpha, &self.args.issuer_id, &mut self.pending_pre_trusted,
-					&self.args.s3_output_url,
+					self.args.alpha, &self.args.issuer_id, &self.args.s3_output_url,
 				)
 				.await
 			{
