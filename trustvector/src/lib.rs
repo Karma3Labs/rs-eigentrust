@@ -45,8 +45,13 @@ where
 		Self { raw }
 	}
 
+	pub async fn create_named(&mut self, id: &str) -> Result<String, Box<dyn std::error::Error>> {
+		let id = String::from(id);
+		Ok(self.raw.create(CreateRequest { id }).await?.into_inner().id)
+	}
+
 	pub async fn create(&mut self) -> Result<String, Box<dyn std::error::Error>> {
-		Ok(self.raw.create(CreateRequest {}).await?.into_inner().id)
+		self.create_named("").await
 	}
 
 	pub async fn get(

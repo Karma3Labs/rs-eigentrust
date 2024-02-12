@@ -26,6 +26,7 @@ message Destination {
 }
 
 message CreateRequest {
+  string id = 1;
 }
 
 message CreateResponse {
