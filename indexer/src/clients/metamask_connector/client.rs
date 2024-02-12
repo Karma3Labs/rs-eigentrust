@@ -1,9 +1,6 @@
 use eyre::Result;
 use reqwest;
-
-
 use std::error::Error;
-
 use tracing::debug;
 
 use super::types::{MetamaskAPIRecord, MetamaskConnectorClientConfig};
