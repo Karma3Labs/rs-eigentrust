@@ -80,6 +80,13 @@ struct Args {
 	#[arg(long = "gt-id", value_name = "DOMAIN=ID")]
 	gt_ids: Vec<String>,
 
+	/// Positive-only global trust vector ID for domain.
+	///
+	/// May be repeated.
+	/// If not specified (for a domain), a new one is created and its ID logged.
+	#[arg(long = "gtp-id", value_name = "DOMAIN=ID")]
+	gtp_ids: Vec<String>,
+
 	/// Status schema for domain.
 	///
 	/// May be repeated.
@@ -232,6 +239,7 @@ struct Domain {
 	lt_id: String,
 	pt_id: String,
 	gt_id: String,
+	gtp_id: String,
 	status_schema: String,
 	// Local trust updates received from LC but not sent to ET yet.
 	local_trust_updates: BTreeMap<Timestamp, TrustMatrix>,
@@ -249,6 +257,7 @@ struct Domain {
 	last_update_ts: Timestamp,
 	// Last compute timestamp;
 	last_compute_ts: Timestamp,
+	gtp: TrustVector,
 	gt: TrustVector,
 	snap_status_updates: BTreeMap<Timestamp, SnapStatuses>,
 	snap_statuses: SnapStatuses,
@@ -346,12 +355,13 @@ impl Domain {
 					info!(?ht_dids, "highly trusted peers");
 
 					match Self::run_et(
-						&self.lt_id, &self.pt_id, &self.gt_id, &self.peer_did_to_id, alpha,
-						et_client, tv_client,
+						&self.lt_id, &self.pt_id, &self.gt_id, &self.gtp_id, alpha, et_client,
+						tv_client,
 					)
 					.await
 					{
-						Ok(gt1) => {
+						Ok((gtp1, gt1)) => {
+							self.gtp = gtp1;
 							self.gt = gt1;
 						},
 						Err(e) => {
@@ -361,6 +371,14 @@ impl Domain {
 							);
 						},
 					}
+					let mut tp_d = 1f64;
+					for ht_peer in ht {
+						let tp = self.gtp.get(&ht_peer).cloned().unwrap_or(0f64);
+						if tp_d > tp {
+							tp_d = tp;
+						}
+					}
+					info!(tp_d, "minimum highly trusted peer trust");
 					self.publish_scores(ts_window, issuer_id, s3_output_url).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
@@ -623,11 +641,11 @@ impl Domain {
 		Ok(())
 	}
 
+	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn run_et(
-		lt_id: &str, pt_id: &str, gt_id: &str, did_to_id: &BTreeMap<String, u32>,
-		alpha: Option<f64>, et_client: &mut ComputeClient<Channel>,
-		tv_client: &mut TrustVectorClient<Channel>,
-	) -> Result<TrustVector, Box<dyn Error>> {
+		lt_id: &str, pt_id: &str, gt_id: &str, gtp_id: &str, alpha: Option<f64>,
+		et_client: &mut ComputeClient<Channel>, tv_client: &mut TrustVectorClient<Channel>,
+	) -> Result<(TrustVector, TrustVector), Box<dyn Error>> {
 		Self::copy_vector(tv_client, pt_id, gt_id).await?;
 		et_client
 			.basic_compute(compute::Params {
@@ -636,20 +654,20 @@ impl Domain {
 				alpha,
 				epsilon: None,
 				global_trust_id: gt_id.to_string(),
+				positive_global_trust_id: gtp_id.to_string(),
 				max_iterations: 0,
 				destinations: vec![],
 			})
 			.await?;
+		let (_timestamp, entries) = tv_client.get(gtp_id).await?;
+		pin_mut!(entries);
+		let gtp = read_tv(entries).await?;
+		info!(?gtp, "undiscounted global trust");
 		let (_timestamp, entries) = tv_client.get(gt_id).await?;
 		pin_mut!(entries);
-		let mut gt = TrustVector::new();
-		while let Some(result) = entries.next().await {
-			let (did, value) = result?;
-			if let Some(&id) = did_to_id.get(&did) {
-				gt.insert(id, value);
-			}
-		}
-		Ok(gt)
+		let gt = read_tv(entries).await?;
+		info!(?gt, "discounted global trust");
+		Ok((gtp, gt))
 	}
 
 	async fn compute_snap_scores(&mut self) -> Result<(), Box<dyn Error>> {
@@ -804,12 +822,14 @@ impl Main {
 		let mut lt_ids = Self::parse_domain_params(&args.lt_ids)?;
 		let mut pt_ids = Self::parse_domain_params(&args.pt_ids)?;
 		let mut gt_ids = Self::parse_domain_params(&args.gt_ids)?;
+		let mut gtp_ids = Self::parse_domain_params(&args.gtp_ids)?;
 		let mut status_schemas = Self::parse_domain_params(&args.status_schemas)?;
 		let mut domain_ids = BTreeSet::new();
 		domain_ids.extend(&args.domains);
 		domain_ids.extend(lt_ids.keys());
 		domain_ids.extend(pt_ids.keys());
 		domain_ids.extend(gt_ids.keys());
+		domain_ids.extend(gtp_ids.keys());
 		domain_ids.extend(status_schemas.keys());
 		let domains = BTreeMap::new();
 		let mut main = Box::new(Self { args, domains });
@@ -821,6 +841,7 @@ impl Main {
 					lt_id: lt_ids.remove(&domain_id).unwrap_or_default(),
 					pt_id: pt_ids.remove(&domain_id).unwrap_or_default(),
 					gt_id: gt_ids.remove(&domain_id).unwrap_or_default(),
+					gtp_id: gtp_ids.remove(&domain_id).unwrap_or_default(),
 					status_schema: status_schemas.remove(&domain_id).unwrap_or_default(),
 					local_trust_updates: BTreeMap::new(),
 					peer_did_to_id: BTreeMap::new(),
@@ -832,6 +853,7 @@ impl Main {
 					last_update_ts: 0,
 					last_compute_ts: 0,
 					gt: TrustVector::new(),
+					gtp: TrustVector::new(),
 					snap_status_updates: BTreeMap::new(),
 					snap_statuses: SnapStatuses::new(),
 					snap_scores: SnapScores::new(),
@@ -929,6 +951,20 @@ impl Main {
 					id = &domain.gt_id,
 					domain = domain_id,
 					"using existing global trust (as the initial vector)"
+				);
+			}
+			if domain.gtp_id.is_empty() {
+				domain.gtp_id = tv_client.create().await?;
+				info!(
+					id = &domain.gtp_id,
+					domain = domain_id,
+					"created positive-only global trust"
+				);
+			} else {
+				info!(
+					id = &domain.gtp_id,
+					domain = domain_id,
+					"using existing positive-only global trust"
 				);
 			}
 		}
