@@ -162,7 +162,9 @@ async fn read_trusted(
 	pin_mut!(entries);
 	while let Some(entry) = entries.next().await {
 		let entry = entry?;
-		trusted.entry(entry.truster.parse()?).or_default().insert(entry.trustee.parse()?);
+		if entry.value > 0.0 {
+			trusted.entry(entry.truster.parse()?).or_default().insert(entry.trustee.parse()?);
+		}
 	}
 	Ok(trusted)
 }
