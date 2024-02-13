@@ -390,7 +390,7 @@ impl Domain {
 						}
 					}
 					info!(tp_d, "minimum highly trusted peer trust");
-					self.publish_scores(ts_window, issuer_id).await?;
+					self.publish_scores(ts_window, issuer_id, tp_d).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
 				match update.body {
@@ -556,7 +556,7 @@ impl Domain {
 	}
 
 	async fn publish_scores(
-		&mut self, ts_window: Timestamp, issuer_id: &str,
+		&mut self, ts_window: Timestamp, issuer_id: &str, tp_d: f64,
 	) -> Result<(), Box<dyn Error>> {
 		let manifest = Self::make_manifest(issuer_id, ts_window).await?;
 		let manifest_path = std::path::Path::new("spd_scores.json");
@@ -569,7 +569,7 @@ impl Domain {
 			self.write_peer_vcs(issuer_id, ts_window, &mut zip).await?;
 			self.compute_snap_scores().await?;
 			zip.start_file("snap_scores.jsonl", options)?;
-			self.write_snap_vcs(issuer_id, ts_window, &mut zip).await?;
+			self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
 			zip.start_file("MANIFEST.json", options)?;
 			serde_jcs::to_writer(&mut zip, &manifest)?;
 			zip.finish()?;
@@ -736,7 +736,8 @@ impl Domain {
 	}
 
 	async fn write_snap_vcs(
-		&mut self, issuer_id: &str, timestamp: Timestamp, output: &mut impl std::io::Write,
+		&mut self, tp_d: f64, issuer_id: &str, timestamp: Timestamp,
+		output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		for (snap_id, (score_value, score_confidence)) in &self.snap_scores {
 			write_full(
@@ -749,7 +750,15 @@ impl Domain {
 						"IssuerTrustWeightedAverage",
 						*score_value,
 						Some(*score_confidence),
-						None,
+						Some(if *score_confidence < tp_d {
+							0
+						} else if *score_value < tp_d {
+							1
+						} else if *score_value > (1.0 - tp_d) {
+							3
+						} else {
+							2
+						}),
 						&self.scope,
 					)
 					.await? + "\n")
