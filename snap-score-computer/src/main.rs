@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Debug;
 use std::io::IsTerminal;
+use std::str::FromStr;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
@@ -123,8 +124,8 @@ struct Args {
 	log_format: Option<LogFormatArg>,
 
 	/// S3 URI to emit scores to.
-	#[arg(long)]
-	s3_output_url: Option<Url>,
+	#[arg(long = "s3-output-url", value_name = "DOMAIN=URL")]
+	s3_output_urls: Vec<String>,
 }
 
 type DomainId = u32;
@@ -250,6 +251,7 @@ struct Domain {
 	gt_id: String,
 	gtp_id: String,
 	status_schema: String,
+	s3_url: Option<Url>,
 	// Local trust updates received from LC but not sent to ET yet.
 	local_trust_updates: BTreeMap<Timestamp, TrustMatrix>,
 	// Peer index (x/y/i/j) <-> peer ID mappings.
@@ -279,7 +281,7 @@ impl Domain {
 		&mut self, idx_client: &mut IndexerClient<Channel>,
 		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
-		interval: Timestamp, alpha: Option<f64>, issuer_id: &str, s3_output_url: &Option<Url>,
+		interval: Timestamp, alpha: Option<f64>, issuer_id: &str,
 	) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
 		Self::fetch_local_trust(
@@ -388,7 +390,7 @@ impl Domain {
 						}
 					}
 					info!(tp_d, "minimum highly trusted peer trust");
-					self.publish_scores(ts_window, issuer_id, s3_output_url).await?;
+					self.publish_scores(ts_window, issuer_id).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
 				match update.body {
@@ -554,7 +556,7 @@ impl Domain {
 	}
 
 	async fn publish_scores(
-		&mut self, ts_window: Timestamp, issuer_id: &str, s3_output_url: &Option<Url>,
+		&mut self, ts_window: Timestamp, issuer_id: &str,
 	) -> Result<(), Box<dyn Error>> {
 		let manifest = Self::make_manifest(issuer_id, ts_window).await?;
 		let manifest_path = std::path::Path::new("spd_scores.json");
@@ -589,7 +591,7 @@ impl Domain {
 			let manifest_file = std::fs::File::create(manifest_path)?;
 			serde_jcs::to_writer(manifest_file, &manifest)?;
 		}
-		if let Some(url) = s3_output_url {
+		if let Some(url) = &self.s3_url {
 			use aws_config::meta::region::RegionProviderChain;
 			use aws_config::BehaviorVersion;
 			use aws_sdk_s3::{primitives::ByteStream, Client};
@@ -844,6 +846,7 @@ impl Main {
 		let mut gtp_ids = Self::parse_domain_params(&args.gtp_ids)?;
 		let mut status_schemas = Self::parse_domain_params(&args.status_schemas)?;
 		let mut scopes = Self::parse_domain_params(&args.scopes)?;
+		let mut s3_urls = Self::parse_domain_params(&args.s3_output_urls)?;
 		let mut domain_ids = BTreeSet::new();
 		domain_ids.extend(&args.domains);
 		domain_ids.extend(lt_ids.keys());
@@ -854,6 +857,16 @@ impl Main {
 		let domains = BTreeMap::new();
 		let mut main = Box::new(Self { args, domains });
 		for domain_id in domain_ids {
+			let s3_url = match s3_urls.remove(&domain_id) {
+				Some(url) => {
+					let url = Url::from_str(&url)?;
+					if url.scheme() != "s3" || !url.has_host() {
+						return boxed_err_msg("invalid S3 URL");
+					}
+					Some(url)
+				},
+				None => None,
+			};
 			main.domains.insert(
 				domain_id,
 				Domain {
@@ -866,6 +879,7 @@ impl Main {
 					gt_id: gt_ids.remove(&domain_id).unwrap_or_default(),
 					gtp_id: gtp_ids.remove(&domain_id).unwrap_or_default(),
 					status_schema: status_schemas.remove(&domain_id).unwrap_or_default(),
+					s3_url,
 					local_trust_updates: BTreeMap::new(),
 					peer_did_to_id: BTreeMap::new(),
 					peer_id_to_did: BTreeMap::new(),
@@ -1005,7 +1019,7 @@ impl Main {
 			if let Err(e) = domain
 				.run_once(
 					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
-					self.args.alpha, &self.args.issuer_id, &self.args.s3_output_url,
+					self.args.alpha, &self.args.issuer_id,
 				)
 				.await
 			{
@@ -1031,11 +1045,6 @@ fn boxed_err_msg<T>(msg: &str) -> Result<T, Box<dyn Error>> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
-	if let Some(url) = &args.s3_output_url {
-		if url.scheme() != "s3" || !url.has_host() {
-			return boxed_err_msg("invalid S3 URL");
-		}
-	}
 	{
 		let log_format = args.log_format.clone().unwrap_or_else(|| {
 			if std::io::stderr().is_terminal() {
