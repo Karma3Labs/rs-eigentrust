@@ -56,6 +56,9 @@ pub struct TrustScore {
 	pub value: f64,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub confidence: Option<f64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub result: Option<i32>,
+	pub scope: String,
 }
 
 #[derive(Serialize, Deserialize)]

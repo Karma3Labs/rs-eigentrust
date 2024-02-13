@@ -87,6 +87,12 @@ struct Args {
 	#[arg(long = "gtp-id", value_name = "DOMAIN=ID")]
 	gtp_ids: Vec<String>,
 
+	/// Trust score scope for domain.
+	///
+	/// May be repeated.
+	#[arg(long = "scope", value_name = "DOMAIN=SCOPE", default_values = ["2=SoftwareSecurity", "3=SoftwareDevelopment"])]
+	scopes: Vec<String>,
+
 	/// Status schema for domain.
 	///
 	/// May be repeated.
@@ -238,6 +244,7 @@ enum MainError {
 
 struct Domain {
 	domain_id: DomainId,
+	scope: String,
 	lt_id: String,
 	pt_id: String,
 	gt_id: String,
@@ -715,7 +722,8 @@ impl Domain {
 					output,
 					(self
 						.make_trust_score_vc(
-							issuer_id, timestamp, peer_did, "EigenTrust", *score_value, None,
+							issuer_id, timestamp, peer_did, "EigenTrust", *score_value, None, None,
+							&self.scope,
 						)
 						.await? + "\n")
 						.as_bytes(),
@@ -739,6 +747,8 @@ impl Domain {
 						"IssuerTrustWeightedAverage",
 						*score_value,
 						Some(*score_confidence),
+						None,
+						&self.scope,
 					)
 					.await? + "\n")
 					.as_bytes(),
@@ -747,9 +757,11 @@ impl Domain {
 		Ok(())
 	}
 
+	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn make_trust_score_vc(
 		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
 		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidenceLevel>,
+		result: Option<i32>, scope: &str,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
@@ -763,7 +775,12 @@ impl Domain {
 			credential_subject: TrustScoreCredentialSubject {
 				id: snap_id.clone(),
 				trust_score_type: score_type.to_string(),
-				trust_score: TrustScore { value: score_value, confidence: score_confidence },
+				trust_score: TrustScore {
+					value: score_value,
+					confidence: score_confidence,
+					result,
+					scope: scope.to_string(),
+				},
 			},
 			proof: TrustScoreCredentialProof {},
 		};
@@ -826,6 +843,7 @@ impl Main {
 		let mut gt_ids = Self::parse_domain_params(&args.gt_ids)?;
 		let mut gtp_ids = Self::parse_domain_params(&args.gtp_ids)?;
 		let mut status_schemas = Self::parse_domain_params(&args.status_schemas)?;
+		let mut scopes = Self::parse_domain_params(&args.scopes)?;
 		let mut domain_ids = BTreeSet::new();
 		domain_ids.extend(&args.domains);
 		domain_ids.extend(lt_ids.keys());
@@ -840,6 +858,9 @@ impl Main {
 				domain_id,
 				Domain {
 					domain_id,
+					scope: scopes
+						.remove(&domain_id)
+						.unwrap_or_else(|| format!("Domain{}", domain_id)),
 					lt_id: lt_ids.remove(&domain_id).unwrap_or_default(),
 					pt_id: pt_ids.remove(&domain_id).unwrap_or_default(),
 					gt_id: gt_ids.remove(&domain_id).unwrap_or_default(),
