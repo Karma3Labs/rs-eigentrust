@@ -158,22 +158,35 @@ async fn read_tv(
 	Ok(tv)
 }
 
-async fn read_trusted(
+async fn read_trusts(
 	entries: impl TryStream<
 		Ok = trustmatrix::TrustMatrixEntry,
 		Error = Box<dyn Error>,
 		Item = Result<trustmatrix::TrustMatrixEntry, Box<dyn Error>>,
 	>,
-) -> Result<HashMap<Truster, HashSet<Trustee>>, Box<dyn Error>> {
-	let mut trusted = HashMap::<Truster, HashSet<Trustee>>::new();
+) -> Result<
+	(
+		HashMap<Truster, HashSet<Trustee>>,
+		HashMap<Trustee, HashSet<Truster>>,
+	),
+	Box<dyn Error>,
+> {
+	// Peer X -> set of other peers directly trusted by X
+	let mut outbound_trusts = HashMap::<Truster, HashSet<Trustee>>::new();
+	// Peer Y -> set of other peers who directly distrusts Y
+	let mut inbound_distrusts = HashMap::<Trustee, HashSet<Truster>>::new();
 	pin_mut!(entries);
 	while let Some(entry) = entries.next().await {
 		let entry = entry?;
+		let truster = entry.truster.parse()?;
+		let trustee = entry.trustee.parse()?;
 		if entry.value > 0.0 {
-			trusted.entry(entry.truster.parse()?).or_default().insert(entry.trustee.parse()?);
+			outbound_trusts.entry(truster).or_default().insert(trustee);
+		} else if entry.value < 0.0 {
+			inbound_distrusts.entry(trustee).or_default().insert(truster);
 		}
 	}
-	Ok(trusted)
+	Ok((outbound_trusts, inbound_distrusts))
 }
 
 #[derive(Debug, ThisError)]
@@ -348,10 +361,10 @@ impl Domain {
 					let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
 					let pt = read_tv(pt_ent).await?;
 					let (_lt_ts, lt_ent) = tm_client.get(&self.lt_id).await?;
-					let trusted = read_trusted(lt_ent).await?;
+					let (outbound_trusts, inbound_distrusts) = read_trusts(lt_ent).await?;
 					let mut ht = HashSet::<u32>::new();
 					for (&pt_peer, _) in pt.iter() {
-						if let Some(trusted_by_pt_peer) = trusted.get(&pt_peer) {
+						if let Some(trusted_by_pt_peer) = outbound_trusts.get(&pt_peer) {
 							for &ht_peer in trusted_by_pt_peer {
 								ht.insert(ht_peer);
 							}
@@ -390,7 +403,7 @@ impl Domain {
 						}
 					}
 					info!(tp_d, "minimum highly trusted peer trust");
-					self.publish_scores(ts_window, issuer_id, tp_d).await?;
+					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
 				match update.body {
@@ -556,7 +569,8 @@ impl Domain {
 	}
 
 	async fn publish_scores(
-		&mut self, ts_window: Timestamp, issuer_id: &str, tp_d: f64,
+		&mut self, ts_window: Timestamp, tp_d: f64,
+		distrusters: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
 	) -> Result<(), Box<dyn Error>> {
 		let manifest = Self::make_manifest(issuer_id, ts_window).await?;
 		let manifest_path = std::path::Path::new("spd_scores.json");
@@ -566,7 +580,7 @@ impl Domain {
 			let mut zip = zip::ZipWriter::new(zip_file);
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
-			self.write_peer_vcs(issuer_id, ts_window, &mut zip).await?;
+			self.write_peer_vcs(tp_d, &distrusters, issuer_id, ts_window, &mut zip).await?;
 			self.compute_snap_scores().await?;
 			zip.start_file("snap_scores.jsonl", options)?;
 			self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
@@ -716,15 +730,39 @@ impl Domain {
 	}
 
 	async fn write_peer_vcs(
-		&mut self, issuer_id: &str, timestamp: Timestamp, output: &mut impl std::io::Write,
+		&mut self, tp_d: f64, distrusts: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
+		timestamp: Timestamp, output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
+		let empty_distrusters = HashSet::<Truster>::new();
 		for (peer_id, score_value) in &self.gt {
 			if let Some(peer_did) = self.peer_id_to_did.get(peer_id) {
+				let result_label = {
+					if *score_value >= tp_d {
+						1
+					} else if distrusts
+						.get(peer_id)
+						.unwrap_or(&empty_distrusters)
+						.iter()
+						.map(|distruster| self.gt.get(distruster).cloned().unwrap_or(0.0))
+						.fold(0.0, |acc, v| acc + v)
+						> tp_d
+					{
+						-1
+					} else {
+						0
+					}
+				};
 				write_full(
 					output,
 					(self
 						.make_trust_score_vc(
-							issuer_id, timestamp, peer_did, "EigenTrust", *score_value, None, None,
+							issuer_id,
+							timestamp,
+							peer_did,
+							"EigenTrust",
+							*score_value,
+							None,
+							Some(result_label),
 							&self.scope,
 						)
 						.await? + "\n")
@@ -740,6 +778,15 @@ impl Domain {
 		output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		for (snap_id, (score_value, score_confidence)) in &self.snap_scores {
+			let result_label = if *score_confidence < tp_d {
+				0
+			} else if *score_value < tp_d {
+				1
+			} else if *score_value > (1.0 - tp_d) {
+				3
+			} else {
+				2
+			};
 			write_full(
 				output,
 				(self
@@ -750,15 +797,7 @@ impl Domain {
 						"IssuerTrustWeightedAverage",
 						*score_value,
 						Some(*score_confidence),
-						Some(if *score_confidence < tp_d {
-							0
-						} else if *score_value < tp_d {
-							1
-						} else if *score_value > (1.0 - tp_d) {
-							3
-						} else {
-							2
-						}),
+						Some(result_label),
 						&self.scope,
 					)
 					.await? + "\n")
