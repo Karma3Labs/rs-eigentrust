@@ -695,7 +695,7 @@ impl Domain {
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
 					trace!(issuer = issuer_did, weight, "issuer score (weight)");
 					if weight > 0.0 {
-						*score_value = opinion * weight;
+						*score_value += opinion * weight;
 						*score_confidence += weight;
 					}
 				} else {
