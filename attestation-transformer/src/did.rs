@@ -8,11 +8,11 @@ pub enum Schema {
 	Snap,
 }
 
-impl Into<u8> for Schema {
-	fn into(self) -> u8 {
-		match self {
-			Self::PkhEth => 0,
-			Self::Snap => 1,
+impl From<Schema> for u8 {
+	fn from(value: Schema) -> Self {
+		match value {
+			Schema::PkhEth => 0,
+			Schema::Snap => 1,
 		}
 	}
 }
@@ -29,7 +29,7 @@ impl Did {
 	}
 
 	pub fn parse_pkh_eth(value: String) -> Result<Self, AttTrError> {
-		let parts = value.split(":");
+		let parts = value.split(':');
 		let part_slices: Vec<&str> = parts.into_iter().collect();
 		// 4 parts: did, pkh, eth, [public key hash]
 		if part_slices.len() != 4 {
@@ -70,10 +70,10 @@ impl Did {
 	}
 }
 
-impl Into<String> for Did {
-	fn into(self) -> String {
-		let key = hex::encode(self.key);
-		match self.schema {
+impl From<Did> for String {
+	fn from(value: Did) -> Self {
+		let key = hex::encode(value.key);
+		match value.schema {
 			Schema::PkhEth => format!("did:pkh:eth:0x{}", key),
 			Schema::Snap => format!("snap://0x{}", key),
 		}

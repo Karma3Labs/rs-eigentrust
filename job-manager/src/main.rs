@@ -1,4 +1,3 @@
-use proto_buf;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
 use proto_buf::transformer::transformer_client::TransformerClient;

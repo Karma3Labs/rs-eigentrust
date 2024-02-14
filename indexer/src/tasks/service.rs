@@ -1,5 +1,5 @@
-use std::thread;
 use std::time::Duration;
+
 use tracing::info;
 
 use crate::storage::types::BaseKVStorage;
@@ -37,7 +37,7 @@ impl TaskService {
 
 			let state = self.task.get_state();
 
-			if state.is_finished == true {
+			if state.is_finished {
 				info!("Job id={} is finished", task_id);
 				break;
 			}
@@ -49,18 +49,16 @@ impl TaskService {
 	}
 
 	pub async fn sleep(&self, duration: Duration) {
-		thread::sleep(duration);
+		tokio::time::sleep(duration).await;
 	}
 
-	async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {
+	pub async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {
 		println!("{:?}", data);
 		data
 	}
 
 	// todo tmp shortcut for poc
 	pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskResponse> {
-		let res = self.task.run(Some(offset), Some(limit)).await;
-
-		res
+		self.task.run(Some(offset), Some(limit)).await
 	}
 }

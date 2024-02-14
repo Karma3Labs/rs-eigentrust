@@ -30,9 +30,6 @@ pub enum AttTrError {
 
 	#[error("ParseError")]
 	ParseError,
-
-	#[error("NotImplemented")]
-	NotImplemented,
 }
 
 impl AttTrError {
