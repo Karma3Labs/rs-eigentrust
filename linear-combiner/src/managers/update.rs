@@ -21,6 +21,7 @@ impl UpdateManager {
 		iter.set_mode(IteratorMode::Start);
 
 		let size = usize::try_from(n).map_err(|_| LcError::ParseError)?;
+		/* items */
 		iter.take(size).try_fold(Vec::new(), |mut acc, item| {
 			item.map(|(key, value)| {
 				let item_prefix = LtItem::get_prefix_from_key(key.clone());

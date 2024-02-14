@@ -86,10 +86,6 @@ impl BaseTask for CliqueTask {
 		Duration::from_secs(0)
 	}
 
-	fn get_state(&self) -> BaseTaskState {
-		self.state.global.clone()
-	}
-
 	// todo use chain id instead of rpc url
 	fn get_id(&self) -> String {
 		let data = format!(
@@ -103,6 +99,10 @@ impl BaseTask for CliqueTask {
 
 		let id = format!("{}{}", "clique:", hash);
 		id
+	}
+
+	fn get_state(&self) -> BaseTaskState {
+		self.state.global.clone()
 	}
 
 	fn get_is_finished(&self) -> bool {

@@ -60,14 +60,14 @@ impl TransformerService {
 			SchemaType::SecurityCredential => {
 				// TODO: Uncooment when security reports are included in LT
 				// let parsed_att: SecurityReportSchema =
-				// 	from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				// parsed_att.into_term(event.timestamp)?
 				Vec::new()
 			},
 			SchemaType::StatusCredential => {
 				// TODO: Uncooment when snaps are included in LT
 				// let parsed_att: StatusSchema =
-				// 	from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				// parsed_att.into_term(event.timestamp)?
 				Vec::new()
 			},

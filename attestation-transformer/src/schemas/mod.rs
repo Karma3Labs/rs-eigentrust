@@ -93,8 +93,8 @@ pub enum Domain {
 }
 
 impl From<Domain> for u8 {
-	fn from(domain: Domain) -> u8 {
-		match domain {
+	fn from(value: Domain) -> Self {
+		match value {
 			Domain::Honesty => 0,
 			Domain::SoftwareDevelopment => 1,
 			Domain::SoftwareSecurity => 2,
@@ -103,8 +103,8 @@ impl From<Domain> for u8 {
 }
 
 impl From<Domain> for u32 {
-	fn from(domain: Domain) -> u32 {
-		match domain {
+	fn from(value: Domain) -> Self {
+		match value {
 			Domain::Honesty => 0,
 			Domain::SoftwareDevelopment => 1,
 			Domain::SoftwareSecurity => 2,

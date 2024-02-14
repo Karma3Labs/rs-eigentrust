@@ -1,5 +1,5 @@
-use std::thread;
 use std::time::Duration;
+
 use tracing::info;
 
 use crate::storage::types::BaseKVStorage;
@@ -49,7 +49,7 @@ impl TaskService {
 	}
 
 	pub async fn sleep(&self, duration: Duration) {
-		thread::sleep(duration);
+		tokio::time::sleep(duration).await;
 	}
 
 	pub async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {

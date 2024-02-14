@@ -19,6 +19,7 @@ impl MappingManager {
 		);
 
 		let size = usize::try_from(n).map_err(|_| LcError::ParseError)?;
+		/* mappings */
 		iter.take(size).try_fold(Vec::new(), |mut acc, item| {
 			item.map(|(key, value)| {
 				let mapping = MappingItem::from_raw(key, value);

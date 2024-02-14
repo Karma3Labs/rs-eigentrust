@@ -77,7 +77,7 @@ impl BaseTask for CSVPOCTask {
 
 		let _from_new = self.state.from + self.state.range;
 		let new_state = CSVPOCTaskState {
-			// from: from_new,
+			// from: _from_new,
 			global,
 			..self.state
 		};
@@ -99,8 +99,7 @@ impl BaseTask for CSVPOCTask {
 		let byte_vector = hasher.finalize().to_vec();
 		let hash = hex::encode(byte_vector);
 
-		let id = format!("{}{}", "csv-poc:", hash);
-		id
+		format!("csv-poc:{}", hash)
 	}
 
 	fn get_state(&self) -> BaseTaskState {

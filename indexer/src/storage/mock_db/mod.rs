@@ -6,7 +6,7 @@ pub struct MockDBClient;
 #[allow(unused)]
 impl MockDBClient {
 	pub fn new() -> Self {
-		Self {}
+		MockDBClient {}
 	}
 }
 

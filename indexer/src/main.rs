@@ -1,4 +1,4 @@
-mod cli;
+pub mod cli;
 pub mod clients;
 pub mod config;
 pub mod frontends;
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let csv_client = CSVClient::new(csv_client_config);
 	let csv_poc_task = CSVPOCTask::new(csv_client);
 
-	let task_service = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
+	let task_service: TaskService = TaskService::new(Box::new(csv_poc_task), Box::new(db.clone()));
 
 	// let client_config = config.evm_indexer_config.clone();
 	// let client = CliqueClient::new(client_config);
