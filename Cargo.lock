@@ -2551,6 +2551,7 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "futures",
+ "hex",
  "proto-buf",
  "tokio",
  "tokio-stream",

@@ -1,9 +1,10 @@
 use clap::Parser as ClapParser;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
-use proto_buf::combiner::{LtBatch, LtHistoryBatch};
+use proto_buf::combiner::{LtBatch, LtHistoryBatch, MappingQuery};
 use proto_buf::transformer::transformer_client::TransformerClient;
 use proto_buf::transformer::{EventBatch, TermBatch};
 use std::error::Error;
+use std::str::from_utf8;
 use std::time::Duration;
 use tokio::time::interval;
 use tokio_stream::wrappers::IntervalStream;
@@ -150,6 +151,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let mut res_new = lc_client.get_new_data(Request::new(batch_new)).await?.into_inner();
 	while let Ok(Some(res)) = res_new.message().await {
 		println!("SoftwareSecurity - Trust - LT items: {:?}", res);
+	}
+
+	let batch_new = LtBatch { domain: security_domain, form: distrust_form, size: 100 };
+	let mut res_new = lc_client.get_new_data(Request::new(batch_new)).await?.into_inner();
+	while let Ok(Some(res)) = res_new.message().await {
+		println!("SoftwareSecurity - Distrust - LT items: {:?}", res);
+	}
+
+	let batch_new = MappingQuery { start: 0, size: 100 };
+	let mut mapping_data = lc_client.get_did_mapping(Request::new(batch_new)).await?.into_inner();
+	while let Ok(Some(res)) = mapping_data.message().await {
+		println!(
+			"Mapping; did: {}, index: {}",
+			String::from_utf8(hex::decode(res.did).unwrap()).unwrap(),
+			res.id
+		);
 	}
 
 	Ok(())
