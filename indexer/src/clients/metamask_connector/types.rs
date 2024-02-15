@@ -12,3 +12,9 @@ pub struct MetamaskAPIRecord {
 	pub assertion: Value,
 	pub creation_at: String,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetamaskGetAssertionsResponse {
+	pub assertions: Vec<MetamaskAPIRecord>,
+}
