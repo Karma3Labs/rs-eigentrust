@@ -8,10 +8,10 @@ mod tasks;
 use tokio::time::Duration;
 
 use crate::frontends::api::grpc_server::client::GRPCServerClient;
-use crate::frontends::api::grpc_server::grpc_server::GRPCServer;
 use crate::logger::global::AppLogger;
-use crate::storage::lm_db::lm_db::LMDBClient;
 use crate::tasks::service::TaskService;
+use frontends::api::grpc_server::GRPCServer;
+use storage::lm_db::LMDBClient;
 
 use crate::clients::metamask_connector::{
 	client::MetamaskConnectorClient, types::MetamaskConnectorClientConfig,
