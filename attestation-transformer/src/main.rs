@@ -15,6 +15,8 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
+// use schemas::security::SecurityReportSchema;
+// use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
 use term::Term;
@@ -225,9 +227,9 @@ mod test {
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
 	};
 	use crate::schemas::{Domain, Proof};
-	use crate::TransformerService;
 	// use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
+	use crate::TransformerService;
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
