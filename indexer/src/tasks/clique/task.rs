@@ -58,10 +58,9 @@ impl TaskTrait for CliqueTask {
 		// todo
 		let _ = self.client.query(Some(self.state.from_block), Some(self.state.range)).await;
 
-		let mut logs = Vec::new();
-		logs.push(String::from("Hello"));
+		let logs = vec![String::from("Hello")];
 
-		if logs.len() > 0 {
+		if !logs.is_empty() {
 			info!("Found {:?} log records", logs.len());
 		}
 
@@ -82,8 +81,7 @@ impl TaskTrait for CliqueTask {
 
 	fn get_sleep_interval(&self) -> Duration {
 		// todo interval if reaches the latest onchain block
-		let duration = Duration::from_secs(0);
-		duration
+		Duration::from_secs(0)
 	}
 
 	// todo use chain id instead of rpc url
@@ -95,7 +93,7 @@ impl TaskTrait for CliqueTask {
 		let mut hasher = Sha3_256::new();
 		hasher.update(data.as_bytes());
 		let byte_vector = hasher.finalize().to_vec();
-		let hash = hex::encode(&byte_vector);
+		let hash = hex::encode(byte_vector);
 
 		let id = format!("{}{}", "clique:", hash);
 		id
@@ -110,8 +108,7 @@ impl TaskTrait for CliqueTask {
 	}
 
 	fn get_state_dump(&self) -> String {
-		let json_string = serde_json::to_string(&self.state).expect("Failed to serialize to JSON");
-		json_string
+		serde_json::to_string(&self.state).expect("Failed to serialize to JSON")
 	}
 
 	fn set_state_dump(&mut self, state_json_string: &str) {

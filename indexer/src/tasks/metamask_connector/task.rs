@@ -58,7 +58,7 @@ impl TaskTrait for MetamaskConnectorTask {
 				let r = record;
 
 				TaskRecord {
-					timestamp: r.creationAt,
+					timestamp: r.creation_at,
 					id: r.id,
 					job_id: "0".to_string(),
 					schema_id: 0,
@@ -84,16 +84,15 @@ impl TaskTrait for MetamaskConnectorTask {
 
 	fn get_sleep_interval(&self) -> Duration {
 		// todo 0 if not synced
-		let duration = Duration::from_secs(DEFAULT_SLEEP_INTERVAL_SECONDS);
-		duration
+		Duration::from_secs(DEFAULT_SLEEP_INTERVAL_SECONDS)
 	}
 
 	fn get_id(&self) -> String {
-		let data = format!("{}", self.client.config.url);
+		let data = self.client.config.url.to_string();
 		let mut hasher = Sha3_256::new();
 		hasher.update(data.as_bytes());
 		let byte_vector = hasher.finalize().to_vec();
-		let hash = hex::encode(&byte_vector);
+		let hash = hex::encode(byte_vector);
 
 		let id = format!("{}{}", "metamask-connector:", hash);
 		id
@@ -108,8 +107,7 @@ impl TaskTrait for MetamaskConnectorTask {
 	}
 
 	fn get_state_dump(&self) -> String {
-		let json_string = serde_json::to_string(&self.state).expect("Failed to serialize to JSON");
-		json_string
+		serde_json::to_string(&self.state).expect("Failed to serialize to JSON")
 	}
 
 	fn set_state_dump(&mut self, state_json_string: &str) {

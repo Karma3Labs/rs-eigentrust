@@ -6,8 +6,9 @@ pub struct MetamaskConnectorClientConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MetamaskAPIRecord {
 	pub id: usize,
 	pub assertion: Value,
-	pub creationAt: String,
+	pub creation_at: String,
 }

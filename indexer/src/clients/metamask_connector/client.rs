@@ -26,9 +26,9 @@ impl MetamaskConnectorClient {
 
 		let _limit = range.unwrap_or(DEFAULT_LIMIT);
 		let url = &self.config.url;
-		let urlPath = format!("{}/assertions/?from={}&to={}", url, _offset, _limit);
+		let url_path = format!("{}/assertions/?from={}&to={}", url, _offset, _limit);
 
-		let records = reqwest::get(urlPath).await?.json::<Vec<MetamaskAPIRecord>>().await?;
+		let records = reqwest::get(url_path).await?.json::<Vec<MetamaskAPIRecord>>().await?;
 		Ok(records)
 	}
 }

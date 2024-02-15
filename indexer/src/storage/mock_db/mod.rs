@@ -1,5 +1,6 @@
 use crate::storage::types::KVStorageTrait;
 
+#[derive(Default)]
 pub struct MockDBClient;
 
 #[allow(unused)]

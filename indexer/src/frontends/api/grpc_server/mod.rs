@@ -1,16 +1,19 @@
-use crate::frontends::api::grpc_server::types::GRPCServerConfig;
-use crate::tasks::cache::CacheService;
-use crate::tasks::service::TaskService;
-use proto_buf::indexer::indexer_server::{Indexer, IndexerServer};
-use proto_buf::indexer::{IndexerEvent, Query};
 use std::error::Error;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 use tracing::info;
+
+use proto_buf::indexer::indexer_server::{Indexer, IndexerServer};
+use proto_buf::indexer::{IndexerEvent, Query};
+
+use crate::frontends::api::grpc_server::types::GRPCServerConfig;
+use crate::tasks::cache::CacheService;
+use crate::tasks::service::TaskService;
 
 pub mod client;
 pub mod types;
@@ -90,7 +93,7 @@ impl GRPCServer {
 	}
 
 	pub async fn serve(&mut self) -> Result<(), Box<dyn Error>> {
-		let address = format!("{}{}", "[::1]:", self.config.port.to_string()).parse()?;
+		let address = format!("{}{}", "[::1]:", self.config.port).parse()?;
 		info!("GRPC server is starting at {}", address);
 
 		// todo task id only

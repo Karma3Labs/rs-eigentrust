@@ -1,5 +1,5 @@
 use proto_buf::indexer::indexer_client::IndexerClient;
-use proto_buf::indexer::{indexer_server::Indexer, Query};
+use proto_buf::indexer::Query;
 use std::time::Duration;
 
 use tonic::transport::Channel;
@@ -7,8 +7,6 @@ use tracing::{debug, info};
 
 pub struct GRPCServerClient {}
 
-const MAX_TERM_BATCH_SIZE: u32 = 1000;
-const MAX_ATT_BATCH_SIZE: u32 = 1000;
 const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";
 const AUDIT_APPROVE_SCHEMA_ID: &str = "0x2";
 const AUDIT_DISAPPROVE_SCHEMA_ID: &str = "0x3";
@@ -39,7 +37,7 @@ impl GRPCServerClient {
 		let mut count = 0;
 		while let Ok(Some(_res)) = response.message().await {
 			// info!("{:?}", _res);
-			count = count + 1;
+			count += 1;
 		}
 		info!("Got {:?} records", count);
 		tokio::time::sleep(Duration::from_secs(1)).await;

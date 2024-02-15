@@ -27,9 +27,7 @@ impl CacheService {
 		let cache_dir = current_dir.join(CACHE_DIR_NAME);
 		std::fs::create_dir_all(&cache_dir).unwrap();
 		let file_name = self.task_id.clone();
-		let file_path = cache_dir.join(format!("{}.csv", file_name));
-
-		file_path
+		cache_dir.join(format!("{}.csv", file_name))
 	}
 
 	// todo gaps in syncing?

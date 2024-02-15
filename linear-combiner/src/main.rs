@@ -1,138 +1,45 @@
 use error::LcError;
-use item::LtItem;
+use managers::{
+	checkpoint::CheckpointManager, index::IndexManager, item::ItemManager, mapping::MappingManager,
+	update::UpdateManager,
+};
 use proto_buf::{
 	combiner::{
 		linear_combiner_server::{LinearCombiner, LinearCombinerServer},
-		LtBatch, LtHistoryBatch, LtObject,
+		LtBatch, LtHistoryBatch, LtObject, Mapping, MappingQuery,
 	},
 	common::Void,
 	transformer::TermObject,
 };
-use rocksdb::DB;
-use rocksdb::{IteratorMode, WriteBatch};
+use rocksdb::{Options, DB};
 use std::error::Error;
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
-mod error;
-mod item;
+pub mod error;
+pub mod item;
+pub mod managers;
 
 #[derive(Clone)]
 struct LinearCombinerService {
-	main_db: String,
-	updates_db: String,
+	db_url: String,
 }
 
 impl LinearCombinerService {
-	pub fn new(main_db_url: &str, updates_db_url: &str) -> Result<Self, LcError> {
-		let main_db = DB::open_default(main_db_url).map_err(|x| LcError::DbError(x))?;
-		let checkpoint = main_db.get(b"checkpoint").map_err(|x| LcError::DbError(x))?;
-		if let None = checkpoint {
-			let count = 0u32.to_be_bytes();
-			main_db.put(b"checkpoint", count).map_err(|x| LcError::DbError(x))?;
-		}
+	pub fn new(db_url: &str) -> Result<Self, LcError> {
+		let mut opts = Options::default();
+		opts.create_missing_column_families(true);
+		opts.create_if_missing(true);
+		let db = DB::open_cf(
+			&opts,
+			db_url,
+			vec!["checkpoint", "index", "item", "mapping", "update"],
+		)
+		.map_err(LcError::DbError)?;
+		CheckpointManager::init(&db)?;
 
-		Ok(Self { main_db: main_db_url.to_string(), updates_db: updates_db_url.to_string() })
-	}
-
-	fn read_checkpoint(db: &DB) -> Result<u32, LcError> {
-		let offset_bytes_opt = db.get(b"checkpoint").map_err(|x| LcError::DbError(x))?;
-		let offset_bytes = offset_bytes_opt.map_or([0; 4], |x| {
-			let mut bytes: [u8; 4] = [0; 4];
-			bytes.copy_from_slice(&x);
-			bytes
-		});
-		let offset = u32::from_be_bytes(offset_bytes);
-		Ok(offset)
-	}
-
-	fn write_checkpoint(db: &DB, count: u32) -> Result<(), LcError> {
-		db.put(b"checkpoint", count.to_be_bytes()).map_err(|x| LcError::DbError(x))?;
-		Ok(())
-	}
-
-	fn get_index(db: &DB, source: String, offset: &mut u32) -> Result<[u8; 4], LcError> {
-		let key = hex::decode(source).map_err(|_| LcError::ParseError)?;
-		let source_index = db.get(&key).map_err(|e| LcError::DbError(e))?;
-
-		let x = if let Some(from_i) = source_index {
-			let from_bytes: [u8; 4] = from_i.try_into().map_err(|_| LcError::ParseError)?;
-			from_bytes
-		} else {
-			let curr_offset = offset.to_be_bytes();
-			db.put(&key, curr_offset).map_err(|e| LcError::DbError(e))?;
-			*offset += 1;
-			curr_offset
-		};
-
-		Ok(x)
-	}
-
-	fn get_value(main_db: &DB, key: &Vec<u8>) -> Result<u32, LcError> {
-		let value_opt = main_db.get(&key).map_err(|e| LcError::DbError(e))?;
-		let value_bytes = value_opt.map_or([0; 4], |x| {
-			let mut bytes: [u8; 4] = [0; 4];
-			bytes.copy_from_slice(&x);
-			bytes
-		});
-		Ok(u32::from_be_bytes(value_bytes))
-	}
-
-	fn update_value(
-		main_db: &DB, updates_db: &DB, key: Vec<u8>, weight: u32,
-	) -> Result<(), LcError> {
-		let value = Self::get_value(main_db, &key)?;
-		let new_value = (value + weight).to_be_bytes();
-		main_db.put(key.clone(), new_value).map_err(|e| LcError::DbError(e))?;
-		updates_db.put(key.clone(), new_value).map_err(|e| LcError::DbError(e))?;
-		Ok(())
-	}
-
-	fn read_batch(updates_db: &DB, prefix: Vec<u8>, n: u32) -> Result<Vec<LtItem>, LcError> {
-		let mut iter = updates_db.prefix_iterator(prefix);
-		iter.set_mode(IteratorMode::Start);
-
-		let size = usize::try_from(n).map_err(|_| LcError::ParseError)?;
-		let items = iter.take(size).try_fold(Vec::new(), |mut acc, item| {
-			item.map(|(key, value)| {
-				let lt_item = LtItem::from_raw(key, value);
-				acc.push(lt_item);
-				acc
-			})
-			.map_err(|e| LcError::DbError(e))
-		});
-
-		items
-	}
-
-	fn delete_batch(updates_db: &DB, prefix: Vec<u8>, items: Vec<LtItem>) -> Result<(), LcError> {
-		let mut batch = WriteBatch::default();
-		items.iter().for_each(|x| {
-			let mut key = Vec::new();
-			key.extend_from_slice(&prefix);
-			key.extend_from_slice(&x.key_bytes());
-			batch.delete(key);
-		});
-		updates_db.write(batch).map_err(|e| LcError::DbError(e))?;
-		Ok(())
-	}
-
-	fn read_window(main_db: &DB, prefix: Vec<u8>, p0: (u32, u32), p1: (u32, u32)) -> Vec<LtItem> {
-		let mut items = Vec::new();
-		(p0.0..=p1.0).zip(p0.1..=p1.1).into_iter().for_each(|(x, y)| {
-			let mut key = Vec::new();
-			key.extend_from_slice(&prefix);
-			key.extend_from_slice(&x.to_be_bytes());
-			key.extend_from_slice(&y.to_be_bytes());
-
-			let item_res = main_db.get(key.clone());
-			if let Ok(Some(value)) = item_res {
-				let let_item = LtItem::from_raw(key, value);
-				items.push(let_item);
-			}
-		});
-		items
+		Ok(Self { db_url: db_url.to_string() })
 	}
 }
 
@@ -140,16 +47,19 @@ impl LinearCombinerService {
 impl LinearCombiner for LinearCombinerService {
 	type GetNewDataStream = ReceiverStream<Result<LtObject, Status>>;
 	type GetHistoricDataStream = ReceiverStream<Result<LtObject, Status>>;
+	type GetDidMappingStream = ReceiverStream<Result<Mapping, Status>>;
 
 	async fn sync_transformer(
 		&self, request: Request<Streaming<TermObject>>,
 	) -> Result<Response<Void>, Status> {
-		let main_db = DB::open_default(&self.main_db)
-			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
-		let updates_db = DB::open_default(&self.updates_db)
-			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+		let db = DB::open_cf(
+			&Options::default(),
+			&self.db_url,
+			vec!["checkpoint", "index", "item", "mapping", "update"],
+		)
+		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let mut offset = Self::read_checkpoint(&main_db).map_err(|e| e.into_status())?;
+		let mut offset = CheckpointManager::read_checkpoint(&db).map_err(|e| e.into_status())?;
 
 		let mut terms = Vec::new();
 		let mut stream = request.into_inner();
@@ -158,13 +68,27 @@ impl LinearCombiner for LinearCombinerService {
 		}
 
 		for term in terms {
-			println!("Received Term({}, {})", term.from.clone(), term.to.clone());
-			let x = Self::get_index(&main_db, term.from.clone(), &mut offset)
-				.map_err(|e| e.into_status())?;
-			let y = Self::get_index(&main_db, term.to.clone(), &mut offset)
-				.map_err(|e| e.into_status())?;
 			let domain = term.domain.to_be_bytes();
 			let form = term.form.to_be_bytes();
+
+			let (x, is_x_new) = IndexManager::get_index(&db, term.from.clone(), offset)
+				.map_err(|e| e.into_status())?;
+
+			// If x is new, write new mapping and increment the offset
+			if is_x_new {
+				MappingManager::write_mapping(&db, x.to_vec(), term.from.clone())
+					.map_err(|e| e.into_status())?;
+				offset += 1;
+			}
+			let (y, is_y_new) = IndexManager::get_index(&db, term.to.clone(), offset)
+				.map_err(|e| e.into_status())?;
+
+			// If y is new, write new mapping and increment the offset
+			if is_y_new {
+				MappingManager::write_mapping(&db, y.to_vec(), term.to.clone())
+					.map_err(|e| e.into_status())?;
+				offset += 1;
+			}
 
 			let mut key = Vec::new();
 			key.extend_from_slice(&domain);
@@ -179,26 +103,48 @@ impl LinearCombiner for LinearCombinerService {
 				term.weight
 			);
 
-			Self::update_value(&main_db, &updates_db, key.clone(), term.weight)
+			let value = ItemManager::update_value(&db, key.clone(), term.weight, term.timestamp)
+				.map_err(|e| e.into_status())?;
+			UpdateManager::set_value(&db, key.clone(), value, term.timestamp)
 				.map_err(|e| e.into_status())?;
 		}
 
-		Self::write_checkpoint(&main_db, offset).map_err(|e| e.into_status())?;
+		CheckpointManager::write_checkpoint(&db, offset).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(Void {}))
+	}
+
+	async fn get_did_mapping(
+		&self, request: Request<MappingQuery>,
+	) -> Result<Response<Self::GetDidMappingStream>, Status> {
+		let mapping_query = request.into_inner();
+		let db = DB::open_cf(&Options::default(), &self.db_url, vec!["mapping"])
+			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+
+		let mappings = MappingManager::read_mappings(&db, mapping_query.start, mapping_query.size)
+			.map_err(|e| e.into_status())?;
+
+		let (tx, rx) = channel(1);
+		for x in mappings.clone() {
+			let x_obj: Mapping = x.into();
+			if let Err(e) = tx.send(Ok(x_obj)).await {
+				e.0?;
+			}
+		}
+		Ok(Response::new(ReceiverStream::new(rx)))
 	}
 
 	async fn get_new_data(
 		&self, request: Request<LtBatch>,
 	) -> Result<Response<Self::GetNewDataStream>, Status> {
 		let batch = request.into_inner();
-		let updates_db = DB::open_default(&self.updates_db)
+		let db = DB::open_cf(&Options::default(), &self.db_url, vec!["update"])
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let mut prefix = Vec::new();
 		prefix.extend_from_slice(&batch.domain.to_be_bytes());
 		prefix.extend_from_slice(&batch.form.to_be_bytes());
-		let items = Self::read_batch(&updates_db, prefix.clone(), batch.size)
+		let items = UpdateManager::read_batch(&db, prefix.clone(), batch.size)
 			.map_err(|e| e.into_status())?;
 
 		let (tx, rx) = channel(1);
@@ -209,7 +155,7 @@ impl LinearCombiner for LinearCombinerService {
 			}
 		}
 
-		Self::delete_batch(&updates_db, prefix, items).map_err(|e| e.into_status())?;
+		UpdateManager::delete_batch(&db, prefix, items).map_err(|e| e.into_status())?;
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -218,7 +164,7 @@ impl LinearCombiner for LinearCombinerService {
 		&self, request: Request<LtHistoryBatch>,
 	) -> Result<Response<Self::GetHistoricDataStream>, Status> {
 		let batch = request.into_inner();
-		let main_db = DB::open_default(&self.main_db)
+		let db = DB::open_cf_for_read_only(&Options::default(), &self.db_url, vec!["item"], false)
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
 		let is_x_bigger = batch.x0 <= batch.x1;
@@ -240,15 +186,18 @@ impl LinearCombiner for LinearCombinerService {
 		prefix.extend_from_slice(&domain_bytes);
 		prefix.extend_from_slice(&form_bytes);
 
-		let items = Self::read_window(&main_db, prefix, (x_start, y_start), (x_end, y_end));
+		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))
+			.map_err(|e| e.into_status())?;
 
-		let (tx, rx) = channel(1);
-		for x in items.clone() {
-			let x_obj: LtObject = x.into();
-			if let Err(e) = tx.send(Ok(x_obj)).await {
-				e.0?;
+		println!("Read items: {:?}", items);
+
+		let (tx, rx) = channel(4);
+		tokio::spawn(async move {
+			for x in items.clone() {
+				let x_obj: LtObject = x.into();
+				tx.send(Ok(x_obj)).await.unwrap();
 			}
-		}
+		});
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -257,108 +206,7 @@ impl LinearCombiner for LinearCombinerService {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let addr = "[::1]:50052".parse()?;
-	let service = LinearCombinerService::new("lc-storage", "lc-updates-storage")?;
+	let service = LinearCombinerService::new("lc-storage")?;
 	Server::builder().add_service(LinearCombinerServer::new(service)).serve(addr).await?;
 	Ok(())
-}
-
-#[cfg(test)]
-mod test {
-	use rocksdb::DB;
-
-	use crate::{item::LtItem, LinearCombinerService};
-	#[test]
-	fn should_write_read_checkpoint() {
-		let db = DB::open_default("lc-checkpoint-test-storage").unwrap();
-		LinearCombinerService::write_checkpoint(&db, 15).unwrap();
-		let checkpoint = LinearCombinerService::read_checkpoint(&db).unwrap();
-		assert_eq!(checkpoint, 15);
-	}
-
-	#[test]
-	fn should_update_and_get_index() {
-		let main_db = DB::open_default("lc-index-test-storage").unwrap();
-		let source = "90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_string();
-		let mut offset = 0;
-
-		let index = LinearCombinerService::get_index(&main_db, source, &mut offset).unwrap();
-
-		let mut bytes = [0; 4];
-		bytes.copy_from_slice(&index);
-		let i = u32::from_be_bytes(bytes);
-
-		assert_eq!(i, 0);
-	}
-
-	#[test]
-	fn should_update_item() {
-		let main_db = DB::open_default("lc-items-test-storage").unwrap();
-		let updates_db = DB::open_default("lc-updates-test-storage").unwrap();
-		let key = vec![0; 8];
-		let weight = 50;
-
-		let prev_value = LinearCombinerService::get_value(&main_db, &key).unwrap();
-		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight).unwrap();
-		let value = LinearCombinerService::get_value(&main_db, &key).unwrap();
-
-		assert_eq!(value, prev_value + weight);
-	}
-
-	#[test]
-	fn should_read_delete_batch() {
-		let main_db = DB::open_default("lc-rd-items-test-storage").unwrap();
-		let updates_db = DB::open_default("lc-rd-updates-test-storage").unwrap();
-		let prefix = vec![0; 8];
-		let key = vec![0; 16];
-		let weight = 50u32;
-
-		let prev_value = LinearCombinerService::get_value(&main_db, &key).unwrap();
-		LinearCombinerService::update_value(&main_db, &updates_db, key.clone(), weight).unwrap();
-
-		let org_items =
-			vec![LtItem::from_raw(key.clone(), (weight + prev_value).to_be_bytes().to_vec())];
-		let items = LinearCombinerService::read_batch(&updates_db, prefix.clone(), 1).unwrap();
-		assert_eq!(items, org_items);
-
-		LinearCombinerService::delete_batch(&updates_db, prefix.clone(), items).unwrap();
-		let items = LinearCombinerService::read_batch(&updates_db, prefix, 1).unwrap();
-		assert_eq!(items, Vec::new());
-	}
-
-	#[test]
-	fn should_read_window() {
-		let main_db = DB::open_default("lc-rdw-items-test-storage").unwrap();
-		let updates_db = DB::open_default("lc-rdw-updates-test-storage").unwrap();
-		let prefix = vec![0; 8];
-
-		let x1: u32 = 0;
-		let y1: u32 = 0;
-
-		let x2: u32 = 1;
-		let y2: u32 = 1;
-
-		let weight = 50u32;
-
-		let mut key1 = Vec::new();
-		key1.extend_from_slice(&prefix);
-		key1.extend_from_slice(&x1.to_be_bytes());
-		key1.extend_from_slice(&y1.to_be_bytes());
-
-		let mut key2 = Vec::new();
-		key2.extend_from_slice(&prefix);
-		key2.extend_from_slice(&x2.to_be_bytes());
-		key2.extend_from_slice(&y2.to_be_bytes());
-
-		let prev_value1 = LinearCombinerService::get_value(&main_db, &key1).unwrap();
-		let prev_value2 = LinearCombinerService::get_value(&main_db, &key2).unwrap();
-		LinearCombinerService::update_value(&main_db, &updates_db, key1.clone(), weight).unwrap();
-		LinearCombinerService::update_value(&main_db, &updates_db, key2.clone(), weight).unwrap();
-		let new_item1 = LtItem::new(x1, y1, prev_value1 + weight);
-		let new_item2 = LtItem::new(x2, y2, prev_value2 + weight);
-		let new_items = vec![new_item1, new_item2];
-
-		let items = LinearCombinerService::read_window(&main_db, prefix, (x1, y1), (x2, y2));
-
-		assert_eq!(new_items, items);
-	}
 }

@@ -24,6 +24,7 @@ pub struct CSVPOCTask {
 const CSV_COLUMN_INDEX_DATA: usize = 3;
 const CSV_COLUMN_SCHEMA_ID: usize = 2;
 const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
+const CSV_COLUMN_INDEX: usize = 0;
 
 impl CSVPOCTask {
 	pub fn new(client: CSVClient) -> Self {
@@ -62,7 +63,7 @@ impl TaskTrait for CSVPOCTask {
 				let schema_id = r.get(CSV_COLUMN_SCHEMA_ID).unwrap().parse::<usize>().unwrap_or(0);
 				TaskRecord {
 					timestamp: r.get(CSV_COLUMN_INDEX_TIMESTAMP).unwrap().to_string(),
-					id: 1,
+					id: r.get(CSV_COLUMN_INDEX).unwrap().parse::<usize>().unwrap_or(0),
 					job_id: "0".to_string(),
 					schema_id,
 					data: r.get(CSV_COLUMN_INDEX_DATA).unwrap().to_string(),
@@ -74,7 +75,7 @@ impl TaskTrait for CSVPOCTask {
 
 		let _from_new = self.state.from + self.state.range;
 		let new_state = CSVPOCTaskState {
-			// from: from_new,
+			// from: _from_new,
 			global,
 			..self.state
 		};
@@ -85,20 +86,18 @@ impl TaskTrait for CSVPOCTask {
 	}
 
 	fn get_sleep_interval(&self) -> Duration {
-		let duration = Duration::from_secs(0);
-		duration
+		Duration::from_secs(0)
 	}
 
 	fn get_id(&self) -> String {
 		// todo filename
-		let data = format!("{}", "file");
+		let data = "file".to_string();
 		let mut hasher = Sha3_256::new();
 		hasher.update(data.as_bytes());
 		let byte_vector = hasher.finalize().to_vec();
-		let hash = hex::encode(&byte_vector);
+		let hash = hex::encode(byte_vector);
 
-		let id = format!("{}{}", "csv-poc:", hash);
-		id
+		format!("csv-poc:{}", hash)
 	}
 
 	fn get_state(&self) -> TaskGlobalState {
@@ -110,8 +109,7 @@ impl TaskTrait for CSVPOCTask {
 	}
 
 	fn get_state_dump(&self) -> String {
-		let json_string = serde_json::to_string(&self.state).expect("Failed to serialize to JSON");
-		json_string
+		serde_json::to_string(&self.state).expect("Failed to serialize to JSON")
 	}
 
 	fn set_state_dump(&mut self, state_json_string: &str) {

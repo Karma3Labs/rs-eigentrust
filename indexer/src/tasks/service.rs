@@ -57,7 +57,7 @@ impl TaskService {
 
 			let state = self.task.get_state();
 
-			if state.is_finished == true {
+			if state.is_finished {
 				info!("Job id={} is finished", task_id);
 				break;
 			}
