@@ -1,27 +1,42 @@
-use std::thread;
-use std::time::Duration;
-use tracing::info;
+use crate::storage::types::KVStorageTrait;
+pub use crate::tasks::cache::CacheService;
+pub use crate::tasks::types::{TaskRecord, TaskTrait};
 
-use crate::storage::types::BaseKVStorage;
-pub use crate::tasks::types::{BaseTask, TaskResponse};
+use tokio::time::{sleep, Duration};
+use tracing::{debug, info};
 
 pub struct TaskService {
-	task: Box<dyn BaseTask>,
-	db: Box<dyn BaseKVStorage>,
+	pub task: Box<dyn TaskTrait>,
+	db: Box<dyn KVStorageTrait>,
+	pub cache: CacheService,
 }
 
 // todo global generic state
 impl TaskService {
-	pub fn new(task: Box<dyn BaseTask>, db: Box<dyn BaseKVStorage>) -> Self {
+	pub fn new(task: Box<dyn TaskTrait>, db: Box<dyn KVStorageTrait>) -> Self {
 		let task_id = task.get_id();
-		// todo pass to a task
-		let restored_state = db.get(task_id.as_str()).unwrap_or("{}".to_string());
-		info!("Job created id={}, state={}", task_id, restored_state);
+		info!("Job created id={}", task_id);
+		// todo composition
+		let cache = CacheService::new(task_id);
 
-		TaskService { task, db }
+		TaskService { task, db, cache }
 	}
 
+	// todo check is running
 	pub async fn run(&mut self) {
+		let task_id = self.task.get_id();
+		let restored_state = self.db.get(task_id.as_str());
+
+		match restored_state {
+			Some(state) => {
+				info!("Restored state={}", state);
+				self.task.set_state_dump(&state.clone());
+			},
+			None => {
+				debug!("No previous state found");
+			},
+		}
+
 		self.index().await;
 	}
 
@@ -29,7 +44,12 @@ impl TaskService {
 		// todo catch inner level errors
 		loop {
 			let n: Option<u64> = None;
-			self.task.run(n, n).await;
+
+			// todo must be dedicated field in the global state
+			let from = self.task.get_state().records_total as u64;
+
+			let records = self.task.run(Some(from), n).await;
+			let _ = self.cache.append(records).await;
 
 			let task_id = self.task.get_id();
 			let task_state = self.task.get_state_dump();
@@ -49,16 +69,6 @@ impl TaskService {
 	}
 
 	pub async fn sleep(&self, duration: Duration) {
-		thread::sleep(duration);
-	}
-
-	pub async fn on_data(&self, data: Vec<TaskResponse>) -> Vec<TaskResponse> {
-		println!("{:?}", data);
-		data
-	}
-
-	// todo tmp shortcut for poc
-	pub async fn get_chunk(&mut self, offset: u64, limit: u64) -> Vec<TaskResponse> {
-		self.task.run(Some(offset), Some(limit)).await
+		sleep(duration).await;
 	}
 }

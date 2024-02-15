@@ -15,6 +15,8 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
+// use schemas::security::SecurityReportSchema;
+// use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
 use term::Term;
@@ -60,14 +62,14 @@ impl TransformerService {
 			SchemaType::SecurityCredential => {
 				// TODO: Uncooment when security reports are included in LT
 				// let parsed_att: SecurityReportSchema =
-				// 	from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				// parsed_att.into_term(event.timestamp)?
 				Vec::new()
 			},
 			SchemaType::StatusCredential => {
 				// TODO: Uncooment when snaps are included in LT
 				// let parsed_att: StatusSchema =
-				// 	from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				// parsed_att.into_term(event.timestamp)?
 				Vec::new()
 			},
@@ -225,9 +227,9 @@ mod test {
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
 	};
 	use crate::schemas::{Domain, Proof};
-	use crate::TransformerService;
 	// use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
+	use crate::TransformerService;
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {

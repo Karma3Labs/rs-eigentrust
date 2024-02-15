@@ -4,7 +4,7 @@ use proto_buf::combiner::{LtBatch, LtHistoryBatch, MappingQuery};
 use proto_buf::transformer::transformer_client::TransformerClient;
 use proto_buf::transformer::{EventBatch, TermBatch};
 use std::error::Error;
-use std::str::from_utf8;
+
 use std::time::Duration;
 use tokio::time::interval;
 use tokio_stream::wrappers::IntervalStream;

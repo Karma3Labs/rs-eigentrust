@@ -13,13 +13,13 @@ pub use crate::clients::types::EVMLogsClient;
 pub use crate::clients::clique::client::CliqueClient;
 pub use crate::clients::clique::types::EVMIndexerConfig;
 
-pub use crate::tasks::types::{BaseTask, BaseTaskState, TaskResponse};
+pub use crate::tasks::types::{TaskGlobalState, TaskRecord, TaskTrait};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CliqueTaskState {
 	from_block: u64,
 	range: u64,
-	global: BaseTaskState,
+	global: TaskGlobalState,
 }
 
 pub struct CliqueTask {
@@ -31,12 +31,10 @@ pub struct CliqueTask {
 
 impl CliqueTask {
 	pub fn new(config: EVMIndexerConfig, client: CliqueClient) -> Self {
-		// todo restore prev state
 		let from_block = config.from_block;
 		let range = 100;
 
-		let global = BaseTaskState { is_synced: false, is_finished: false, records_total: 0 };
-
+		let global = TaskGlobalState { is_synced: false, is_finished: false, records_total: 0 };
 		let state = CliqueTaskState { from_block, range, global };
 
 		debug!("Clique task created");
@@ -49,8 +47,8 @@ impl CliqueTask {
 }
 
 #[tonic::async_trait]
-impl BaseTask for CliqueTask {
-	async fn run(&mut self, _offset: Option<u64>, _limit: Option<u64>) -> Vec<TaskResponse> {
+impl TaskTrait for CliqueTask {
+	async fn run(&mut self, _offset: Option<u64>, _limit: Option<u64>) -> Vec<TaskRecord> {
 		info!(
 			"Indexing logs in [{}..{}] block range",
 			self.state.from_block,
@@ -77,17 +75,13 @@ impl BaseTask for CliqueTask {
 
 		self.update_state(new_state);
 
-		let res: Vec<TaskResponse> = Vec::new();
+		let res: Vec<TaskRecord> = Vec::new();
 		res
 	}
 
 	fn get_sleep_interval(&self) -> Duration {
 		// todo interval if reaches the latest onchain block
 		Duration::from_secs(0)
-	}
-
-	fn get_state(&self) -> BaseTaskState {
-		self.state.global.clone()
 	}
 
 	// todo use chain id instead of rpc url
@@ -105,11 +99,19 @@ impl BaseTask for CliqueTask {
 		id
 	}
 
+	fn get_state(&self) -> TaskGlobalState {
+		self.state.global.clone()
+	}
+
 	fn get_is_finished(&self) -> bool {
 		self.state.global.is_finished
 	}
 
 	fn get_state_dump(&self) -> String {
 		serde_json::to_string(&self.state).expect("Failed to serialize to JSON")
+	}
+
+	fn set_state_dump(&mut self, state_json_string: &str) {
+		let _my_struct: CliqueTaskState = serde_json::from_str(state_json_string).unwrap();
 	}
 }

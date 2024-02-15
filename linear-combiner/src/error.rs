@@ -1,6 +1,6 @@
 use rocksdb::Error as RocksDbError;
 use thiserror::Error;
-use tonic::Status;
+pub use tonic::Status;
 
 #[derive(Debug, Error)]
 pub enum LcError {
