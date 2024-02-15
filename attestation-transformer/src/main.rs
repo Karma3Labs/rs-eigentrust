@@ -1,5 +1,12 @@
-use error::AttTrError;
+use std::error::Error;
+
 use futures::stream::iter;
+use rocksdb::{Options, DB};
+use serde_json::from_str;
+use tonic::transport::Channel;
+use tonic::{transport::Server, Request, Response, Status};
+
+use error::AttTrError;
 use managers::checkpoint::CheckpointManager;
 use managers::term::TermManager;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
@@ -7,17 +14,11 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
-use rocksdb::{Options, DB};
 use schemas::security::SecurityReportSchema;
 use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
-use serde_json::from_str;
-use std::error::Error;
 use term::Term;
-
-use tonic::transport::Channel;
-use tonic::{transport::Server, Request, Response, Status};
 
 pub mod did;
 pub mod error;
@@ -184,6 +185,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
+	use secp256k1::rand::thread_rng;
+	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
+	use serde_json::to_string;
+	use sha3::{Digest, Keccak256};
+
+	use proto_buf::indexer::IndexerEvent;
+
 	use crate::did::{Did, Schema};
 	use crate::schemas::status::{CredentialSubject, CurrentStatus, StatusSchema};
 	use crate::schemas::trust::{
@@ -193,11 +201,6 @@ mod test {
 	use crate::term::Term;
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
-	use proto_buf::indexer::IndexerEvent;
-	use secp256k1::rand::thread_rng;
-	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
-	use serde_json::to_string;
-	use sha3::{Digest, Keccak256};
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
