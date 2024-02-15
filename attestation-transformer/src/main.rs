@@ -431,6 +431,59 @@ mod test {
 	// 	)
 	// }
 
+	fn print_csv(
+		trust_arcs: Vec<TrustSchema>, status_arcs: Vec<StatusSchema>, mut id: u32, timestamp: u64,
+	) -> u32 {
+		let trust_schema_id = 2;
+		let status_schema_id = 1;
+
+		for schema_value in trust_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: trust_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				trust_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			id += 1;
+		}
+
+		for schema_value in status_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: status_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				status_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			id += 1;
+		}
+
+		id
+	}
+
 	#[test]
 	fn generate_functional_test_schemas() {
 		let x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
@@ -448,8 +501,8 @@ mod test {
 		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
 		let _q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
 
-		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 
 		// Trust
 		// p => x - Trust Credential - Honesty - trust
@@ -542,58 +595,10 @@ mod test {
 
 		println!("num attestations: {}", trust_arcs.len() + status_arcs.len());
 
-		let mut timestamp = 2397848;
-		let mut id = 1;
-		let trust_schema_id = 2;
-		let status_schema_id = 1;
-
+		let timestamp = 2397848;
+		let id = 1;
 		println!("id;timestamp;schema_id;schema_value");
-
-		for schema_value in trust_arcs {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: trust_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				trust_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
-
-		for schema_value in status_arcs {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: status_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				status_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
+		print_csv(trust_arcs.to_vec(), status_arcs.to_vec(), id, timestamp);
 	}
 
 	#[test]
@@ -613,8 +618,8 @@ mod test {
 		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
 		let _q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
 
-		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 
 		// Trust - Direct
 		// x => y - Trust Credential - Software security - trust
@@ -749,58 +754,10 @@ mod test {
 
 		println!("num attestations: {}", trust_arcs.len() + status_arcs.len());
 
-		let mut timestamp = 2397848;
-		let mut id = 1;
-		let trust_schema_id = 2;
-		let status_schema_id = 1;
-
+		let timestamp = 2397848;
+		let id = 1;
 		println!("id;timestamp;schema_id;schema_value");
-
-		for schema_value in trust_arcs {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: trust_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				trust_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
-
-		for schema_value in status_arcs {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: status_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				status_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
+		print_csv(trust_arcs.to_vec(), status_arcs.to_vec(), id, timestamp);
 	}
 
 	#[test]
@@ -820,8 +777,8 @@ mod test {
 		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
 		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
 
-		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 
 		// Trust - Direct
 		// P => Q - Trust Credential - Software security - trust
@@ -911,69 +868,66 @@ mod test {
 			z_sk.clone(),
 		);
 
+		// Distrust - Direct
+		// P => Z - Trust Credential - Software security - distrust
+		// Q => Z - Trust Credential - Software security - distrust
+		let p_z_2 = TrustSchema::generate_from_sk_string(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let q_z_2 = TrustSchema::generate_from_sk_string(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			q_sk.clone(),
+		);
+
+		// Distrust - Snap
+		// P => S1 - Status Credential - Dispute
+		// Q => S1 - Status Credential - Dispute
+		let p_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Disputed,
+			p_sk.clone(),
+		);
+		let q_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Disputed,
+			q_sk.clone(),
+		);
+
 		// 1st round
-		let trust_arcs = [p_q, q_p, p_z, q_z, p_x, p_y, q_x, q_y];
+		let trust_arcs_1st = [p_q, q_p, p_z, q_z, p_x, p_y, q_x, q_y];
 		let status_arcs_1st = [p_s2, q_s2, z_s2];
 		// 2nd round
 		let status_arcs_2nd = [z_s1, z_s2_override];
+		// 3rd round
+		let trust_arcs_3rd = [p_z_2, q_z_2];
+		let status_arcs_3rd = [p_s1, q_s1];
 
 		println!(
 			"num attestations: {}",
-			trust_arcs.len() + status_arcs_1st.len() + status_arcs_2nd.len()
+			trust_arcs_1st.len() + status_arcs_1st.len() + status_arcs_2nd.len()
 		);
 
-		let mut timestamp = 2397848;
-		let mut id = 1;
-		let trust_schema_id = 2;
-		let status_schema_id = 1;
-
 		println!("id;timestamp;schema_id;schema_value");
-
-		for schema_value in trust_arcs {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: trust_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				trust_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
-
-		for schema_value in [status_arcs_1st.to_vec(), status_arcs_2nd.to_vec()].concat() {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: status_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				status_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
+		let mut timestamp = 2397848;
+		let id = 1;
+		let id = print_csv(
+			trust_arcs_1st.to_vec(),
+			status_arcs_1st.to_vec(),
+			id,
+			timestamp,
+		);
+		timestamp += 610000;
+		let id = print_csv(Vec::new(), status_arcs_2nd.to_vec(), id, timestamp);
+		timestamp += 610000;
+		print_csv(
+			trust_arcs_3rd.to_vec(),
+			status_arcs_3rd.to_vec(),
+			id,
+			timestamp,
+		);
 	}
 
 	#[test]
@@ -981,7 +935,7 @@ mod test {
 		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
 
-		let num_trustees = 100;
+		let num_trustees = 20;
 		let rng = &mut thread_rng();
 		let secp = Secp256k1::new();
 
@@ -998,7 +952,7 @@ mod test {
 			for trustee in &trustees {
 				let trust_credential = TrustSchema::generate_from_sk(
 					trustee.clone(),
-					DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+					DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
 					sk,
 				);
 				trust_credentials.push(trust_credential);
@@ -1023,57 +977,14 @@ mod test {
 			trust_credentials.len() + status_credentials.len()
 		);
 
-		let mut timestamp = 2397848;
-		let mut id = 1;
-		let trust_schema_id = 2;
-		let status_schema_id = 1;
-
+		let timestamp = 2397848;
+		let id = 1;
 		println!("id;timestamp;schema_id;schema_value");
-
-		for schema_value in trust_credentials {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: trust_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				trust_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
-
-		for schema_value in status_credentials {
-			// Validate event
-			let indexed_event = IndexerEvent {
-				id,
-				schema_id: status_schema_id,
-				schema_value: to_string(&schema_value).unwrap(),
-				timestamp,
-			};
-			let _ = TransformerService::parse_event(indexed_event).unwrap();
-
-			let string = [
-				id.to_string(),
-				timestamp.to_string(),
-				status_schema_id.to_string(),
-				to_string(&schema_value).unwrap(),
-			]
-			.join(";");
-			println!("{}", string);
-
-			timestamp += 1000;
-			id += 1;
-		}
+		print_csv(
+			trust_credentials.to_vec(),
+			status_credentials.to_vec(),
+			id,
+			timestamp,
+		);
 	}
 }
