@@ -212,7 +212,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-	use secp256k1::rand::thread_rng;
+	use secp256k1::rand::{thread_rng, Rng};
 	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
 	use serde_json::to_string;
 	use sha3::{Digest, Keccak256};
@@ -930,8 +930,22 @@ mod test {
 
 	#[test]
 	fn generate_100_sybils_test_schemas() {
-		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
-		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let s3 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c3".to_owned();
+		let s4 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c4".to_owned();
+		let s5 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c5".to_owned();
+		let s6 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c6".to_owned();
+		let s7 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c7".to_owned();
+		let s8 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c8".to_owned();
+		let s9 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c9".to_owned();
+		let s10 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c910".to_owned();
+		let s11 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c911".to_owned();
+		let s12 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c912".to_owned();
+		let s13 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c913".to_owned();
+		let s14 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c914".to_owned();
+		let s15 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c915".to_owned();
+		let snaps = [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15];
 
 		let num_trustees = 20;
 		let rng = &mut thread_rng();
@@ -939,7 +953,6 @@ mod test {
 
 		let mut trustees = Vec::new();
 		let mut sks = Vec::new();
-		trustees.push("did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c5".to_string());
 
 		let mut trust_credentials = Vec::new();
 		let mut status_credentials = Vec::new();
@@ -947,27 +960,39 @@ mod test {
 			let sk = SecretKey::new(rng);
 			sks.push(sk);
 
-			for trustee in &trustees {
-				let trust_credential = TrustSchema::generate_from_sk(
-					trustee.clone(),
-					DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
-					sk,
-				);
-				trust_credentials.push(trust_credential);
-			}
-
 			let pk = sk.public_key(&secp);
 			let addr = address_from_ecdsa_key(&pk);
 			let did = Did::new(Schema::PkhEth, addr);
 			let did_string: String = did.into();
 			trustees.push(did_string);
 
-			let endorsment_credential =
-				StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Endorsed, sk);
-			let dispute_credential =
-				StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Disputed, sk);
-			status_credentials.push(endorsment_credential);
-			status_credentials.push(dispute_credential);
+			for snap in snaps.clone() {
+				let val: f32 = rng.gen();
+				let status =
+					if val > 0.5 { CurrentStatus::Endorsed } else { CurrentStatus::Disputed };
+				let credential = StatusSchema::generate_from_sk(snap.clone(), status, sk);
+				status_credentials.push(credential);
+			}
+		}
+
+		for sk in sks.clone() {
+			let pk = sk.public_key(&secp);
+			let addr = address_from_ecdsa_key(&pk);
+			let did = Did::new(Schema::PkhEth, addr);
+			let did_string: String = did.into();
+
+			for trustee in &trustees {
+				if did_string != *trustee {
+					let val: f32 = rng.gen();
+					let trust = if val > 0.5 { 1.0 } else { -1.0 };
+					let trust_credential = TrustSchema::generate_from_sk(
+						trustee.clone(),
+						DomainTrust::new(Domain::SoftwareSecurity, trust, Vec::new()),
+						sk,
+					);
+					trust_credentials.push(trust_credential);
+				}
+			}
 		}
 
 		println!(
