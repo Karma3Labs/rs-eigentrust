@@ -3,7 +3,9 @@ use reqwest;
 use std::error::Error;
 use tracing::debug;
 
-use super::types::{MetamaskAPIRecord, MetamaskConnectorClientConfig};
+use super::types::{
+	MetamaskAPIRecord, MetamaskConnectorClientConfig, MetamaskGetAssertionsResponse,
+};
 pub use crate::clients::types::EVMLogsClient;
 
 pub struct MetamaskConnectorClient {
@@ -28,7 +30,7 @@ impl MetamaskConnectorClient {
 		let url = &self.config.url;
 		let url_path = format!("{}/assertions/?from={}&to={}", url, _offset, _limit);
 
-		let records = reqwest::get(url_path).await?.json::<Vec<MetamaskAPIRecord>>().await?;
-		Ok(records)
+		let records = reqwest::get(url_path).await?.json::<MetamaskGetAssertionsResponse>().await?;
+		Ok(records.assertions)
 	}
 }
