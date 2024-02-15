@@ -19,12 +19,12 @@ use term::Term;
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
 
-mod did;
-mod error;
-mod managers;
-mod schemas;
-mod term;
-mod utils;
+pub mod did;
+pub mod error;
+pub mod managers;
+pub mod schemas;
+pub mod term;
+pub mod utils;
 
 const MAX_TERM_BATCH_SIZE: u32 = 1000;
 const ATTESTATION_SOURCE_ADDRESS: &str = "0x1";
@@ -46,8 +46,8 @@ impl TransformerService {
 		let mut opts = Options::default();
 		opts.create_missing_column_families(true);
 		opts.create_if_missing(true);
-		let db = DB::open_cf(&opts, db_url, vec!["checkpoint", "term"])
-			.map_err(|e| AttTrError::DbError(e))?;
+		let db =
+			DB::open_cf(&opts, db_url, vec!["checkpoint", "term"]).map_err(AttTrError::DbError)?;
 		CheckpointManager::init(&db)?;
 
 		Ok(Self { indexer_channel, lt_channel, db_url: db_url.to_string() })
@@ -59,17 +59,17 @@ impl TransformerService {
 		let terms = match schema_type {
 			SchemaType::SecurityCredential => {
 				let parsed_att: SecurityReportSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::StatusCredential => {
 				let parsed_att: StatusSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::TrustCredential => {
 				let parsed_att: TrustSchema =
-					from_str(&event.schema_value).map_err(|e| AttTrError::SerdeError(e))?;
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
 				parsed_att.into_term(event.timestamp)?
 			},
 		};
@@ -203,9 +203,9 @@ mod test {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[current_status.clone().into()]);
+			keccak.update([current_status.clone().into()]);
 			let digest = keccak.finalize();
 
 			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
@@ -234,9 +234,9 @@ mod test {
 		pub fn generate_from_sk(id: String, current_status: CurrentStatus, sk: SecretKey) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[current_status.clone().into()]);
+			keccak.update([current_status.clone().into()]);
 			let digest = keccak.finalize();
 
 			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
@@ -267,9 +267,9 @@ mod test {
 		) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[current_status.clone().into()]);
+			keccak.update([current_status.clone().into()]);
 			let digest = keccak.finalize();
 
 			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
@@ -303,9 +303,9 @@ mod test {
 			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[trust_arc.scope.clone().into()]);
+			keccak.update([trust_arc.scope.clone().into()]);
 			// keccak.update(&trust_arc.level.to_be_bytes());
 
 			let digest = keccak.finalize();
@@ -339,9 +339,9 @@ mod test {
 			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
 
 			let mut keccak = Keccak256::default();
-			keccak.update(&[did.schema.into()]);
+			keccak.update([did.schema.into()]);
 			keccak.update(&did.key);
-			keccak.update(&[trust_arc.scope.clone().into()]);
+			keccak.update([trust_arc.scope.clone().into()]);
 			// keccak.update(&trust_arc.level.to_be_bytes());
 
 			let digest = keccak.finalize();
@@ -409,10 +409,10 @@ mod test {
 		let z = "did:pkh:eth:0x9a2954b87d8745df0b1010291c51d68ae9269d43".to_owned();
 
 		let p_sk = "bbb7d40b7bb8e41c550696fdef78fff6f013bb34627ba50ca2d63b6e84cffa6c".to_owned();
-		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
+		let _p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
 
 		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
-		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+		let _q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
 
 		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
@@ -577,7 +577,7 @@ mod test {
 		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
 
 		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
-		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+		let _q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
 
 		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
 		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
@@ -771,10 +771,10 @@ mod test {
 
 	#[test]
 	fn generate_sleeping_agent_attack_test_schemas() {
-		let x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
+		let _x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
 		let x = "did:pkh:eth:0xa9572220348b1080264e81c0779f77c144790cd6".to_owned();
 
-		let y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
+		let _y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
 		let y = "did:pkh:eth:0xba9090181312bd0e40254a3dc29841980dd392d2".to_owned();
 
 		let z_sk = "ac7f0d9eaea4d4bf5438b887e34d0cf87e7f98d97da70eff001850487b2cae23".to_owned();

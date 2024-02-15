@@ -29,6 +29,11 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v1.3.0
 
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "25.1"
+
       - name: Set-Up
         run: ./init.sh
 

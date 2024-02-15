@@ -75,9 +75,9 @@ impl BaseTask for CSVPOCTask {
 
 		let global = BaseTaskState { is_synced: is_finished, is_finished, records_total };
 
-		let from_new = self.state.from + self.state.range;
+		let _from_new = self.state.from + self.state.range;
 		let new_state = CSVPOCTaskState {
-			// from: from_new,
+			// from: _from_new,
 			global,
 			..self.state
 		};
@@ -88,20 +88,18 @@ impl BaseTask for CSVPOCTask {
 	}
 
 	fn get_sleep_interval(&self) -> Duration {
-		let duration = Duration::from_secs(0);
-		duration
+		Duration::from_secs(0)
 	}
 
 	fn get_id(&self) -> String {
 		// todo filename
-		let data = format!("{}", "file");
+		let data = "file".to_string();
 		let mut hasher = Sha3_256::new();
 		hasher.update(data.as_bytes());
 		let byte_vector = hasher.finalize().to_vec();
-		let hash = hex::encode(&byte_vector);
+		let hash = hex::encode(byte_vector);
 
-		let id = format!("{}{}", "csv-poc:", hash);
-		id
+		format!("csv-poc:{}", hash)
 	}
 
 	fn get_state(&self) -> BaseTaskState {
@@ -113,7 +111,6 @@ impl BaseTask for CSVPOCTask {
 	}
 
 	fn get_state_dump(&self) -> String {
-		let json_string = serde_json::to_string(&self.state).expect("Failed to serialize to JSON");
-		json_string
+		serde_json::to_string(&self.state).expect("Failed to serialize to JSON")
 	}
 }

@@ -14,7 +14,7 @@ impl TermManager {
 		let mut terms = Vec::new();
 		for i in batch.start..batch.start + batch.size {
 			let id_bytes = i.to_be_bytes();
-			let res_opt = db.get_cf(&cf, id_bytes).map_err(|e| AttTrError::DbError(e))?;
+			let res_opt = db.get_cf(&cf, id_bytes).map_err(AttTrError::DbError)?;
 			if let Some(res) = res_opt {
 				let term = Term::from_bytes(res)?;
 				let term_obj: TermObject = term.into();
@@ -33,7 +33,7 @@ impl TermManager {
 			let id = id.to_be_bytes();
 			batch.put_cf(&cf, id, term_bytes);
 		}
-		db.write(batch).map_err(|e| AttTrError::DbError(e))
+		db.write(batch).map_err(AttTrError::DbError)
 	}
 
 	pub fn get_indexed_terms(
@@ -42,7 +42,7 @@ impl TermManager {
 		let new_items =
 			terms.iter().fold((start, Vec::new()), |(mut acc, mut new_items), items| {
 				let indexed_items = items
-					.into_iter()
+					.iter()
 					.map(|x| {
 						let indexed_item = (acc, x.clone());
 						acc += 1;

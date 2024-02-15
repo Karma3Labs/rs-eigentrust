@@ -17,20 +17,20 @@ impl From<u8> for TermForm {
 	}
 }
 
-impl Into<u8> for TermForm {
-	fn into(self) -> u8 {
-		match self {
-			Self::Trust => 0,
-			Self::Distrust => 1,
+impl From<TermForm> for u8 {
+	fn from(value: TermForm) -> Self {
+		match value {
+			TermForm::Trust => 0,
+			TermForm::Distrust => 1,
 		}
 	}
 }
 
-impl Into<Form> for TermForm {
-	fn into(self) -> Form {
-		match self {
-			Self::Trust => Form::Trust,
-			Self::Distrust => Form::Distrust,
+impl From<TermForm> for Form {
+	fn from(value: TermForm) -> Self {
+		match value {
+			TermForm::Trust => Self::Trust,
+			TermForm::Distrust => Self::Distrust,
 		}
 	}
 }
@@ -69,8 +69,8 @@ impl Term {
 		let form_byte: u8 = self.form.into();
 		let timestamp_bytes = self.timestamp.to_be_bytes();
 
-		bytes.extend_from_slice(&from_bytes);
-		bytes.extend_from_slice(&to_bytes);
+		bytes.extend_from_slice(from_bytes);
+		bytes.extend_from_slice(to_bytes);
 		bytes.extend_from_slice(&weight_bytes);
 		bytes.extend_from_slice(&domain_bytes);
 		bytes.push(form_byte);
@@ -162,16 +162,16 @@ impl Term {
 	}
 }
 
-impl Into<TermObject> for Term {
-	fn into(self) -> TermObject {
-		let form: Form = self.form.into();
-		TermObject {
-			from: self.from,
-			to: self.to,
-			weight: self.weight,
-			domain: self.domain,
+impl From<Term> for TermObject {
+	fn from(value: Term) -> Self {
+		let form: Form = value.form.into();
+		Self {
+			from: value.from,
+			to: value.to,
+			weight: value.weight,
+			domain: value.domain,
 			form: form.into(),
-			timestamp: self.timestamp,
+			timestamp: value.timestamp,
 		}
 	}
 }

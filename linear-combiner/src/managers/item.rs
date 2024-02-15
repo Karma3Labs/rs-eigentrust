@@ -7,8 +7,8 @@ pub struct ItemManager;
 
 impl ItemManager {
 	pub fn get_value(db: &DB, key: &Vec<u8>) -> Result<LtItem, LcError> {
-		let cf = db.cf_handle("item").ok_or_else(|| LcError::NotFoundError)?;
-		let value_opt = db.get_cf(&cf, &key).map_err(|e| LcError::DbError(e))?;
+		let cf = db.cf_handle("item").ok_or(LcError::NotFoundError)?;
+		let value_opt = db.get_cf(&cf, key).map_err(LcError::DbError)?;
 		let item = value_opt.map_or(LtItem::default(), |value| LtItem::from_raw(key, &value));
 		Ok(item)
 	}
@@ -16,7 +16,7 @@ impl ItemManager {
 	pub fn update_value(
 		db: &DB, key: Vec<u8>, weight: f32, timestamp: u64,
 	) -> Result<f32, LcError> {
-		let cf = db.cf_handle("item").ok_or_else(|| LcError::NotFoundError)?;
+		let cf = db.cf_handle("item").ok_or(LcError::NotFoundError)?;
 		let item = Self::get_value(db, &key)?;
 
 		let new_value = item.value + weight;
@@ -25,17 +25,17 @@ impl ItemManager {
 		bytes.extend_from_slice(&new_value.to_be_bytes());
 		bytes.extend_from_slice(&timestamp.to_be_bytes());
 
-		db.put_cf(&cf, key.clone(), bytes).map_err(|e| LcError::DbError(e))?;
+		db.put_cf(&cf, key.clone(), bytes).map_err(LcError::DbError)?;
 		Ok(new_value)
 	}
 
 	pub fn read_window(
 		db: &DB, prefix: Vec<u8>, p0: (u32, u32), p1: (u32, u32),
 	) -> Result<Vec<LtItem>, LcError> {
-		let cf = db.cf_handle("item").ok_or_else(|| LcError::NotFoundError)?;
+		let cf = db.cf_handle("item").ok_or(LcError::NotFoundError)?;
 		let mut items = Vec::new();
-		(p0.0..=p1.0).into_iter().for_each(|x| {
-			(p0.1..=p1.1).into_iter().for_each(|y| {
+		(p0.0..=p1.0).for_each(|x| {
+			(p0.1..=p1.1).for_each(|y| {
 				let mut key = Vec::new();
 				key.extend_from_slice(&prefix);
 				key.extend_from_slice(&x.to_be_bytes());
