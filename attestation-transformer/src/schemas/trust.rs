@@ -34,7 +34,7 @@ impl CredentialSubject {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TrustSchema {
-	#[serde(rename = "type")]
+	#[serde(alias = "type")]
 	kind: String,
 	issuer: String,
 	credential_subject: CredentialSubject,

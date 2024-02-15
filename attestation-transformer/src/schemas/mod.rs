@@ -86,9 +86,9 @@ impl From<u32> for SchemaType {
 #[derive(Deserialize, Serialize, Clone)]
 pub enum Domain {
 	Honesty,
-	#[serde(rename = "Software development")]
+	#[serde(alias = "Software development")]
 	SoftwareDevelopment,
-	#[serde(rename = "Software security")]
+	#[serde(alias = "Software security")]
 	SoftwareSecurity,
 }
 

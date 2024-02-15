@@ -21,7 +21,7 @@ impl From<CurrentStatus> for u8 {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct StatusReason {
-	#[serde(rename = "type")]
+	#[serde(alias = "type")]
 	kind: Option<String>,
 	value: String,
 	lang: Option<String>,
@@ -46,7 +46,7 @@ impl CredentialSubject {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusSchema {
-	#[serde(rename = "type")]
+	#[serde(alias = "type")]
 	kind: String,
 	issuer: String,
 	credential_subject: CredentialSubject,

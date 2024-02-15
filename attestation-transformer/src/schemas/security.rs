@@ -24,7 +24,7 @@ impl From<SecurityStatus> for u8 {
 #[derive(Deserialize, Serialize, Clone)]
 pub struct SecurityFinding {
 	criticality: f32,
-	#[serde(rename = "type")]
+	#[serde(alias = "type")]
 	kind: Option<String>,
 	description: Option<String>,
 	lang: Option<String>,
@@ -57,7 +57,7 @@ impl CredentialSubject {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SecurityReportSchema {
-	#[serde(rename = "type")]
+	#[serde(alias = "type")]
 	kind: String,
 	issuer: String,
 	credential_subject: CredentialSubject,
