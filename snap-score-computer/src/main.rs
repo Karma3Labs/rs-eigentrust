@@ -373,7 +373,7 @@ impl Domain {
 					let ht_dids: Vec<String> = ht
 						.iter()
 						.map(|peer| {
-							self.peer_id_to_did.get(&peer).cloned().unwrap_or(peer.to_string())
+							self.peer_id_to_did.get(peer).cloned().unwrap_or(peer.to_string())
 						})
 						.collect();
 					info!(?ht_dids, "highly trusted peers");
@@ -580,7 +580,7 @@ impl Domain {
 			let mut zip = zip::ZipWriter::new(zip_file);
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
-			self.write_peer_vcs(tp_d, &distrusters, issuer_id, ts_window, &mut zip).await?;
+			self.write_peer_vcs(tp_d, distrusters, issuer_id, ts_window, &mut zip).await?;
 			self.compute_snap_scores().await?;
 			zip.start_file("snap_scores.jsonl", options)?;
 			self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
