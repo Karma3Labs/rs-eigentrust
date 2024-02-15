@@ -6,98 +6,96 @@ use sha3::Sha3_256;
 use std::time::Duration;
 use tracing::{debug, info};
 
-pub use crate::clients::csv::client::CSVClient;
+pub use crate::clients::metamask_connector::client::MetamaskConnectorClient;
+pub use crate::clients::metamask_connector::types::MetamaskAPIRecord;
+
 pub use crate::tasks::types::{TaskGlobalState, TaskRecord, TaskTrait};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CSVPOCTaskState {
+pub struct MetamaskConnectorTaskState {
 	from: u64,
 	range: u64,
 	global: TaskGlobalState,
 }
 
-pub struct CSVPOCTask {
-	client: CSVClient,
-	state: CSVPOCTaskState,
+pub struct MetamaskConnectorTask {
+	client: MetamaskConnectorClient,
+	state: MetamaskConnectorTaskState,
 }
 
-const CSV_COLUMN_INDEX_DATA: usize = 3;
-const CSV_COLUMN_SCHEMA_ID: usize = 2;
-const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
-const CSV_COLUMN_INDEX: usize = 0;
+const DEFAULT_SLEEP_INTERVAL_SECONDS: u64 = 5;
 
-impl CSVPOCTask {
-	pub fn new(client: CSVClient) -> Self {
+impl MetamaskConnectorTask {
+	pub fn new(client: MetamaskConnectorClient) -> Self {
 		let global = TaskGlobalState { is_synced: false, is_finished: false, records_total: 0 };
-		let state = CSVPOCTaskState { from: 0, range: 2000, global };
+		let state = MetamaskConnectorTaskState { from: 1, range: 2000, global };
 
-		debug!("CSV POC task created");
-		CSVPOCTask { client, state }
+		debug!("Metamask connector task created");
+		MetamaskConnectorTask { client, state }
 	}
 
-	fn update_state(&mut self, new_state: CSVPOCTaskState) {
+	fn update_state(&mut self, new_state: MetamaskConnectorTaskState) {
 		self.state = new_state;
 	}
 }
 
 #[tonic::async_trait]
-impl TaskTrait for CSVPOCTask {
+impl TaskTrait for MetamaskConnectorTask {
 	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord> {
 		let from = offset.unwrap_or(self.state.from);
 		let range = limit.unwrap_or(self.state.from + self.state.range);
 
-		info!("Parsing CSV [{}..{}] lines", from, range);
-
+		info!("Fetching records [{}..{}] lines", from, range);
 		let records = self.client.query(Some(from), Some(range)).await.unwrap();
 
 		let records_total = records.len();
 		info!("Received {:?} records", records_total);
 
-		let is_finished = self.state.range > records_total.try_into().unwrap();
-
 		let results: Vec<TaskRecord> = records
 			.into_iter()
-			.map(|record| -> TaskRecord {
-				let r = record.unwrap();
+			.enumerate()
+			.map(|(_i, record)| -> TaskRecord {
+				let r = record;
 
-				let schema_id = r.get(CSV_COLUMN_SCHEMA_ID).unwrap().parse::<usize>().unwrap_or(0);
 				TaskRecord {
-					timestamp: r.get(CSV_COLUMN_INDEX_TIMESTAMP).unwrap().to_string(),
-					id: r.get(CSV_COLUMN_INDEX).unwrap().parse::<usize>().unwrap_or(0),
+					timestamp: r.creation_at,
+					id: r.id,
 					job_id: "0".to_string(),
-					schema_id,
-					data: r.get(CSV_COLUMN_INDEX_DATA).unwrap().to_string(),
+					schema_id: 0,
+					data: r.assertion.to_string(),
 				}
 			})
 			.collect();
 
-		let global = TaskGlobalState { is_synced: is_finished, is_finished, records_total };
+		let from_new = self.state.from + (records_total as u64);
+		let records_total_new = self.state.global.records_total + records_total;
 
-		let _from_new = self.state.from + self.state.range;
-		let new_state = CSVPOCTaskState {
-			// from: _from_new,
-			global,
-			..self.state
+		let global = TaskGlobalState {
+			is_synced: true,
+			is_finished: false,
+			records_total: records_total_new,
 		};
 
+		let new_state = MetamaskConnectorTaskState { from: from_new, global, ..self.state };
 		self.update_state(new_state);
 
 		results
 	}
 
 	fn get_sleep_interval(&self) -> Duration {
-		Duration::from_secs(0)
+		// todo 0 if not synced
+		Duration::from_secs(DEFAULT_SLEEP_INTERVAL_SECONDS)
 	}
 
 	fn get_id(&self) -> String {
-		// todo filename
-		let data = "file".to_string();
+		let data = self.client.config.url.to_string();
 		let mut hasher = Sha3_256::new();
 		hasher.update(data.as_bytes());
 		let byte_vector = hasher.finalize().to_vec();
 		let hash = hex::encode(byte_vector);
 
-		format!("csv-poc:{}", hash)
+		let id = format!("{}{}", "metamask-connector:", hash);
+		id
 	}
 
 	fn get_state(&self) -> TaskGlobalState {
@@ -113,6 +111,7 @@ impl TaskTrait for CSVPOCTask {
 	}
 
 	fn set_state_dump(&mut self, state_json_string: &str) {
-		let _my_struct: CSVPOCTaskState = serde_json::from_str(state_json_string).unwrap();
+		let state: MetamaskConnectorTaskState = serde_json::from_str(state_json_string).unwrap();
+		self.update_state(state);
 	}
 }

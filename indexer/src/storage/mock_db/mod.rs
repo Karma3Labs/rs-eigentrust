@@ -1,4 +1,4 @@
-use crate::storage::types::BaseKVStorage;
+use crate::storage::types::KVStorageTrait;
 
 #[derive(Default)]
 pub struct MockDBClient;
@@ -10,7 +10,7 @@ impl MockDBClient {
 	}
 }
 
-impl BaseKVStorage for MockDBClient {
+impl KVStorageTrait for MockDBClient {
 	fn put(&self, _key: &str, _value: &str) -> heed::Result<()> {
 		Ok(())
 	}

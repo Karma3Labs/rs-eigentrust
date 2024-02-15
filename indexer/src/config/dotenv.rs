@@ -1,4 +1,5 @@
 use crate::clients::clique::types::EVMIndexerConfig;
+use crate::clients::metamask_connector::types::MetamaskConnectorClientConfig;
 use crate::frontends::api::grpc_server::types::GRPCServerConfig;
 use crate::storage::lm_db::types::LMDBClientConfig;
 use dotenv::dotenv;
@@ -17,6 +18,7 @@ pub struct Config {
 	pub logger_config: LoggerConfig,
 	pub grpc_server_config: GRPCServerConfig,
 	pub lm_db_config: LMDBClientConfig,
+	pub metamask_connector_client_config: MetamaskConnectorClientConfig,
 }
 
 fn parse_level_from_string(level: &str) -> Option<Level> {
@@ -30,6 +32,7 @@ fn parse_level_from_string(level: &str) -> Option<Level> {
 	}
 }
 
+// todo break down to entities
 impl Config {
 	pub fn from_env() -> Self {
 		dotenv().ok();
@@ -49,15 +52,19 @@ impl Config {
 		let logger_level = parse_level_from_string(&logger_level_str).unwrap();
 
 		let lm_db_path = env::var("LMDB_PATH").unwrap_or("./db".to_string());
+		let metamask_api_url = env::var("METAMASK_API_URL").unwrap_or("".to_string());
 
 		let grpc_server_port: u16 =
-			env::var("GRPC_SERVER_PORT").unwrap_or(50050.to_string()).parse::<u16>().unwrap();
+			env::var("GRPC_SERVER_PORT").unwrap_or((50050).to_string()).parse::<u16>().unwrap();
 
 		let evm_indexer_config = EVMIndexerConfig { rpc_url, from_block, master_registry_contract };
 
 		let logger_config = LoggerConfig { logger_level };
 
 		let grpc_server_config = GRPCServerConfig { port: grpc_server_port };
+
+		let metamask_connector_client_config =
+			MetamaskConnectorClientConfig { url: metamask_api_url };
 
 		let lm_db_config = LMDBClientConfig {
 			path: lm_db_path,
@@ -66,6 +73,12 @@ impl Config {
 			map_size: 10 * 1024 * 1024,
 		};
 
-		Config { evm_indexer_config, logger_config, grpc_server_config, lm_db_config }
+		Config {
+			evm_indexer_config,
+			logger_config,
+			grpc_server_config,
+			lm_db_config,
+			metamask_connector_client_config,
+		}
 	}
 }
