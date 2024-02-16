@@ -46,7 +46,7 @@ impl CacheService {
 			WriterBuilder::new().delimiter(DELIMITER).has_headers(false).from_writer(file);
 
 		for record in records {
-			writer.serialize(record).unwrap();
+			writer.serialize((record.id, record.timestamp, record.schema_id, record.data)).unwrap();
 		}
 
 		writer.flush().unwrap();
