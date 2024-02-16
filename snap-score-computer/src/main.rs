@@ -54,7 +54,30 @@ pub struct SnapScore {
 
 type SnapScores = HashMap<SnapId, SnapScore>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+pub struct Accuracy {
+	pub correct: i32,
+	pub total: i32,
+}
+
+impl Accuracy {
+	pub fn record(&mut self, accurate: bool) {
+		self.total += 1;
+		if accurate {
+			self.correct += 1;
+		}
+	}
+
+	pub fn level(&self) -> Option<f64> {
+		if self.total != 0 {
+			Some((self.correct as f64) / (self.total as f64))
+		} else {
+			None
+		}
+	}
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum SnapSecurityLabel {
 	Unverified = 0,
 	Reported = 1,
@@ -72,6 +95,14 @@ impl SnapSecurityLabel {
 			Self::Endorsed
 		} else {
 			Self::InReview
+		}
+	}
+
+	pub fn is_definitive(&self) -> bool {
+		match self {
+			Self::Endorsed => true,
+			Self::Reported => true,
+			_ => false,
 		}
 	}
 }
@@ -220,6 +251,7 @@ struct Domain {
 	snap_status_updates: BTreeMap<Timestamp, SnapStatuses>,
 	snap_statuses: SnapStatuses,
 	snap_scores: SnapScores,
+	accuracies: BTreeMap<IssuerId, Accuracy>,
 }
 
 impl Domain {
@@ -337,7 +369,7 @@ impl Domain {
 						}
 					}
 					info!(tp_d, "minimum highly trusted peer trust");
-					self.compute_snap_scores().await?;
+					self.compute_snap_scores(tp_d).await?;
 					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
@@ -629,8 +661,9 @@ impl Domain {
 		Ok((gtp, gt))
 	}
 
-	async fn compute_snap_scores(&mut self) -> Result<(), Box<dyn Error>> {
+	async fn compute_snap_scores(&mut self, tp_d: f64) -> Result<(), Box<dyn Error>> {
 		self.snap_scores.clear();
+		self.accuracies.clear();
 		for (snap_id, opinions) in &self.snap_statuses {
 			trace!(snap = snap_id, "computing snap score");
 			let score = self.snap_scores.entry(snap_id.clone()).or_default();
@@ -652,12 +685,27 @@ impl Domain {
 			if score.confidence != 0.0 {
 				score.value /= score.confidence;
 			}
+			let verdict = SnapSecurityLabel::from_snap_score(&score, tp_d);
 			trace!(
 				snap = snap_id,
 				value = score.value,
 				confidence = score.confidence,
+				?verdict,
 				"snap score",
 			);
+			if verdict.is_definitive() {
+				for (issuer_did, &opinion) in opinions {
+					let opinion = if opinion > 0.5 {
+						SnapSecurityLabel::Endorsed
+					} else {
+						SnapSecurityLabel::Reported
+					};
+					self.accuracies
+						.entry(issuer_did.clone())
+						.or_default()
+						.record(verdict == opinion);
+				}
+			}
 		}
 		Ok(())
 	}
@@ -696,6 +744,9 @@ impl Domain {
 							*score_value,
 							None,
 							Some(result_label),
+							self.accuracies.get(issuer_id).map(|a| {
+								a.level().expect("accuracies map should not contain zero entries")
+							}),
 							&self.scope,
 						)
 						.await? + "\n")
@@ -723,6 +774,7 @@ impl Domain {
 						score.value,
 						Some(score.confidence),
 						Some(result_label),
+						None,
 						&self.scope,
 					)
 					.await? + "\n")
@@ -736,7 +788,7 @@ impl Domain {
 	async fn make_trust_score_vc(
 		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
 		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidence>,
-		result: Option<i32>, scope: &str,
+		result: Option<i32>, accuracy: Option<f64>, scope: &str,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
@@ -754,6 +806,7 @@ impl Domain {
 					value: score_value,
 					confidence: score_confidence,
 					result,
+					accuracy,
 					scope: scope.to_string(),
 				},
 			},
@@ -867,6 +920,7 @@ impl Main {
 					snap_status_updates: BTreeMap::new(),
 					snap_statuses: SnapStatuses::new(),
 					snap_scores: SnapScores::new(),
+					accuracies: BTreeMap::new(),
 				},
 			);
 		}
