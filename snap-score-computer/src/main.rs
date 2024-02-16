@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
+use cli::{Args, LogFormatArg};
 use futures::stream::iter;
 use futures::{pin_mut, StreamExt, TryStream};
 use num::BigUint;
@@ -29,104 +30,8 @@ use vc::{
 	TrustScoreCredentialProof, TrustScoreCredentialSubject,
 };
 
+mod cli;
 mod vc;
-
-/// Log format and destination.
-#[derive(Clone, Debug, clap::ValueEnum)]
-enum LogFormatArg {
-	/// JSON onto stdout (default if stderr is not a terminal).
-	Json,
-	/// ANSI terminal onto stderr (default if stderr is a terminal).
-	Ansi,
-}
-
-#[derive(ClapParser)]
-struct Args {
-	/// Indexer gRPC endpoint.
-	#[arg(long, value_name = "URL", default_value = "http://[::1]:50050")]
-	indexer_grpc: tonic::transport::Endpoint,
-
-	/// Linear combiner gRPC endpoint.
-	#[arg(long, value_name = "URL", default_value = "http://[::1]:50052")]
-	linear_combiner_grpc: tonic::transport::Endpoint,
-
-	/// go-eigentrust gRPC endpoint.
-	#[arg(long, value_name = "URL", default_value = "http://[::1]:8080")]
-	go_eigentrust_grpc: tonic::transport::Endpoint,
-
-	/// Domain number to process.
-	///
-	/// May be repeated.
-	#[arg(long = "domain", value_name = "DOMAIN", default_values = ["2"])]
-	domains: Vec<DomainId>,
-
-	/// Local trust matrix ID for domain.
-	///
-	/// May be repeated.
-	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "lt-id", value_name = "DOMAIN=ID")]
-	lt_ids: Vec<String>,
-
-	/// Pre-trust vector ID for domain.
-	///
-	/// May be repeated.
-	/// Every domain must have one.
-	#[arg(long = "pt-id", value_name = "DOMAIN=ID")]
-	pt_ids: Vec<String>,
-
-	/// Global trust vector ID for domain.
-	///
-	/// May be repeated.
-	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "gt-id", value_name = "DOMAIN=ID")]
-	gt_ids: Vec<String>,
-
-	/// Positive-only global trust vector ID for domain.
-	///
-	/// May be repeated.
-	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "gtp-id", value_name = "DOMAIN=ID")]
-	gtp_ids: Vec<String>,
-
-	/// Trust score scope for domain.
-	///
-	/// May be repeated.
-	#[arg(long = "scope", value_name = "DOMAIN=SCOPE", default_values = ["2=SoftwareSecurity", "3=SoftwareDevelopment"])]
-	scopes: Vec<String>,
-
-	/// Status schema for domain.
-	///
-	/// May be repeated.
-	/// Specifying this enables StatusCredential processing for the domain.
-	#[arg(long = "status-schema", value_name = "DOMAIN=SCHEMA-ID", default_values = ["2=4"])]
-	status_schemas: Vec<String>,
-
-	/// Interval at which to recompute scores.
-	#[arg(long, default_value = "600000")]
-	interval: u64,
-
-	/// EigenTrust alpha value.
-	///
-	/// If not specified, uses the go-eigentrust default.
-	#[arg(long)]
-	alpha: Option<f64>,
-
-	/// Score credential issuer DID.
-	#[arg(long, default_value = "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0")]
-	issuer_id: String,
-
-	/// Minimum log level.
-	#[arg(long, default_value = "info")]
-	log_level: tracing_subscriber::filter::LevelFilter,
-
-	/// Log format (and destination).
-	#[arg(long)]
-	log_format: Option<LogFormatArg>,
-
-	/// S3 URI to emit scores to.
-	#[arg(long = "s3-output-url", value_name = "DOMAIN=URL")]
-	s3_output_urls: Vec<String>,
-}
 
 type DomainId = u32;
 type Timestamp = u64;
@@ -1104,14 +1009,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		let builder = tracing_subscriber::FmtSubscriber::builder().with_max_level(args.log_level);
 		match log_format {
 			LogFormatArg::Ansi => {
-				tracing::subscriber::set_global_default(
-					builder.with_writer(std::io::stderr).with_ansi(true).finish(),
-				)?;
+				let subscriber = builder.with_writer(std::io::stderr).with_ansi(true).finish();
+				tracing::subscriber::set_global_default(subscriber)?;
 			},
 			LogFormatArg::Json => {
-				tracing::subscriber::set_global_default(
-					builder.with_writer(std::io::stdout).with_ansi(false).json().finish(),
-				)?;
+				let subscriber =
+					builder.with_writer(std::io::stdout).with_ansi(false).json().finish();
+				tracing::subscriber::set_global_default(subscriber)?;
 			},
 		}
 	}
