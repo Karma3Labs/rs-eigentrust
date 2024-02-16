@@ -1,7 +1,8 @@
 use eyre::Result;
 use reqwest;
 use std::error::Error;
-use tracing::debug;
+use std::time::Duration;
+use tracing::{debug, info};
 
 use super::types::{
 	MetamaskAPIRecord, MetamaskConnectorClientConfig, MetamaskGetAssertionsResponse,
@@ -30,7 +31,26 @@ impl MetamaskConnectorClient {
 		let url = &self.config.url;
 		let url_path = format!("{}/assertions/?from={}&to={}", url, _offset, _limit);
 
-		let records = reqwest::get(url_path).await?.json::<MetamaskGetAssertionsResponse>().await?;
+		let mut delay = Duration::from_secs(0);
+		let records = loop {
+			let err = match reqwest::get(&url_path).await {
+				Ok(response) => match response.error_for_status() {
+					Ok(response) => match response.json::<MetamaskGetAssertionsResponse>().await {
+						Ok(records) => break records,
+						Err(err) => err,
+					},
+					Err(err) => err,
+				},
+				Err(err) => err,
+			};
+			delay += Duration::from_secs(1);
+			delay *= 2;
+			let max_delay = Duration::from_secs(30);
+			if delay > max_delay {
+				delay = max_delay;
+			}
+			info!(?err, ?delay, "assertion polling failed, retrying");
+		};
 		Ok(records.assertions)
 	}
 }
