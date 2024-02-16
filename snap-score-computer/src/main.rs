@@ -43,9 +43,38 @@ type TrustVector = HashMap<Trustee, Value>;
 type SnapId = String;
 type IssuerId = String;
 type SnapScoreValue = f64;
-type SnapScoreConfidenceLevel = f64;
+type SnapScoreConfidence = f64;
 type SnapStatuses = HashMap<SnapId, HashMap<IssuerId, Value>>;
-type SnapScores = HashMap<SnapId, (SnapScoreValue, SnapScoreConfidenceLevel)>;
+
+#[derive(Debug, Default)]
+pub struct SnapScore {
+	pub value: SnapScoreValue,
+	pub confidence: SnapScoreConfidence,
+}
+
+type SnapScores = HashMap<SnapId, SnapScore>;
+
+#[derive(Debug)]
+pub enum SnapSecurityLabel {
+	Unverified = 0,
+	Reported = 1,
+	InReview = 2,
+	Endorsed = 3,
+}
+
+impl SnapSecurityLabel {
+	pub fn from_snap_score(score: &SnapScore, tp_d: f64) -> Self {
+		if score.confidence < tp_d {
+			Self::Unverified
+		} else if score.value < tp_d {
+			Self::Reported
+		} else if score.value > (1.0 - tp_d) {
+			Self::Endorsed
+		} else {
+			Self::InReview
+		}
+	}
+}
 
 async fn read_tv(
 	entries: impl TryStream<
@@ -604,8 +633,7 @@ impl Domain {
 		self.snap_scores.clear();
 		for (snap_id, opinions) in &self.snap_statuses {
 			trace!(snap = snap_id, "computing snap score");
-			let (score_value, score_confidence) =
-				self.snap_scores.entry(snap_id.clone()).or_default();
+			let score = self.snap_scores.entry(snap_id.clone()).or_default();
 			for (issuer_did, opinion) in opinions {
 				let issuer_did = issuer_did.clone();
 				trace!(issuer = issuer_did, opinion, "one opinion");
@@ -614,20 +642,20 @@ impl Domain {
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
 					trace!(issuer = issuer_did, weight, "issuer score (weight)");
 					if weight > 0.0 {
-						*score_value += opinion * weight;
-						*score_confidence += weight;
+						score.value += opinion * weight;
+						score.confidence += weight;
 					}
 				} else {
 					warn!(did = issuer_did, "unknown issuer");
 				}
 			}
-			if *score_confidence != 0.0 {
-				*score_value /= *score_confidence;
+			if score.confidence != 0.0 {
+				score.value /= score.confidence;
 			}
 			trace!(
 				snap = snap_id,
-				value = *score_value,
-				confidence = *score_confidence,
+				value = score.value,
+				confidence = score.confidence,
 				"snap score",
 			);
 		}
@@ -682,16 +710,8 @@ impl Domain {
 		&mut self, tp_d: f64, issuer_id: &str, timestamp: Timestamp,
 		output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
-		for (snap_id, (score_value, score_confidence)) in &self.snap_scores {
-			let result_label = if *score_confidence < tp_d {
-				0
-			} else if *score_value < tp_d {
-				1
-			} else if *score_value > (1.0 - tp_d) {
-				3
-			} else {
-				2
-			};
+		for (snap_id, score) in &self.snap_scores {
+			let result_label = SnapSecurityLabel::from_snap_score(score, tp_d) as i32;
 			write_full(
 				output,
 				(self
@@ -700,8 +720,8 @@ impl Domain {
 						timestamp,
 						snap_id,
 						"IssuerTrustWeightedAverage",
-						*score_value,
-						Some(*score_confidence),
+						score.value,
+						Some(score.confidence),
 						Some(result_label),
 						&self.scope,
 					)
@@ -715,7 +735,7 @@ impl Domain {
 	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn make_trust_score_vc(
 		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
-		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidenceLevel>,
+		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidence>,
 		result: Option<i32>, scope: &str,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
