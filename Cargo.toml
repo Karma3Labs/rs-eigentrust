@@ -13,6 +13,7 @@ members = [
     "compute",
     "proto-buf",
     "spd-tv",
+    "mm-spd-vc",
 ]
 
 [workspace.package]
@@ -34,3 +35,4 @@ proto-buf.path = "proto-buf"
 trustvector.path = "trustvector"
 trustmatrix.path = "trustmatrix"
 compute.path = "compute"
+mm-spd-vc.path = "mm-spd-vc"

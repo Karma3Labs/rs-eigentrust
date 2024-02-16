@@ -3037,6 +3037,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-spd-vc"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_jcs",
+ "serde_json",
+]
+
+[[package]]
 name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4507,6 +4516,7 @@ dependencies = [
  "http 0.2.11",
  "itertools 0.12.0",
  "json",
+ "mm-spd-vc",
  "num",
  "proto-buf",
  "serde",

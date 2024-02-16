@@ -11,6 +11,7 @@ trustmatrix.workspace = true
 trustvector.workspace = true
 compute.workspace = true
 proto-buf.workspace = true
+mm-spd-vc.workspace = true
 tonic.workspace = true
 tokio = { version = "1.35", features = ["macros", "rt-multi-thread", "sync"] }
 tokio-stream = "0.1"

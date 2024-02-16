@@ -18,6 +18,10 @@ use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 use compute::ComputeClient;
+use mm_spd_vc::{
+	Manifest, ManifestProof, StatusCredential, TrustScore, TrustScoreCredential,
+	TrustScoreCredentialProof, TrustScoreCredentialSubject,
+};
 use proto_buf::combiner;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
@@ -25,13 +29,8 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query as IndexerQuery;
 use trustmatrix::TrustMatrixClient;
 use trustvector::TrustVectorClient;
-use vc::{
-	Manifest, ManifestProof, StatusCredential, TrustScore, TrustScoreCredential,
-	TrustScoreCredentialProof, TrustScoreCredentialSubject,
-};
 
 mod cli;
-mod vc;
 
 type DomainId = u32;
 type Timestamp = u64;
