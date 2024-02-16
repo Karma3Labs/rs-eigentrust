@@ -15,11 +15,12 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
-// use schemas::security::SecurityReportSchema;
-// use schemas::status::StatusSchema;
+use schemas::security::SecurityReportSchema;
+use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
 use term::Term;
+use tracing::{info, warn};
 
 pub mod did;
 pub mod error;
@@ -60,18 +61,14 @@ impl TransformerService {
 		let schema_type = SchemaType::from(schema_id);
 		let terms = match schema_type {
 			SchemaType::SecurityCredential => {
-				// TODO: Uncooment when security reports are included in LT
-				// let parsed_att: SecurityReportSchema =
-				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
-				// parsed_att.into_term(event.timestamp)?
-				Vec::new()
+				let parsed_att: SecurityReportSchema =
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
+				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::StatusCredential => {
-				// TODO: Uncooment when snaps are included in LT
-				// let parsed_att: StatusSchema =
-				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
-				// parsed_att.into_term(event.timestamp)?
-				Vec::new()
+				let parsed_att: StatusSchema =
+					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
+				parsed_att.into_term(event.timestamp)?
 			},
 			SchemaType::TrustCredential => {
 				let parsed_att: TrustSchema =
@@ -123,11 +120,15 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			let parsed_terms = Self::parse_event(res).map_err(|e| e.into_status())?;
-			terms.push(parsed_terms);
+			match Self::parse_event(res.clone()) {
+				Ok(parsed_terms) => terms.push(parsed_terms),
+				Err(err) => {
+					warn!(%err, "cannot parse event received from indexer");
+					info!(?res, "offending message");
+				},
+			}
 		}
-		println!("Received num events: {}", terms.len());
-		println!("Received terms: {:#?}", terms);
+		info!(count = terms.len(), "received terms");
 
 		let num_new_term_groups =
 			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError.into_status())?;
@@ -136,7 +137,7 @@ impl Transformer for TransformerService {
 		let (new_count, indexed_terms) = TermManager::get_indexed_terms(ct_offset, terms)
 			.map_err(|_| AttTrError::SerialisationError.into_status())?;
 
-		println!("Received num terms: {}", new_count);
+		info!(new_count, "received terms");
 
 		TermManager::write_terms(&db, indexed_terms).map_err(|e| e.into_status())?;
 		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)
@@ -202,6 +203,13 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
+	tracing_subscriber::fmt::Subscriber::builder()
+		.with_max_level(tracing::Level::INFO)
+		.with_writer(std::io::stderr)
+		.with_ansi(true)
+		.init();
+	info!("initializing AT");
+
 	let tr_service =
 		TransformerService::new(args.indexer_grpc, args.linear_combiner_grpc, &args.db_dir)?;
 
@@ -226,7 +234,7 @@ mod test {
 	use crate::schemas::trust::{
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
 	};
-	use crate::schemas::{Domain, Proof};
+	use crate::schemas::{Domain, OneOrMore, Proof};
 	// use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
@@ -260,7 +268,7 @@ mod test {
 			let cs = CredentialSubject::new(id, current_status, None);
 			let proof = Proof::new(encoded_sig);
 
-			StatusSchema::new(kind, issuer, cs, proof)
+			StatusSchema::new(OneOrMore::One(kind), issuer, cs, proof)
 		}
 
 		pub fn generate_from_sk(id: String, current_status: CurrentStatus, sk: SecretKey) -> Self {
@@ -291,7 +299,7 @@ mod test {
 			let cs = CredentialSubject::new(id, current_status, None);
 			let proof = Proof::new(encoded_sig);
 
-			StatusSchema::new(kind, issuer, cs, proof)
+			StatusSchema::new(OneOrMore::One(kind), issuer, cs, proof)
 		}
 
 		pub fn generate_from_sk_string(
@@ -326,7 +334,7 @@ mod test {
 			let cs = CredentialSubject::new(id, current_status, None);
 			let proof = Proof::new(encoded_sig);
 
-			StatusSchema::new(kind, issuer, cs, proof)
+			StatusSchema::new(OneOrMore::One(kind), issuer, cs, proof)
 		}
 	}
 

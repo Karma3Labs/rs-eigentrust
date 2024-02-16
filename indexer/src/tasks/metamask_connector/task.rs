@@ -39,6 +39,28 @@ impl MetamaskConnectorTask {
 	}
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CredType {
+	One(String),
+	Vec(Vec<String>),
+}
+
+impl CredType {
+	fn matches(&self, s: &str) -> bool {
+		match self {
+			Self::One(v) => v == s,
+			Self::Vec(v) => v.contains(&s.to_string()),
+		}
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BaseCred {
+	#[serde(rename = "type")]
+	type_: CredType,
+}
+
 #[tonic::async_trait]
 impl TaskTrait for MetamaskConnectorTask {
 	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord> {
@@ -54,16 +76,49 @@ impl TaskTrait for MetamaskConnectorTask {
 		let results: Vec<TaskRecord> = records
 			.into_iter()
 			.enumerate()
-			.map(|(_i, record)| -> TaskRecord {
+			.filter_map(|(_i, record)| -> Option<TaskRecord> {
 				let r = record;
 
-				TaskRecord {
-					timestamp: r.creation_at,
+				// TODO(ek): This is a hack: this code path is supposed to be content-agnostic.
+				let type_ = match serde_json::from_value::<BaseCred>(r.assertion.clone()) {
+					Ok(cred) => cred.type_,
+					Err(err) => {
+						info!(?err, ?r.assertion, "assertion doesn't seem to be a VC");
+						return None;
+					},
+				};
+				let schema_id = if type_.matches("SecurityReportCredential") {
+					0
+				} else if type_.matches("ReviewCredential") {
+					1
+				} else if type_.matches("TrustCredential") {
+					2
+				} else {
+					info!(?type_, ?r.assertion, "invalid VC type");
+					return None;
+				};
+				// info!(?type_, schema_id, "matched VC type");
+
+				let timestamp = match time::PrimitiveDateTime::parse(
+					&r.creation_at,
+					&time::format_description::well_known::Iso8601::DEFAULT,
+				) {
+					Ok(timestamp) => timestamp,
+					Err(err) => {
+						info!(?err, ?r.assertion, "cannot parse acceptance timestamp");
+						return None;
+					},
+				}
+				.assume_utc()
+				.unix_timestamp_nanos();
+				let timestamp = (timestamp / 1_000_000).to_string();
+				Some(TaskRecord {
+					timestamp,
 					id: r.id,
 					job_id: "0".to_string(),
-					schema_id: 0,
+					schema_id,
 					data: r.assertion.to_string(),
-				}
+				})
 			})
 			.collect();
 

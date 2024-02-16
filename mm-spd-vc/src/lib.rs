@@ -1,5 +1,20 @@
 use serde::{Deserialize, Serialize};
 
+pub fn add(left: usize, right: usize) -> usize {
+	left + right
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn it_works() {
+		let result = add(2, 2);
+		assert_eq!(result, 4);
+	}
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusCredential {
@@ -58,6 +73,8 @@ pub struct TrustScore {
 	pub confidence: Option<f64>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub result: Option<i32>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub accuracy: Option<f64>,
 	pub scope: String,
 }
 

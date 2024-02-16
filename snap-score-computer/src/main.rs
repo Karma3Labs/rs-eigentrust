@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
+use cli::{Args, LogFormatArg};
 use futures::stream::iter;
 use futures::{pin_mut, StreamExt, TryStream};
 use num::BigUint;
@@ -17,6 +18,10 @@ use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 use compute::ComputeClient;
+use mm_spd_vc::{
+	Manifest, ManifestProof, StatusCredential, TrustScore, TrustScoreCredential,
+	TrustScoreCredentialProof, TrustScoreCredentialSubject,
+};
 use proto_buf::combiner;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::combiner::LtHistoryBatch;
@@ -24,109 +29,8 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::Query as IndexerQuery;
 use trustmatrix::TrustMatrixClient;
 use trustvector::TrustVectorClient;
-use vc::{
-	Manifest, ManifestProof, StatusCredential, TrustScore, TrustScoreCredential,
-	TrustScoreCredentialProof, TrustScoreCredentialSubject,
-};
 
-mod vc;
-
-/// Log format and destination.
-#[derive(Clone, Debug, clap::ValueEnum)]
-enum LogFormatArg {
-	/// JSON onto stdout (default if stderr is not a terminal).
-	Json,
-	/// ANSI terminal onto stderr (default if stderr is a terminal).
-	Ansi,
-}
-
-#[derive(ClapParser)]
-struct Args {
-	/// Indexer gRPC endpoint.
-	#[arg(long, value_name = "URL", default_value = "http://[::1]:50050")]
-	indexer_grpc: tonic::transport::Endpoint,
-
-	/// Linear combiner gRPC endpoint.
-	#[arg(long, value_name = "URL", default_value = "http://[::1]:50052")]
-	linear_combiner_grpc: tonic::transport::Endpoint,
-
-	/// go-eigentrust gRPC endpoint.
-	#[arg(long, value_name = "URL", default_value = "http://[::1]:8080")]
-	go_eigentrust_grpc: tonic::transport::Endpoint,
-
-	/// Domain number to process.
-	///
-	/// May be repeated.
-	#[arg(long = "domain", value_name = "DOMAIN", default_values = ["2"])]
-	domains: Vec<DomainId>,
-
-	/// Local trust matrix ID for domain.
-	///
-	/// May be repeated.
-	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "lt-id", value_name = "DOMAIN=ID")]
-	lt_ids: Vec<String>,
-
-	/// Pre-trust vector ID for domain.
-	///
-	/// May be repeated.
-	/// Every domain must have one.
-	#[arg(long = "pt-id", value_name = "DOMAIN=ID")]
-	pt_ids: Vec<String>,
-
-	/// Global trust vector ID for domain.
-	///
-	/// May be repeated.
-	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "gt-id", value_name = "DOMAIN=ID")]
-	gt_ids: Vec<String>,
-
-	/// Positive-only global trust vector ID for domain.
-	///
-	/// May be repeated.
-	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "gtp-id", value_name = "DOMAIN=ID")]
-	gtp_ids: Vec<String>,
-
-	/// Trust score scope for domain.
-	///
-	/// May be repeated.
-	#[arg(long = "scope", value_name = "DOMAIN=SCOPE", default_values = ["2=SoftwareSecurity", "3=SoftwareDevelopment"])]
-	scopes: Vec<String>,
-
-	/// Status schema for domain.
-	///
-	/// May be repeated.
-	/// Specifying this enables StatusCredential processing for the domain.
-	#[arg(long = "status-schema", value_name = "DOMAIN=SCHEMA-ID", default_values = ["2=4"])]
-	status_schemas: Vec<String>,
-
-	/// Interval at which to recompute scores.
-	#[arg(long, default_value = "600000")]
-	interval: u64,
-
-	/// EigenTrust alpha value.
-	///
-	/// If not specified, uses the go-eigentrust default.
-	#[arg(long)]
-	alpha: Option<f64>,
-
-	/// Score credential issuer DID.
-	#[arg(long, default_value = "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0")]
-	issuer_id: String,
-
-	/// Minimum log level.
-	#[arg(long, default_value = "info")]
-	log_level: tracing_subscriber::filter::LevelFilter,
-
-	/// Log format (and destination).
-	#[arg(long)]
-	log_format: Option<LogFormatArg>,
-
-	/// S3 URI to emit scores to.
-	#[arg(long = "s3-output-url", value_name = "DOMAIN=URL")]
-	s3_output_urls: Vec<String>,
-}
+mod cli;
 
 type DomainId = u32;
 type Timestamp = u64;
@@ -138,9 +42,69 @@ type TrustVector = HashMap<Trustee, Value>;
 type SnapId = String;
 type IssuerId = String;
 type SnapScoreValue = f64;
-type SnapScoreConfidenceLevel = f64;
+type SnapScoreConfidence = f64;
 type SnapStatuses = HashMap<SnapId, HashMap<IssuerId, Value>>;
-type SnapScores = HashMap<SnapId, (SnapScoreValue, SnapScoreConfidenceLevel)>;
+
+#[derive(Debug, Default)]
+pub struct SnapScore {
+	pub value: SnapScoreValue,
+	pub confidence: SnapScoreConfidence,
+}
+
+type SnapScores = HashMap<SnapId, SnapScore>;
+
+#[derive(Debug, Default)]
+pub struct Accuracy {
+	pub correct: i32,
+	pub total: i32,
+}
+
+impl Accuracy {
+	pub fn record(&mut self, accurate: bool) {
+		self.total += 1;
+		if accurate {
+			self.correct += 1;
+		}
+	}
+
+	pub fn level(&self) -> Option<f64> {
+		if self.total != 0 {
+			Some((self.correct as f64) / (self.total as f64))
+		} else {
+			None
+		}
+	}
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum SnapSecurityLabel {
+	Unverified = 0,
+	Reported = 1,
+	InReview = 2,
+	Endorsed = 3,
+}
+
+impl SnapSecurityLabel {
+	pub fn from_snap_score(score: &SnapScore, tp_d: f64) -> Self {
+		if score.confidence < tp_d {
+			Self::Unverified
+		} else if score.value < tp_d {
+			Self::Reported
+		} else if score.value > (1.0 - tp_d) {
+			Self::Endorsed
+		} else {
+			Self::InReview
+		}
+	}
+
+	pub fn is_definitive(&self) -> bool {
+		match self {
+			Self::Endorsed => true,
+			Self::Reported => true,
+			_ => false,
+		}
+	}
+}
 
 async fn read_tv(
 	entries: impl TryStream<
@@ -286,6 +250,7 @@ struct Domain {
 	snap_status_updates: BTreeMap<Timestamp, SnapStatuses>,
 	snap_statuses: SnapStatuses,
 	snap_scores: SnapScores,
+	accuracies: BTreeMap<IssuerId, Accuracy>,
 }
 
 impl Domain {
@@ -403,6 +368,7 @@ impl Domain {
 						}
 					}
 					info!(tp_d, "minimum highly trusted peer trust");
+					self.compute_snap_scores(tp_d).await?;
 					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
@@ -581,7 +547,6 @@ impl Domain {
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
 			self.write_peer_vcs(tp_d, distrusters, issuer_id, ts_window, &mut zip).await?;
-			self.compute_snap_scores().await?;
 			zip.start_file("snap_scores.jsonl", options)?;
 			self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
 			zip.start_file("MANIFEST.json", options)?;
@@ -695,12 +660,12 @@ impl Domain {
 		Ok((gtp, gt))
 	}
 
-	async fn compute_snap_scores(&mut self) -> Result<(), Box<dyn Error>> {
+	async fn compute_snap_scores(&mut self, tp_d: f64) -> Result<(), Box<dyn Error>> {
 		self.snap_scores.clear();
+		self.accuracies.clear();
 		for (snap_id, opinions) in &self.snap_statuses {
 			trace!(snap = snap_id, "computing snap score");
-			let (score_value, score_confidence) =
-				self.snap_scores.entry(snap_id.clone()).or_default();
+			let score = self.snap_scores.entry(snap_id.clone()).or_default();
 			for (issuer_did, opinion) in opinions {
 				let issuer_did = issuer_did.clone();
 				trace!(issuer = issuer_did, opinion, "one opinion");
@@ -709,22 +674,37 @@ impl Domain {
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
 					trace!(issuer = issuer_did, weight, "issuer score (weight)");
 					if weight > 0.0 {
-						*score_value += opinion * weight;
-						*score_confidence += weight;
+						score.value += opinion * weight;
+						score.confidence += weight;
 					}
 				} else {
 					warn!(did = issuer_did, "unknown issuer");
 				}
 			}
-			if *score_confidence != 0.0 {
-				*score_value /= *score_confidence;
+			if score.confidence != 0.0 {
+				score.value /= score.confidence;
 			}
+			let verdict = SnapSecurityLabel::from_snap_score(&score, tp_d);
 			trace!(
 				snap = snap_id,
-				value = *score_value,
-				confidence = *score_confidence,
+				value = score.value,
+				confidence = score.confidence,
+				?verdict,
 				"snap score",
 			);
+			if verdict.is_definitive() {
+				for (issuer_did, &opinion) in opinions {
+					let opinion = if opinion > 0.5 {
+						SnapSecurityLabel::Endorsed
+					} else {
+						SnapSecurityLabel::Reported
+					};
+					self.accuracies
+						.entry(issuer_did.clone())
+						.or_default()
+						.record(verdict == opinion);
+				}
+			}
 		}
 		Ok(())
 	}
@@ -763,6 +743,9 @@ impl Domain {
 							*score_value,
 							None,
 							Some(result_label),
+							self.accuracies.get(issuer_id).map(|a| {
+								a.level().expect("accuracies map should not contain zero entries")
+							}),
 							&self.scope,
 						)
 						.await? + "\n")
@@ -777,16 +760,8 @@ impl Domain {
 		&mut self, tp_d: f64, issuer_id: &str, timestamp: Timestamp,
 		output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
-		for (snap_id, (score_value, score_confidence)) in &self.snap_scores {
-			let result_label = if *score_confidence < tp_d {
-				0
-			} else if *score_value < tp_d {
-				1
-			} else if *score_value > (1.0 - tp_d) {
-				3
-			} else {
-				2
-			};
+		for (snap_id, score) in &self.snap_scores {
+			let result_label = SnapSecurityLabel::from_snap_score(score, tp_d) as i32;
 			write_full(
 				output,
 				(self
@@ -795,9 +770,10 @@ impl Domain {
 						timestamp,
 						snap_id,
 						"IssuerTrustWeightedAverage",
-						*score_value,
-						Some(*score_confidence),
+						score.value,
+						Some(score.confidence),
 						Some(result_label),
+						None,
 						&self.scope,
 					)
 					.await? + "\n")
@@ -810,8 +786,8 @@ impl Domain {
 	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn make_trust_score_vc(
 		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
-		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidenceLevel>,
-		result: Option<i32>, scope: &str,
+		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidence>,
+		result: Option<i32>, accuracy: Option<f64>, scope: &str,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
@@ -829,6 +805,7 @@ impl Domain {
 					value: score_value,
 					confidence: score_confidence,
 					result,
+					accuracy,
 					scope: scope.to_string(),
 				},
 			},
@@ -942,6 +919,7 @@ impl Main {
 					snap_status_updates: BTreeMap::new(),
 					snap_statuses: SnapStatuses::new(),
 					snap_scores: SnapScores::new(),
+					accuracies: BTreeMap::new(),
 				},
 			);
 		}
@@ -1104,14 +1082,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		let builder = tracing_subscriber::FmtSubscriber::builder().with_max_level(args.log_level);
 		match log_format {
 			LogFormatArg::Ansi => {
-				tracing::subscriber::set_global_default(
-					builder.with_writer(std::io::stderr).with_ansi(true).finish(),
-				)?;
+				let subscriber = builder.with_writer(std::io::stderr).with_ansi(true).finish();
+				tracing::subscriber::set_global_default(subscriber)?;
 			},
 			LogFormatArg::Json => {
-				tracing::subscriber::set_global_default(
-					builder.with_writer(std::io::stdout).with_ansi(false).json().finish(),
-				)?;
+				let subscriber =
+					builder.with_writer(std::io::stdout).with_ansi(false).json().finish();
+				tracing::subscriber::set_global_default(subscriber)?;
 			},
 		}
 	}

@@ -195,6 +195,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1315,6 +1317,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
 dependencies = [
  "powerfmt",
+ "serde",
 ]
 
 [[package]]
@@ -2642,6 +2645,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
+ "time",
  "tokio",
  "tokio-stream",
  "tonic",
@@ -3032,6 +3036,15 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "mm-spd-vc"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_jcs",
+ "serde_json",
 ]
 
 [[package]]
@@ -4505,6 +4518,7 @@ dependencies = [
  "http 0.2.11",
  "itertools 0.12.0",
  "json",
+ "mm-spd-vc",
  "num",
  "proto-buf",
  "serde",

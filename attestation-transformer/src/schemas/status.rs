@@ -2,7 +2,7 @@ use crate::term::TermForm;
 use crate::{did::Did, error::AttTrError, term::Term};
 use serde_derive::{Deserialize, Serialize};
 
-use super::{Domain, IntoTerm, Proof, Validation};
+use super::{Domain, IntoTerm, OneOrMore, Proof, Validation};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum CurrentStatus {
@@ -23,7 +23,7 @@ impl From<CurrentStatus> for u8 {
 pub struct StatusReason {
 	#[serde(rename = "type")]
 	kind: Option<String>,
-	value: String,
+	value: OneOrMore<String>,
 	lang: Option<String>,
 }
 
@@ -47,7 +47,7 @@ impl CredentialSubject {
 #[serde(rename_all = "camelCase")]
 pub struct StatusSchema {
 	#[serde(rename = "type")]
-	kind: String,
+	kind: OneOrMore<String>,
 	issuer: String,
 	credential_subject: CredentialSubject,
 	proof: Proof,
@@ -55,7 +55,8 @@ pub struct StatusSchema {
 
 impl StatusSchema {
 	pub fn new(
-		kind: String, issuer: String, credential_subject: CredentialSubject, proof: Proof,
+		kind: OneOrMore<String>, issuer: String, credential_subject: CredentialSubject,
+		proof: Proof,
 	) -> Self {
 		Self { kind, issuer, credential_subject, proof }
 	}
@@ -113,7 +114,7 @@ impl IntoTerm for StatusSchema {
 #[cfg(test)]
 mod test {
 	use crate::schemas::status::{CredentialSubject, StatusSchema};
-	use crate::schemas::{Proof, Validation};
+	use crate::schemas::{OneOrMore, Proof, Validation};
 	use crate::utils::address_from_ecdsa_key;
 	use crate::{did::Did, schemas::status::CurrentStatus};
 	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
@@ -145,11 +146,11 @@ mod test {
 		bytes.push(rec_id);
 		let sig_string = hex::encode(bytes);
 
-		let kind = "AuditReportDisapproveCredential".to_string();
+		let kind = OneOrMore::One("AuditReportDisapproveCredential".to_string());
 		let address = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:0x{}", hex::encode(address));
 		let cs = CredentialSubject::new(did_string, current_status, None);
-		let proof = Proof { signature: sig_string };
+		let proof = Proof { signature: Some(sig_string) };
 
 		let follow_schema = StatusSchema { kind, issuer, credential_subject: cs, proof };
 
