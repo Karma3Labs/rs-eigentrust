@@ -33,10 +33,10 @@ impl IndexerService {
 	}
 }
 
-const CSV_COLUMN_INDEX_DATA: usize = 3;
-const CSV_COLUMN_SCHEMA_ID: usize = 2;
-const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
 const CSV_COLUMN_INDEX_ID: usize = 0;
+const CSV_COLUMN_INDEX_TIMESTAMP: usize = 1;
+const CSV_COLUMN_INDEX_SCHEMA_ID: usize = 2;
+const CSV_COLUMN_INDEX_DATA: usize = 3;
 
 #[tonic::async_trait]
 impl Indexer for IndexerService {
@@ -70,7 +70,7 @@ impl Indexer for IndexerService {
 				let r = record.as_ref().unwrap();
 				let event = IndexerEvent {
 					id: r.get(CSV_COLUMN_INDEX_ID).unwrap().parse::<u32>().unwrap_or(0),
-					schema_id: r.get(CSV_COLUMN_SCHEMA_ID).unwrap().parse::<u32>().unwrap_or(0),
+					schema_id: r.get(CSV_COLUMN_INDEX_SCHEMA_ID).unwrap().parse::<u32>().unwrap_or(0),
 					schema_value: r.get(CSV_COLUMN_INDEX_DATA).unwrap().to_string(),
 					timestamp: r
 						.get(CSV_COLUMN_INDEX_TIMESTAMP)
