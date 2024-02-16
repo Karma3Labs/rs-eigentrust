@@ -6,7 +6,6 @@ use crate::clients::csv::types::CSVClientConfig;
 use crate::clients::metamask_connector::client::MetamaskConnectorClient;
 use crate::config::dotenv::Config;
 use crate::frontends::api::grpc_server::GRPCServer;
-use crate::logger::global::AppLogger;
 use crate::storage::lm_db::LMDBClient;
 use crate::tasks::csv_poc::task::CSVPOCTask;
 use crate::tasks::metamask_connector::task::MetamaskConnectorTask;
@@ -26,9 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let config = Config::from_env();
 	let args = cli::Args::parse();
 
-	let logger_config = config.logger_config.clone();
-	let logger: AppLogger = AppLogger::new(logger_config);
-	logger.init_global_default();
+	crate::logger::global::init(config.logger_config.clone())?;
 
 	// avoid sensitive data leak!
 	// info!("\n{:#?}", config);
