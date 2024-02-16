@@ -308,6 +308,7 @@ impl Domain {
 						}
 					}
 					info!(tp_d, "minimum highly trusted peer trust");
+					self.compute_snap_scores().await?;
 					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
 				}
 				trace!(domain = self.domain_id, ?update, "processing update");
@@ -486,7 +487,6 @@ impl Domain {
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
 			self.write_peer_vcs(tp_d, distrusters, issuer_id, ts_window, &mut zip).await?;
-			self.compute_snap_scores().await?;
 			zip.start_file("snap_scores.jsonl", options)?;
 			self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
 			zip.start_file("MANIFEST.json", options)?;
