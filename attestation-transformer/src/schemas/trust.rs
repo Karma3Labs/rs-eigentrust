@@ -1,4 +1,4 @@
-use super::{Domain, IntoTerm, Proof, Validation};
+use super::{Domain, IntoTerm, OneOrMore, Proof, Validation};
 use crate::{
 	did::Did,
 	error::AttTrError,
@@ -35,7 +35,7 @@ impl CredentialSubject {
 #[serde(rename_all = "camelCase")]
 pub struct TrustSchema {
 	#[serde(rename = "type")]
-	kind: String,
+	kind: OneOrMore<String>,
 	issuer: String,
 	credential_subject: CredentialSubject,
 	proof: Proof,
@@ -45,6 +45,7 @@ impl TrustSchema {
 	pub fn new(
 		kind: String, issuer: String, credential_subject: CredentialSubject, proof: Proof,
 	) -> Self {
+		let kind = OneOrMore::More(vec![kind]);
 		Self { kind, issuer, credential_subject, proof }
 	}
 }

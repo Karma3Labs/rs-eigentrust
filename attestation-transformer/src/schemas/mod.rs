@@ -12,16 +12,17 @@ pub mod trust;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Proof {
-	signature: String,
+	// TODO(ek): Fix this
+	signature: Option<String>,
 }
 
 impl Proof {
 	pub fn new(signature: String) -> Self {
-		Self { signature }
+		Self { signature: Some(signature) }
 	}
 
 	pub fn get_signature(&self) -> String {
-		self.signature.clone()
+		self.signature.clone().unwrap_or_default()
 	}
 }
 
@@ -110,4 +111,11 @@ impl From<Domain> for u32 {
 			Domain::SoftwareSecurity => 2,
 		}
 	}
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum OneOrMore<T> {
+	One(T),
+	More(Vec<T>),
 }
