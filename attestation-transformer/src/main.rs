@@ -124,7 +124,7 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			match Self::parse_event(res.clone()).map_err(|e| e.into_status()) {
+			match Self::parse_event(res.clone()) {
 				Ok(parsed_terms) => terms.push(parsed_terms),
 				Err(err) => {
 					warn!(%err, "cannot parse event received from indexer");
