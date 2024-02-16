@@ -1,5 +1,6 @@
 use crate::error::LcError;
 use rocksdb::DB;
+use tracing::debug;
 
 #[derive(Debug)]
 pub struct IndexManager;
@@ -15,6 +16,7 @@ impl IndexManager {
 			let from_bytes: [u8; 4] = from_i.try_into().map_err(|_| LcError::ParseError)?;
 			(from_bytes, false)
 		} else {
+			debug!(did = source, index = offset, "new DID-index mapping");
 			let curr_offset = offset.to_be_bytes();
 			db.put_cf(&cf, key, curr_offset).map_err(LcError::DbError)?;
 			(curr_offset, true)
