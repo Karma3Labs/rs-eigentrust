@@ -99,8 +99,21 @@ impl TaskTrait for MetamaskConnectorTask {
 				};
 				// info!(?type_, schema_id, "matched VC type");
 
+				let timestamp = match time::PrimitiveDateTime::parse(
+					&r.creation_at,
+					&time::format_description::well_known::Iso8601::DEFAULT,
+				) {
+					Ok(timestamp) => timestamp,
+					Err(err) => {
+						info!(?err, ?r.assertion, "cannot parse acceptance timestamp");
+						return None;
+					},
+				}
+				.assume_utc()
+				.unix_timestamp_nanos();
+				let timestamp = (timestamp / 1_000_000).to_string();
 				Some(TaskRecord {
-					timestamp: r.creation_at,
+					timestamp,
 					id: r.id,
 					job_id: "0".to_string(),
 					schema_id,

@@ -32,3 +32,4 @@ hyper-util = { version = "0.1", features = ["full"] }
 hyper-staticfile = "0.10.0"
 http = "1.0.0"
 hyper-static = "0.2.1"
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
