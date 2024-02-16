@@ -128,8 +128,7 @@ impl Transformer for TransformerService {
 				},
 			}
 		}
-		println!("Received num events: {}", terms.len());
-		println!("Received terms: {:#?}", terms);
+		info!(count = terms.len(), "received terms");
 
 		let num_new_term_groups =
 			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError.into_status())?;
@@ -138,7 +137,7 @@ impl Transformer for TransformerService {
 		let (new_count, indexed_terms) = TermManager::get_indexed_terms(ct_offset, terms)
 			.map_err(|_| AttTrError::SerialisationError.into_status())?;
 
-		println!("Received num terms: {}", new_count);
+		info!(new_count, "received terms");
 
 		TermManager::write_terms(&db, indexed_terms).map_err(|e| e.into_status())?;
 		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)
