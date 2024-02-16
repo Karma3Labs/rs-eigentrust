@@ -20,6 +20,7 @@ use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
 use term::Term;
+use tracing::{info, warn};
 
 pub mod did;
 pub mod error;
@@ -123,8 +124,13 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			let parsed_terms = Self::parse_event(res).map_err(|e| e.into_status())?;
-			terms.push(parsed_terms);
+			match Self::parse_event(res.clone()).map_err(|e| e.into_status()) {
+				Ok(parsed_terms) => terms.push(parsed_terms),
+				Err(err) => {
+					warn!(%err, "cannot parse event received from indexer");
+					info!(?res, "offending message");
+				},
+			}
 		}
 		println!("Received num events: {}", terms.len());
 		println!("Received terms: {:#?}", terms);
@@ -202,6 +208,13 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
+	tracing_subscriber::fmt::Subscriber::builder()
+		.with_max_level(tracing::Level::INFO)
+		.with_writer(std::io::stderr)
+		.with_ansi(true)
+		.init();
+	info!("initializing AT");
+
 	let tr_service =
 		TransformerService::new(args.indexer_grpc, args.linear_combiner_grpc, &args.db_dir)?;
 
