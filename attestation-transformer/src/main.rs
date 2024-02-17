@@ -203,11 +203,18 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
-	tracing_subscriber::fmt::Subscriber::builder()
-		.with_max_level(tracing::Level::INFO)
-		.with_writer(std::io::stderr)
-		.with_ansi(true)
-		.init();
+	{
+		use tracing_subscriber::*;
+		let env_filter = EnvFilter::builder()
+			.with_env_var("SPD_AT_LOG")
+			.from_env()?
+			.add_directive(filter::LevelFilter::WARN.into());
+		fmt::Subscriber::builder()
+			.with_env_filter(env_filter)
+			.with_writer(std::io::stderr)
+			.with_ansi(true)
+			.init();
+	}
 	info!("initializing AT");
 
 	let tr_service =
