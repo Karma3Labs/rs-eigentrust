@@ -10,6 +10,7 @@ use tokio::time::interval;
 use tokio_stream::wrappers::IntervalStream;
 use tokio_stream::StreamExt;
 use tonic::Request;
+use tracing::{info, trace};
 
 const BATCH_SIZE: u32 = 1000;
 const INTERVAL_SECS: u64 = 5;
@@ -30,6 +31,19 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
+	{
+		use tracing_subscriber::*;
+		let env_filter = EnvFilter::builder()
+			.with_env_var("SPD_JM_LOG")
+			.from_env()?
+			.add_directive(filter::LevelFilter::WARN.into());
+		fmt::Subscriber::builder()
+			.with_env_filter(env_filter)
+			.with_writer(std::io::stderr)
+			.with_ansi(true)
+			.init();
+	}
+	info!("initializing JM");
 	let mut tr_client = TransformerClient::connect(args.transformer_grpc).await?;
 	let mut lc_client = LinearCombinerClient::connect(args.linear_combiner_grpc).await?;
 
@@ -40,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Some(_ts) = limited_stream.next().await {
 		let event_request = Request::new(EventBatch { size: BATCH_SIZE });
 		let response = tr_client.sync_indexer(event_request).await?.into_inner();
-		println!("sync_indexer response {:?}", response);
+		trace!(?response, "sync_indexer response");
 
 		if response.num_terms != 0 {
 			let void_request = Request::new(TermBatch {
@@ -48,7 +62,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				size: response.num_terms,
 			});
 			let response = tr_client.term_stream(void_request).await?.into_inner();
-			println!("term_stream response {:?}", response);
+			trace!(?response, "term_stream response");
 		}
 	}
 
@@ -138,34 +152,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		lt4[x][y] = res.value;
 	}
 
-	println!("SoftwareSecurity - Trust:");
-	lt1.map(|x| println!("{:?}", x));
-	println!("SoftwareSecurity - Distrust:");
-	lt2.map(|x| println!("{:?}", x));
-	println!("SoftwareDevelopment - Trust:");
-	lt3.map(|x| println!("{:?}", x));
-	println!("SoftwareDevelopment - Distrust:");
-	lt4.map(|x| println!("{:?}", x));
+	lt1.map(|x| trace!(?x, "SoftwareSecurity    -    Trust"));
+	lt2.map(|x| trace!(?x, "SoftwareSecurity    - Distrust"));
+	lt3.map(|x| trace!(?x, "SoftwareDevelopment -    Trust"));
+	lt4.map(|x| trace!(?x, "SoftwareDevelopment - Distrust"));
 
 	let batch_new = LtBatch { domain: security_domain, form: trust_form, size: 100 };
 	let mut res_new = lc_client.get_new_data(Request::new(batch_new)).await?.into_inner();
 	while let Ok(Some(res)) = res_new.message().await {
-		println!("SoftwareSecurity - Trust - LT items: {:?}", res);
+		trace!(?res, "SoftwareSecurity -    Trust - LT items");
 	}
 
 	let batch_new = LtBatch { domain: security_domain, form: distrust_form, size: 100 };
 	let mut res_new = lc_client.get_new_data(Request::new(batch_new)).await?.into_inner();
 	while let Ok(Some(res)) = res_new.message().await {
-		println!("SoftwareSecurity - Distrust - LT items: {:?}", res);
+		trace!(?res, "SoftwareSecurity - Distrust - LT items");
 	}
 
 	let batch_new = MappingQuery { start: 0, size: 100 };
 	let mut mapping_data = lc_client.get_did_mapping(Request::new(batch_new)).await?.into_inner();
 	while let Ok(Some(res)) = mapping_data.message().await {
-		println!(
-			"Mapping; did: {}, index: {}",
-			String::from_utf8(hex::decode(res.did).unwrap()).unwrap(),
-			res.id
+		trace!(
+			did = String::from_utf8(hex::decode(res.did).unwrap()).unwrap(),
+			index = res.id,
+			"Mapping"
 		);
 	}
 
