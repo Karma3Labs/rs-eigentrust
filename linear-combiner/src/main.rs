@@ -25,7 +25,7 @@ pub mod error;
 pub mod item;
 pub mod managers;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct LinearCombinerService {
 	db_url: String,
 }
