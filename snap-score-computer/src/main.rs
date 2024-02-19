@@ -98,11 +98,7 @@ impl SnapSecurityLabel {
 	}
 
 	pub fn is_definitive(&self) -> bool {
-		match self {
-			Self::Endorsed => true,
-			Self::Reported => true,
-			_ => false,
-		}
+		matches!(self, Self::Endorsed | Self::Reported)
 	}
 }
 
@@ -684,7 +680,7 @@ impl Domain {
 			if score.confidence != 0.0 {
 				score.value /= score.confidence;
 			}
-			let verdict = SnapSecurityLabel::from_snap_score(&score, tp_d);
+			let verdict = SnapSecurityLabel::from_snap_score(score, tp_d);
 			trace!(
 				snap = snap_id,
 				value = score.value,
