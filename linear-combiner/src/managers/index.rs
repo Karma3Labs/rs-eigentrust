@@ -7,6 +7,11 @@ pub struct IndexManager;
 
 impl IndexManager {
 	pub fn get_index(db: &DB, source: String, offset: u32) -> Result<([u8; 4], bool), LcError> {
+		let source = if source.starts_with("did:pkh:eip155:") {
+			source.to_lowercase()
+		} else {
+			source
+		};
 		let cf = db.cf_handle("index").ok_or(LcError::NotFoundError)?;
 
 		let key = source.as_bytes();

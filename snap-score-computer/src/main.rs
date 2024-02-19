@@ -317,9 +317,12 @@ impl Domain {
 						"performing core compute"
 					);
 					self.last_compute_ts = ts_window;
-					self.peer_did_to_id = Self::fetch_did_mapping(lc_client).await?;
-					self.peer_id_to_did =
-						self.peer_did_to_id.iter().map(|(did, id)| (*id, did.clone())).collect();
+					self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
+					self.peer_did_to_id = self
+						.peer_id_to_did
+						.iter()
+						.map(|(id, did)| (did.to_lowercase(), *id))
+						.collect();
 
 					let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
 					let pt = read_tv(pt_ent).await?;
@@ -502,10 +505,10 @@ impl Domain {
 
 	async fn fetch_did_mapping(
 		lc_client: &mut LinearCombinerClient<Channel>,
-	) -> Result<BTreeMap<String, u32>, Box<dyn Error>> {
+	) -> Result<BTreeMap<u32, String>, Box<dyn Error>> {
 		let mut start = 0;
 		let mut more = true;
-		let mut peer_did_to_id = BTreeMap::new();
+		let mut peer_id_to_did = BTreeMap::new();
 		while more {
 			let mut mapping_stream = lc_client
 				.get_did_mapping(combiner::MappingQuery { start, size: 100 })
@@ -517,7 +520,7 @@ impl Domain {
 				match binascii::hex2bin(entry.did.as_bytes(), did_bytes.as_mut_slice()) {
 					Ok(decoded) => match String::from_utf8(Vec::from(decoded)) {
 						Ok(did) => {
-							peer_did_to_id.insert(did.clone(), entry.id);
+							peer_id_to_did.insert(entry.id, Self::canonicalize_eip155(&did));
 						},
 						Err(e) => {
 							error!(err = ?e, "invalid UTF-8 DID encountered");
@@ -531,7 +534,7 @@ impl Domain {
 				more = true;
 			}
 		}
-		Ok(peer_did_to_id)
+		Ok(peer_id_to_did)
 	}
 
 	async fn publish_scores(
@@ -670,6 +673,15 @@ impl Domain {
 		Ok((gtp, gt))
 	}
 
+	fn canonicalize_eip155(did: &str) -> String {
+		if did.to_lowercase().starts_with("did:pkh:eip155:") {
+			let components: Vec<&str> = did.split(':').collect();
+			format!("did:pkh:eip155:1:{}", components[4])
+		} else {
+			did.to_string()
+		}
+	}
+
 	async fn compute_snap_scores(&mut self, tp_d: f64) -> Result<(), Box<dyn Error>> {
 		self.snap_scores.clear();
 		self.accuracies.clear();
@@ -679,7 +691,9 @@ impl Domain {
 			for (issuer_did, opinion) in opinions {
 				let issuer_did = issuer_did.clone();
 				trace!(issuer = issuer_did, opinion, "one opinion");
-				if let Some(id) = self.peer_did_to_id.get(&issuer_did) {
+				if let Some(id) =
+					self.peer_did_to_id.get(&Self::canonicalize_eip155(&issuer_did).to_lowercase())
+				{
 					trace!(did = issuer_did, id, "issuer mapping");
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
 					trace!(issuer = issuer_did, weight, "issuer score (weight)");
