@@ -74,7 +74,7 @@ impl TaskTrait for MetamaskConnectorTask {
 				};
 				let schema_id = if type_.matches("SecurityReportCredential") {
 					0
-				} else if type_.matches("ReviewCredential") {
+				} else if type_.matches("StatusCredential") {
 					1
 				} else if type_.matches("TrustCredential") {
 					2
