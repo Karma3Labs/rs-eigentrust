@@ -15,6 +15,7 @@ use num::BigUint;
 use sha3::Digest;
 use thiserror::Error as ThisError;
 use tonic::transport::Channel;
+use tracing::level_filters::LevelFilter;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -621,8 +622,14 @@ impl Domain {
 		}
 		let post_scores_client = reqwest::Client::new();
 		for url in &self.post_scores_endpoints {
-			info!(%url, "sending manifest");
-			match post_scores_client.post(url.join("scores/new")?).json(&manifest).send().await {
+			// info!(%url, "sending manifest");
+			match post_scores_client
+				.post(url.clone())
+				.header("X-API-Key", "KPKdGRPhdX7Mcxca6ftez1WPGBUGcDfm7exb8ir4")
+				.json(&manifest)
+				.send()
+				.await
+			{
 				Ok(res) => match res.error_for_status() {
 					Ok(res) => info!(%url, status = %res.status(), "sent manifest"),
 					Err(err) => warn!(?err, %url, "cannot send manifest"),
@@ -1139,44 +1146,7 @@ fn write_full(w: &mut dyn std::io::Write, buf: &[u8]) -> std::io::Result<()> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
-	{
-		let log_format = args.log_format.clone().unwrap_or_else(|| {
-			if std::io::stderr().is_terminal() {
-				LogFormatArg::Ansi
-			} else {
-				LogFormatArg::Json
-			}
-		});
-		let env_filter = tracing_subscriber::EnvFilter::builder()
-			.with_env_var("SPD_SSC_LOG")
-			.from_env()?
-			.add_directive(tracing_subscriber::filter::LevelFilter::WARN.into())
-			.add_directive(
-				format!("snap_score_computer={}", args.log_level)
-					.parse()
-					.expect("hard-coded filter is wrong"),
-			);
-		let builder = tracing_subscriber::FmtSubscriber::builder();
-		match log_format {
-			LogFormatArg::Ansi => {
-				let subscriber = builder
-					.with_env_filter(env_filter)
-					.with_writer(std::io::stderr)
-					.with_ansi(true)
-					.finish();
-				tracing::subscriber::set_global_default(subscriber)?;
-			},
-			LogFormatArg::Json => {
-				let subscriber = builder
-					.with_env_filter(env_filter)
-					.with_writer(std::io::stdout)
-					.with_ansi(false)
-					.json()
-					.finish();
-				tracing::subscriber::set_global_default(subscriber)?;
-			},
-		}
-	}
+	setup_logging(&args.log_format, &args.log_level)?;
 	let mut m = Main::new(args).map_err(|e| MainError::Init(e))?;
 	match m.main().await {
 		Ok(()) => Ok(()),
@@ -1185,4 +1155,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			Err(e)
 		},
 	}
+}
+
+fn setup_logging(format: &Option<LogFormatArg>, level: &LevelFilter) -> Result<(), Box<dyn Error>> {
+	let log_format = format.clone().unwrap_or_else(|| {
+		if std::io::stderr().is_terminal() {
+			LogFormatArg::Ansi
+		} else {
+			LogFormatArg::Json
+		}
+	});
+	let env_filter = tracing_subscriber::EnvFilter::builder()
+		.with_env_var("SPD_SSC_LOG")
+		.from_env()?
+		.add_directive(LevelFilter::WARN.into())
+		.add_directive(
+			format!("snap_score_computer={}", level).parse().expect("hard-coded filter is wrong"),
+		);
+	let builder = tracing_subscriber::FmtSubscriber::builder();
+	match log_format {
+		LogFormatArg::Ansi => {
+			let subscriber = builder
+				.with_env_filter(env_filter)
+				.with_writer(std::io::stderr)
+				.with_ansi(true)
+				.finish();
+			tracing::subscriber::set_global_default(subscriber)?;
+		},
+		LogFormatArg::Json => {
+			let subscriber = builder
+				.with_env_filter(env_filter)
+				.with_writer(std::io::stdout)
+				.with_ansi(false)
+				.json()
+				.finish();
+			tracing::subscriber::set_global_default(subscriber)?;
+		},
+	};
+	Ok(())
 }
