@@ -720,7 +720,18 @@ impl Domain {
 						score.confidence += weight;
 					}
 				} else {
-					warn!(did = issuer_did, "unknown issuer");
+					// TODO(ek): This happens when someone hasn't received/sent TrustCredential
+					//   but still issued ReviewCredential.  Since peer_did_to_id is populated by
+					//   LC (which doesn't see ReviewCredentials), it may be missing there.
+					//   In this case, the peer's trust score is necessarily zero, so skipping
+					//   their opinion is only natural.  Nevertheless, split addr-index management
+					//   out of LC and into a separate component.
+					// warn!(
+					// 	did = issuer_did,
+					// 	canon = Self::canonicalize_eip155(&issuer_did),
+					// 	mapping = ?self.peer_did_to_id,
+					// 	"unknown issuer"
+					// );
 				}
 			}
 			if score.confidence != 0.0 {
