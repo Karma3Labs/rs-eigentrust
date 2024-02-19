@@ -22,3 +22,4 @@ tonic-build = "0.10"
 prost = "0.12"
 prost-types = "0.12"
 proto-buf = { path = "proto-buf" }
+mm-spd-vc = { path = "mm-spd-vc" }

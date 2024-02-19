@@ -1,5 +1,6 @@
 use digest::Digest;
 use hex;
+use mm_spd_vc::OneOrMore;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sha3::Sha3_256;
@@ -40,25 +41,9 @@ impl MetamaskConnectorTask {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum CredType {
-	One(String),
-	Vec(Vec<String>),
-}
-
-impl CredType {
-	fn matches(&self, s: &str) -> bool {
-		match self {
-			Self::One(v) => v == s,
-			Self::Vec(v) => v.contains(&s.to_string()),
-		}
-	}
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct BaseCred {
 	#[serde(rename = "type")]
-	type_: CredType,
+	type_: OneOrMore<String>,
 }
 
 #[tonic::async_trait]
