@@ -14,7 +14,7 @@ use tracing::{info, trace};
 
 const BATCH_SIZE: u32 = 1000;
 const INTERVAL_SECS: u64 = 5;
-const NUM_ITERATIONS: usize = 3;
+const NUM_ITERATIONS: usize = 100000000000;
 const MAX_SIZE: u32 = 7;
 
 #[derive(ClapParser)]
