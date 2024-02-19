@@ -553,7 +553,13 @@ impl Domain {
 		} else {
 			ts_window
 		};
-		let manifest = Self::make_manifest(issuer_id, ts_window).await?;
+		let mut locations = Vec::new();
+		for url in &self.s3_output_urls {
+			locations.push(url.join(&format!("{}.zip", ts_window))?.to_string());
+		}
+		info!(?locations, "uploading manifest");
+		let mut manifest = Self::make_manifest(issuer_id, ts_window).await?;
+		manifest.locations = Some(locations);
 		let manifest_path = std::path::Path::new("spd_scores.json");
 		let zip_path = std::path::Path::new("spd_scores.zip");
 		{
