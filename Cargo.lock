@@ -4552,6 +4552,7 @@ dependencies = [
  "mm-spd-vc",
  "num",
  "proto-buf",
+ "reqwest",
  "serde",
  "serde_jcs",
  "serde_json",
