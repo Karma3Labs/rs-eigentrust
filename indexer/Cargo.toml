@@ -11,6 +11,7 @@ serde = "1.0.192"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3", features = ["ansi", "json", "env-filter"] }
 proto-buf.workspace = true
+mm-spd-vc.workspace = true
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = "0.1"
 tonic.workspace = true

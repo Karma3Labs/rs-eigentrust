@@ -19,8 +19,8 @@ use url::Url;
 
 use compute::ComputeClient;
 use mm_spd_vc::{
-	Manifest, ManifestProof, StatusCredential, TrustScore, TrustScoreCredential,
-	TrustScoreCredentialProof, TrustScoreCredentialSubject,
+	Manifest, ManifestProof, OneOrMore, StatusCredential, TrustScore, TrustScoreCredential,
+	TrustScoreCredentialProof, TrustScoreCredentialSubject, VerifiableCredential,
 };
 use proto_buf::combiner;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
@@ -160,8 +160,6 @@ enum DomainParamParseError {
 
 #[derive(Debug, ThisError)]
 enum SnapStatusError {
-	#[error("invalid type {0:?}")]
-	InvalidType(String),
 	#[error("invalid snap status {0:?}")]
 	InvalidStatus(String),
 }
@@ -180,11 +178,12 @@ enum UpdateBody {
 
 fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<dyn Error>> {
 	// trace!(source = vc_json, "parsing StatusCredential");
+	let vc: VerifiableCredential = serde_json::from_str(vc_json)?;
+	if !vc.type_.matches("StatusCredential") {
+		return Err(MainError::NotStatusCredential(vc.type_).into());
+	}
 	let vc: StatusCredential = serde_json::from_str(vc_json)?;
 	trace!(parsed = ?vc, "parsed StatusCredential");
-	if vc.type_ != "StatusCredential" {
-		return Err(SnapStatusError::InvalidType(vc.type_).into());
-	}
 	Ok((
 		vc.credential_subject.id,
 		vc.issuer,
@@ -214,6 +213,8 @@ enum MainError {
 	LoadSnapStatuses(Box<dyn Error>),
 	#[error("cannot convert binary to hex: {0:?}")]
 	ConvertToHex(binascii::ConvertError),
+	#[error("not a StatusCredential but {0:?}")]
+	NotStatusCredential(OneOrMore<String>),
 }
 
 struct Domain {
@@ -337,7 +338,7 @@ impl Domain {
 							self.peer_id_to_did.get(peer).cloned().unwrap_or(peer.to_string())
 						})
 						.collect();
-					info!(?ht_dids, "highly trusted peers");
+					debug!(?ht_dids, "highly trusted peers");
 
 					match Self::run_et(
 						&self.lt_id, &self.pt_id, &self.gt_id, &self.gtp_id, alpha, et_client,
@@ -363,7 +364,7 @@ impl Domain {
 							tp_d = tp;
 						}
 					}
-					info!(tp_d, "minimum highly trusted peer trust");
+					debug!(tp_d, "minimum highly trusted peer trust");
 					self.compute_snap_scores(tp_d).await?;
 					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
 				}
@@ -485,7 +486,9 @@ impl Domain {
 							.insert(issuer_id, value);
 					},
 					Err(_err) => {
-						warn!(src = &entry.schema_value, err = ?_err, "cannot process entry");
+						if !format!("{:?}", _err).starts_with("NotStatusCredential(") {
+							warn!(src = &entry.schema_value, err = ?_err, "cannot process entry");
+						}
 					},
 				}
 			}
@@ -612,7 +615,7 @@ impl Domain {
 				},
 			)
 			.collect();
-		info!(count = entries.len(), ts = timestamp, "copied LT entries");
+		trace!(count = entries.len(), ts = timestamp, "copied LT entries");
 		let timestamp = BigUint::from(timestamp);
 		tm_client.update(&self.lt_id, &timestamp, iter(entries.into_iter().map(Ok))).await?;
 		Ok(())
@@ -648,11 +651,11 @@ impl Domain {
 		let (_timestamp, entries) = tv_client.get(gtp_id).await?;
 		pin_mut!(entries);
 		let gtp = read_tv(entries).await?;
-		info!(?gtp, "undiscounted global trust");
+		trace!(?gtp, "undiscounted global trust");
 		let (_timestamp, entries) = tv_client.get(gt_id).await?;
 		pin_mut!(entries);
 		let gt = read_tv(entries).await?;
-		info!(?gt, "discounted global trust");
+		trace!(?gt, "discounted global trust");
 		Ok((gtp, gt))
 	}
 
@@ -788,7 +791,10 @@ impl Domain {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
 			id: "".to_string(), // to be replaced with real hash URI
-			type_: vec!["VerifiableCredential".to_string(), "TrustScoreCredential".to_string()],
+			type_: OneOrMore::More(vec![
+				"VerifiableCredential".to_string(),
+				"TrustScoreCredential".to_string(),
+			]),
 			issuer: String::from(issuer_id),
 			issuance_date: format!(
 				"{:?}",
@@ -1075,15 +1081,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				LogFormatArg::Json
 			}
 		});
-		let builder = tracing_subscriber::FmtSubscriber::builder().with_max_level(args.log_level);
+		let env_filter = tracing_subscriber::EnvFilter::builder()
+			.with_env_var("SPD_SSC_LOG")
+			.from_env()?
+			.add_directive(tracing_subscriber::filter::LevelFilter::WARN.into())
+			.add_directive(
+				format!("snap_score_computer={}", args.log_level)
+					.parse()
+					.expect("hard-coded filter is wrong"),
+			);
+		let builder = tracing_subscriber::FmtSubscriber::builder();
 		match log_format {
 			LogFormatArg::Ansi => {
-				let subscriber = builder.with_writer(std::io::stderr).with_ansi(true).finish();
+				let subscriber = builder
+					.with_env_filter(env_filter)
+					.with_writer(std::io::stderr)
+					.with_ansi(true)
+					.finish();
 				tracing::subscriber::set_global_default(subscriber)?;
 			},
 			LogFormatArg::Json => {
-				let subscriber =
-					builder.with_writer(std::io::stdout).with_ansi(false).json().finish();
+				let subscriber = builder
+					.with_env_filter(env_filter)
+					.with_writer(std::io::stdout)
+					.with_ansi(false)
+					.json()
+					.finish();
 				tracing::subscriber::set_global_default(subscriber)?;
 			},
 		}

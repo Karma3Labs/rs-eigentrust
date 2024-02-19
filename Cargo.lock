@@ -2641,6 +2641,7 @@ dependencies = [
  "hyper-static",
  "hyper-staticfile",
  "hyper-util",
+ "mm-spd-vc",
  "proto-buf",
  "reqwest",
  "serde",
