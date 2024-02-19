@@ -15,8 +15,6 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
-use schemas::security::SecurityReportSchema;
-use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
 use term::Term;
@@ -61,14 +59,18 @@ impl TransformerService {
 		let schema_type = SchemaType::from(schema_id);
 		let terms = match schema_type {
 			SchemaType::SecurityCredential => {
-				let parsed_att: SecurityReportSchema =
-					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
-				parsed_att.into_term(event.timestamp)?
+				// TODO: Uncomment when supported
+				// let parsed_att: SecurityReportSchema =
+				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
+				// parsed_att.into_term(event.timestamp)?
+				Vec::new()
 			},
 			SchemaType::StatusCredential => {
-				let parsed_att: StatusSchema =
-					from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
-				parsed_att.into_term(event.timestamp)?
+				// TODO: Uncomment when supported
+				// let parsed_att: StatusSchema =
+				// 	from_str(&event.schema_value).map_err(AttTrError::SerdeError)?;
+				// parsed_att.into_term(event.timestamp)?
+				Vec::new()
 			},
 			SchemaType::TrustCredential => {
 				let parsed_att: TrustSchema =
