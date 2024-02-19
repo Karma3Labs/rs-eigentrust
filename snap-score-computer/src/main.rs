@@ -180,11 +180,11 @@ enum UpdateBody {
 fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<dyn Error>> {
 	// trace!(source = vc_json, "parsing StatusCredential");
 	let vc: VerifiableCredential = serde_json::from_str(vc_json)?;
-	if !vc.type_.matches("StatusCredential") {
+	if !vc.type_.matches("ReviewCredential") {
 		return Err(MainError::NotStatusCredential(vc.type_).into());
 	}
 	let vc: StatusCredential = serde_json::from_str(vc_json)?;
-	trace!(parsed = ?vc, "parsed StatusCredential");
+	info!(parsed = ?vc, "parsed ReviewCredential");
 	Ok((
 		vc.credential_subject.id,
 		vc.issuer,
