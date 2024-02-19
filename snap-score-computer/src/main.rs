@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::io::IsTerminal;
 use std::str::FromStr;
+use std::time;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
@@ -249,6 +250,7 @@ struct Domain {
 	snap_statuses: SnapStatuses,
 	snap_scores: SnapScores,
 	accuracies: BTreeMap<IssuerId, Accuracy>,
+	start_timestamp: u64,
 }
 
 impl Domain {
@@ -541,6 +543,16 @@ impl Domain {
 		&mut self, ts_window: Timestamp, tp_d: f64,
 		distrusters: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
 	) -> Result<(), Box<dyn Error>> {
+		let ts_window = if ts_window < self.start_timestamp {
+			info!(
+				self.start_timestamp,
+				"using clipped timestamp for historic data",
+			);
+			self.start_timestamp += 1;
+			self.start_timestamp - 1
+		} else {
+			ts_window
+		};
 		let manifest = Self::make_manifest(issuer_id, ts_window).await?;
 		let manifest_path = std::path::Path::new("spd_scores.json");
 		let zip_path = std::path::Path::new("spd_scores.zip");
@@ -920,6 +932,10 @@ impl Main {
 		domain_ids.extend(status_schemas.keys());
 		let domains = BTreeMap::new();
 		let mut main = Box::new(Self { args, domains });
+		let start_timestamp =
+			time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap().as_secs()
+				* 1000;
+		info!(ts = &start_timestamp, "starting");
 		for domain_id in domain_ids {
 			let s3_output_urls = match s3_urls.remove(&domain_id) {
 				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
@@ -958,6 +974,7 @@ impl Main {
 					snap_statuses: SnapStatuses::new(),
 					snap_scores: SnapScores::new(),
 					accuracies: BTreeMap::new(),
+					start_timestamp,
 				},
 			);
 		}
