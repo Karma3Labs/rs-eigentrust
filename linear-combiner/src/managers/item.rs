@@ -41,7 +41,7 @@ impl ItemManager {
 				key.extend_from_slice(&x.to_be_bytes());
 				key.extend_from_slice(&y.to_be_bytes());
 
-				println!("Looking for {} {}", x, y);
+				// trace!(x, y, "looking for");
 
 				let item_res = db.get_cf(&cf, key.clone());
 				if let Ok(Some(value)) = item_res {

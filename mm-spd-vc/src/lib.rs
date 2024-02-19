@@ -1,18 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-pub fn add(left: usize, right: usize) -> usize {
-	left + right
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn it_works() {
-		let result = add(2, 2);
-		assert_eq!(result, 4);
-	}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifiableCredential {
+	#[serde(rename = "@context")]
+	pub context: Option<Vec<String>>,
+	pub id: Option<String>,
+	#[serde(rename = "type")]
+	pub type_: OneOrMore<String>,
+	pub issuer: String,
+	pub issuance_date: Option<String>,
+	pub credential_subject: serde_json::Value,
+	pub proof: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,7 +21,7 @@ pub struct StatusCredential {
 	pub context: Option<Vec<String>>,
 	pub id: Option<String>,
 	#[serde(rename = "type")]
-	pub type_: String,
+	pub type_: OneOrMore<String>,
 	pub issuer: String,
 	pub issuance_date: Option<String>,
 	pub credential_subject: StatusCredentialSubject,
@@ -34,13 +33,15 @@ pub struct StatusCredential {
 pub struct StatusCredentialSubject {
 	pub id: String,
 	pub current_status: String,
-	pub status_reason: Option<Vec<String>>,
+	// TODO(ek): Re-enable when format stabilizes
+	// pub status_reason: Option<OneOrMore<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusCredentialProof {
-	pub signature: String,
+	// TODO(ek): Implement
+	// pub signature: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -50,7 +51,7 @@ pub struct TrustScoreCredential {
 	pub context: Vec<String>,
 	pub id: String,
 	#[serde(rename = "type")]
-	pub type_: Vec<String>,
+	pub type_: OneOrMore<String>,
 	pub issuer: String,
 	pub issuance_date: String,
 	pub credential_subject: TrustScoreCredentialSubject,
@@ -94,3 +95,19 @@ pub struct Manifest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestProof {}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum OneOrMore<T> {
+	One(T),
+	More(Vec<T>),
+}
+
+impl OneOrMore<String> {
+	pub fn matches(&self, s: &str) -> bool {
+		match self {
+			Self::One(v) => v == s,
+			Self::More(v) => v.contains(&s.to_string()),
+		}
+	}
+}

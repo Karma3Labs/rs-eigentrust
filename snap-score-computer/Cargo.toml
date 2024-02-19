@@ -20,7 +20,7 @@ simple-error = "0.3"
 json = "0.12"
 http = "0.2"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["ansi", "json"] }
+tracing-subscriber = { version = "0.3", features = ["ansi", "json", "env-filter"] }
 itertools = "0.12"
 binascii = "0.1"
 serde = { version = "1.0", features = ["derive"] }
@@ -34,3 +34,4 @@ aws-sdk-s3 = "1.14.0"
 url = "2.5.0"
 futures = "0.3.30"
 num = "0.4.1"
+reqwest = { version = "0.11", features = ["json"] }

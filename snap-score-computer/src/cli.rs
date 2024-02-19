@@ -96,4 +96,8 @@ pub struct Args {
 	/// S3 URI to emit scores to.
 	#[arg(long = "s3-output-url", value_name = "DOMAIN=URL")]
 	pub s3_output_urls: Vec<String>,
+
+	/// Score POST API endpoints.
+	#[arg(long = "post-scores-endpoint")]
+	pub post_scores_endpoints: Vec<String>,
 }

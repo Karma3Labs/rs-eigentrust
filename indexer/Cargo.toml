@@ -9,8 +9,9 @@ edition.workspace = true
 dotenv = "0.15.0"
 serde = "1.0.192"
 tracing = "0.1.40"
-tracing-subscriber = "0.3.17"
+tracing-subscriber = { version = "0.3", features = ["ansi", "json", "env-filter"] }
 proto-buf.workspace = true
+mm-spd-vc.workspace = true
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = "0.1"
 tonic.workspace = true
@@ -34,3 +35,4 @@ http = "1.0.0"
 hyper-static = "0.2.1"
 clap = { version = "4.4", features = ["derive"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+thiserror = "1.0"

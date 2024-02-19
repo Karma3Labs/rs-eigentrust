@@ -1,9 +1,10 @@
-use super::{Domain, IntoTerm, OneOrMore, Proof, Validation};
+use super::{Domain, IntoTerm, Proof, Validation};
 use crate::{
 	did::Did,
 	error::AttTrError,
 	term::{Term, TermForm},
 };
+use mm_spd_vc::OneOrMore;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -144,6 +145,7 @@ mod test {
 	};
 
 	use super::TrustSchema;
+	use mm_spd_vc::OneOrMore;
 	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
 	use sha3::{Digest, Keccak256};
 
@@ -179,9 +181,14 @@ mod test {
 		let addr = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
 		let cs = CredentialSubject::new(did_string, vec![trust_arc]);
-		let proof = Proof { signature: sig_string };
+		let proof = Proof { signature: Some(sig_string) };
 
-		let aa_schema = TrustSchema { kind, issuer, credential_subject: cs, proof };
+		let aa_schema = TrustSchema {
+			kind: OneOrMore::More(vec![kind]),
+			issuer,
+			credential_subject: cs,
+			proof,
+		};
 
 		let rec_pk = aa_schema.validate().unwrap();
 

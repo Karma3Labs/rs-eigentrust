@@ -1,8 +1,9 @@
 use crate::term::TermForm;
 use crate::{did::Did, error::AttTrError, term::Term};
+use mm_spd_vc::OneOrMore;
 use serde_derive::{Deserialize, Serialize};
 
-use super::{Domain, IntoTerm, OneOrMore, Proof, Validation};
+use super::{Domain, IntoTerm, Proof, Validation};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum CurrentStatus {
@@ -114,9 +115,10 @@ impl IntoTerm for StatusSchema {
 #[cfg(test)]
 mod test {
 	use crate::schemas::status::{CredentialSubject, StatusSchema};
-	use crate::schemas::{OneOrMore, Proof, Validation};
+	use crate::schemas::{Proof, Validation};
 	use crate::utils::address_from_ecdsa_key;
 	use crate::{did::Did, schemas::status::CurrentStatus};
+	use mm_spd_vc::OneOrMore;
 	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
 	use sha3::{Digest, Keccak256};
 

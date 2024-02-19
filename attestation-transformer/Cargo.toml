@@ -13,6 +13,7 @@ tokio-stream = "0.1"
 futures = "0.3"
 rocksdb = { version = "0.21.0", features = ["multi-threaded-cf"] }
 proto-buf.workspace = true
+mm-spd-vc.workspace = true
 secp256k1 = { version = "0.28.0", features = ["recovery", "global-context", "rand"] }
 sha3 = "0.10.8"
 hex = "0.4.3"
@@ -23,4 +24,4 @@ thiserror = "1.0.50"
 itertools = "0.12.0"
 clap = { version = "4.4", features = ["derive"] }
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["ansi", "json", "env-filter"] }

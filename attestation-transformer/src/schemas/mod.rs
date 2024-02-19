@@ -112,10 +112,3 @@ impl From<Domain> for u32 {
 		}
 	}
 }
-
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum OneOrMore<T> {
-	One(T),
-	More(Vec<T>),
-}

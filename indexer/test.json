@@ -1,0 +1,38 @@
+{
+  "assertions": [
+    {
+      "id": 1,
+      "creationAt": "1970-01-01T00:39:57.848+00:00",
+      "assertion": {
+        "type": ["TrustCredential"],
+        "issuer": "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf",
+        "credentialSubject": {
+          "id": "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775",
+          "trustworthiness": [
+            { "scope": "Software security", "level": 1, "reason": [] }
+          ]
+        },
+        "proof": {
+          "signature": "c316bdaff4144f1bf5087e1c42d79ee4a9850a93252a3844880c53fc31d153aa0a45546e446ad50ad3058481c3f03293b4fa2f02f4c8604bdb40363348e3095500"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "creationAt": "1970-01-01T00:39:57.848+00:00",
+      "assertion": {
+        "type": ["TrustCredential"],
+        "issuer": "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775",
+        "credentialSubject": {
+          "id": "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf",
+          "trustworthiness": [
+            { "scope": "Software security", "level": 1, "reason": [] }
+          ]
+        },
+        "proof": {
+          "signature": "d1471dc9308656202f860a729308ed46e2b9090caa05c2b227ef8bef5104c6f43f52861b29e9b29bbfdfd9ddea7fb9ba92bd820a38696e23c6344d225b6f0c3500"
+        }
+      }
+    }
+  ]
+}

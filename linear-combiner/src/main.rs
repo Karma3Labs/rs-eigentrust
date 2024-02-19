@@ -5,6 +5,7 @@ use rocksdb::{Options, DB};
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
+use tracing::{debug, info};
 
 use error::LcError;
 use managers::{
@@ -24,7 +25,7 @@ pub mod error;
 pub mod item;
 pub mod managers;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct LinearCombinerService {
 	db_url: String,
 }
@@ -95,13 +96,13 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&x);
 			key.extend_from_slice(&y);
 
-			println!(
-				"Received Item({}, {}, {}, {}, {})",
+			debug!(
 				term.domain,
 				term.form,
-				u32::from_be_bytes(x),
-				u32::from_be_bytes(y),
-				term.weight
+				x = u32::from_be_bytes(x),
+				y = u32::from_be_bytes(y),
+				term.weight,
+				"received item"
 			);
 
 			let value = ItemManager::update_value(&db, key.clone(), term.weight, term.timestamp)
@@ -202,7 +203,7 @@ impl LinearCombiner for LinearCombinerService {
 		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))
 			.map_err(|e| e.into_status())?;
 
-		println!("Read items: {:?}", items);
+		debug!(?items, "read items");
 
 		let (tx, rx) = channel(4);
 		tokio::spawn(async move {
@@ -230,6 +231,19 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
+	{
+		use tracing_subscriber::*;
+		let env_filter = EnvFilter::builder()
+			.with_env_var("SPD_LC_LOG")
+			.from_env()?
+			.add_directive(filter::LevelFilter::WARN.into());
+		fmt::Subscriber::builder()
+			.with_env_filter(env_filter)
+			.with_writer(std::io::stderr)
+			.with_ansi(true)
+			.init();
+	}
+	info!("initializing LC");
 	let service = LinearCombinerService::new(&args.db_dir)?;
 	Server::builder()
 		.add_service(LinearCombinerServer::new(service))
