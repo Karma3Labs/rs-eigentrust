@@ -229,6 +229,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
+	use mm_spd_vc::OneOrMore;
 	use secp256k1::rand::thread_rng;
 	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
 	use serde_json::to_string;
@@ -241,7 +242,7 @@ mod test {
 	use crate::schemas::trust::{
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
 	};
-	use crate::schemas::{Domain, OneOrMore, Proof};
+	use crate::schemas::{Domain, Proof};
 	// use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;

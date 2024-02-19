@@ -94,3 +94,10 @@ pub struct Manifest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestProof {}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum OneOrMore<T> {
+	One(T),
+	More(Vec<T>),
+}

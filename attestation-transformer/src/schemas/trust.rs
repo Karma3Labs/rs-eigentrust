@@ -1,9 +1,10 @@
-use super::{Domain, IntoTerm, OneOrMore, Proof, Validation};
+use super::{Domain, IntoTerm, Proof, Validation};
 use crate::{
 	did::Did,
 	error::AttTrError,
 	term::{Term, TermForm},
 };
+use mm_spd_vc::OneOrMore;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -143,7 +144,8 @@ mod test {
 		utils::address_from_ecdsa_key,
 	};
 
-	use super::{OneOrMore, TrustSchema};
+	use super::TrustSchema;
+	use mm_spd_vc::OneOrMore;
 	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
 	use sha3::{Digest, Keccak256};
 
