@@ -20,7 +20,7 @@ use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
 use term::Term;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 pub mod did;
 pub mod error;
@@ -123,7 +123,10 @@ impl Transformer for TransformerService {
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
 			match Self::parse_event(res.clone()) {
-				Ok(parsed_terms) => terms.push(parsed_terms),
+				Ok(parsed_terms) => {
+					trace!(?parsed_terms, ?res.schema_value, "translated terms");
+					terms.push(parsed_terms);
+				},
 				Err(err) => {
 					warn!(%err, "cannot parse event received from indexer");
 					info!(?res, "offending message");
