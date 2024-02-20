@@ -433,7 +433,7 @@ impl Domain {
 			vec![(1i32, 1.0, form1_timestamp), (0, -1.0, form0_timestamp)]
 		{
 			let batch_req =
-				LtHistoryBatch { domain: domain_id, form, x0: 0, y0: 0, x1: 100, y1: 100 };
+				LtHistoryBatch { domain: domain_id, form, x0: 0, y0: 0, x1: 500, y1: 500 };
 			let mut lc_stream = lc_client.get_historic_data(batch_req).await?.into_inner();
 			while let Some(msg) = lc_stream.message().await? {
 				if msg.timestamp < *timestamp {
