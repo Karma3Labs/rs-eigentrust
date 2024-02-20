@@ -161,6 +161,15 @@ enum DomainParamParseError {
 }
 
 #[derive(Debug, ThisError)]
+enum EndpointParamParseError {
+	#[error("missing equal sign in endpoint-bound parameter")]
+	MissingEqualSign,
+
+	#[error("invalid endpoint URL: {0}")]
+	InvalidUrl(url::ParseError),
+}
+
+#[derive(Debug, ThisError)]
 enum SnapStatusError {
 	#[error("invalid snap status {0:?}")]
 	InvalidStatus(String),
@@ -185,7 +194,7 @@ fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<d
 		return Err(MainError::NotStatusCredential(vc.type_).into());
 	}
 	let vc: StatusCredential = serde_json::from_str(vc_json)?;
-	info!(parsed = ?vc, "parsed ReviewCredential");
+	// info!(parsed = ?vc, "parsed ReviewCredential");
 	Ok((
 		vc.credential_subject.id,
 		vc.issuer,
@@ -229,6 +238,7 @@ struct Domain {
 	status_schema: String,
 	s3_output_urls: Vec<Url>,
 	post_scores_endpoints: Vec<Url>,
+	api_keys: HashMap<Url, String>,
 	// Local trust updates received from LC but not sent to ET yet.
 	local_trust_updates: BTreeMap<Timestamp, TrustMatrix>,
 	// Peer index (x/y/i/j) <-> peer ID mappings.
@@ -623,13 +633,13 @@ impl Domain {
 		let post_scores_client = reqwest::Client::new();
 		for url in &self.post_scores_endpoints {
 			// info!(%url, "sending manifest");
-			match post_scores_client
-				.post(url.clone())
-				.header("X-API-Key", "KPKdGRPhdX7Mcxca6ftez1WPGBUGcDfm7exb8ir4")
-				.json(&manifest)
-				.send()
-				.await
-			{
+			let api_key = self.api_keys.get(&url);
+			let req = post_scores_client.post(url.clone());
+			let req = match api_key {
+				Some(api_key) => req.header("X-API-Key", api_key),
+				None => req,
+			};
+			match req.json(&manifest).send().await {
 				Ok(res) => match res.error_for_status() {
 					Ok(res) => info!(%url, status = %res.status(), "sent manifest"),
 					Err(err) => warn!(?err, %url, "cannot send manifest"),
@@ -938,6 +948,38 @@ impl Main {
 		Ok(m)
 	}
 
+	fn parse_endpoint_param(spec: &str) -> Result<(Url, String), EndpointParamParseError> {
+		if let Some((endpoint, arg)) = spec.split_once('=') {
+			match endpoint.parse() {
+				Ok(url) => Ok((url, arg.to_string())),
+				Err(err) => Err(EndpointParamParseError::InvalidUrl(err)),
+			}
+		} else {
+			Err(EndpointParamParseError::MissingEqualSign)
+		}
+	}
+
+	fn parse_endpoint_params(
+		src: &Vec<String>,
+	) -> Result<Vec<(Url, String)>, EndpointParamParseError> {
+		Ok(src.iter().map(|s| Self::parse_endpoint_param(&s)).try_collect()?)
+	}
+
+	fn url_starts_with(u1: &Url, u2: &Url) -> bool {
+		u1.scheme() == u2.scheme()
+			&& u1.host_str() == u2.host_str()
+			&& u2.path().ends_with('/')
+			&& u1.path().starts_with(u2.path())
+	}
+
+	fn get_endpoint_param(url: &Url, params: &Vec<(Url, String)>) -> Option<String> {
+		params
+			.iter()
+			.find(|(prefix, _)| Self::url_starts_with(url, prefix))
+			.map(|(_, param)| param)
+			.cloned()
+	}
+
 	pub fn new(args: Args) -> Result<Box<Self>, Box<dyn Error>> {
 		let mut lt_ids = Self::parse_domain_params(&args.lt_ids)?;
 		let mut pt_ids = Self::parse_domain_params(&args.pt_ids)?;
@@ -947,6 +989,7 @@ impl Main {
 		let mut scopes = Self::parse_domain_params(&args.scopes)?;
 		let mut s3_urls = Self::parse_domain_vec(&args.s3_output_urls)?;
 		let mut post_scores_endpoints = Self::parse_domain_vec(&args.post_scores_endpoints)?;
+		let post_scores_api_keys = Self::parse_endpoint_params(&args.post_scores_api_keys)?;
 		let mut domain_ids = BTreeSet::new();
 		domain_ids.extend(&args.domains);
 		domain_ids.extend(lt_ids.keys());
@@ -969,6 +1012,13 @@ impl Main {
 				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
 				None => vec![],
 			};
+			let api_keys = post_scores_endpoints
+				.iter()
+				.cloned()
+				.filter_map(|url| {
+					Self::get_endpoint_param(&url, &post_scores_api_keys).map(|key| (url, key))
+				})
+				.collect();
 			main.domains.insert(
 				domain_id,
 				Domain {
@@ -983,6 +1033,7 @@ impl Main {
 					status_schema: status_schemas.remove(&domain_id).unwrap_or_default(),
 					s3_output_urls,
 					post_scores_endpoints,
+					api_keys,
 					local_trust_updates: BTreeMap::new(),
 					peer_did_to_id: BTreeMap::new(),
 					peer_id_to_did: BTreeMap::new(),

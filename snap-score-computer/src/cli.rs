@@ -100,4 +100,8 @@ pub struct Args {
 	/// Score POST API endpoints.
 	#[arg(long = "post-scores-endpoint")]
 	pub post_scores_endpoints: Vec<String>,
+
+	/// POST API keys
+	#[arg(long = "post-scores-api-key")]
+	pub post_scores_api_keys: Vec<String>,
 }
