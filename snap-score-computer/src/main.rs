@@ -330,12 +330,7 @@ impl Domain {
 						"performing core compute"
 					);
 					self.last_compute_ts = ts_window;
-					self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
-					self.peer_did_to_id = self
-						.peer_id_to_did
-						.iter()
-						.map(|(id, did)| (did.to_lowercase(), *id))
-						.collect();
+					self.update_did_mappings(lc_client).await?;
 
 					let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
 					let pt = read_tv(pt_ent).await?;
@@ -385,6 +380,8 @@ impl Domain {
 					self.compute_snap_scores(tp_d).await?;
 					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
 				}
+				// for debugging
+				// self.update_did_mappings(lc_client).await?;
 				trace!(domain = self.domain_id, ?update, "processing update");
 				match update.body {
 					UpdateBody::LocalTrust(lt) => {
@@ -548,6 +545,15 @@ impl Domain {
 			}
 		}
 		Ok(peer_id_to_did)
+	}
+
+	async fn update_did_mappings(
+		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
+	) -> Result<(), Box<dyn Error>> {
+		self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
+		self.peer_did_to_id =
+			self.peer_id_to_did.iter().map(|(id, did)| (did.to_lowercase(), *id)).collect();
+		Ok(())
 	}
 
 	async fn publish_scores(
