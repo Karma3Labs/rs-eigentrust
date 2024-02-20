@@ -637,7 +637,7 @@ impl Domain {
 		let post_scores_client = reqwest::Client::new();
 		for url in &self.post_scores_endpoints {
 			// info!(%url, "sending manifest");
-			let api_key = self.api_keys.get(&url);
+			let api_key = self.api_keys.get(url);
 			let req = post_scores_client.post(url.clone());
 			let req = match api_key {
 				Some(api_key) => req.header("X-API-Key", api_key),
@@ -966,7 +966,7 @@ impl Main {
 	fn parse_endpoint_params(
 		src: &Vec<String>,
 	) -> Result<Vec<(Url, String)>, EndpointParamParseError> {
-		Ok(src.iter().map(|s| Self::parse_endpoint_param(&s)).try_collect()?)
+		src.iter().map(|s| Self::parse_endpoint_param(s)).try_collect()
 	}
 
 	fn url_starts_with(u1: &Url, u2: &Url) -> bool {
