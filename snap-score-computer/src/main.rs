@@ -12,6 +12,7 @@ use futures::stream::iter;
 use futures::{pin_mut, StreamExt, TryStream};
 use itertools::Itertools;
 use num::BigUint;
+use ordered_float::OrderedFloat;
 use sha3::Digest;
 use thiserror::Error as ThisError;
 use tonic::transport::Channel;
@@ -786,6 +787,16 @@ impl Domain {
 		timestamp: Timestamp, output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		let empty_distrusters = HashSet::<Truster>::new();
+		let mut score_ranks = BTreeMap::<OrderedFloat<Value>, usize>::new();
+		for (_, &score_value) in &self.gt {
+			*(score_ranks.entry(score_value.into()).or_default()) += 1;
+		}
+		let mut cumulative_rank = 1;
+		for (_, rank) in score_ranks.iter_mut().rev() {
+			let count = *rank;
+			*rank = cumulative_rank;
+			cumulative_rank += count;
+		}
 		for (peer_id, score_value) in &self.gt {
 			if let Some(peer_did) = self.peer_id_to_did.get(peer_id) {
 				let result_label = {
@@ -819,6 +830,7 @@ impl Domain {
 							self.accuracies.get(&canon_issuer_id).map(|a| {
 								a.level().expect("accuracies map should not contain zero entries")
 							}),
+							score_ranks.get(score_value.into()).map(|rank| *rank as u64),
 							&self.scope,
 						)
 						.await? + "\n")
@@ -847,6 +859,7 @@ impl Domain {
 						Some(score.confidence),
 						Some(result_label),
 						None,
+						None,
 						&self.scope,
 					)
 					.await? + "\n")
@@ -860,7 +873,7 @@ impl Domain {
 	async fn make_trust_score_vc(
 		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
 		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidence>,
-		result: Option<i32>, accuracy: Option<f64>, scope: &str,
+		result: Option<i32>, accuracy: Option<f64>, rank: Option<u64>, scope: &str,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
@@ -882,6 +895,7 @@ impl Domain {
 					confidence: score_confidence,
 					result,
 					accuracy,
+					rank,
 					scope: scope.to_string(),
 				},
 			},
