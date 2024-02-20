@@ -436,9 +436,6 @@ impl Domain {
 				LtHistoryBatch { domain: domain_id, form, x0: 0, y0: 0, x1: 500, y1: 500 };
 			let mut lc_stream = lc_client.get_historic_data(batch_req).await?.into_inner();
 			while let Some(msg) = lc_stream.message().await? {
-				if msg.timestamp < *timestamp {
-					continue;
-				}
 				*timestamp = msg.timestamp;
 				match last_timestamp {
 					None => {
