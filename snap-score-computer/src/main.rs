@@ -773,10 +773,8 @@ impl Domain {
 					} else {
 						SnapSecurityLabel::Reported
 					};
-					self.accuracies
-						.entry(issuer_did.clone())
-						.or_default()
-						.record(verdict == opinion);
+					let canon_issuer_did = Self::canonicalize_eip155(issuer_did).to_lowercase();
+					self.accuracies.entry(canon_issuer_did).or_default().record(verdict == opinion);
 				}
 			}
 		}
@@ -806,6 +804,7 @@ impl Domain {
 						0
 					}
 				};
+				let canon_issuer_id = Self::canonicalize_eip155(issuer_id).to_lowercase();
 				write_full(
 					output,
 					(self
@@ -817,7 +816,7 @@ impl Domain {
 							*score_value,
 							None,
 							Some(result_label),
-							self.accuracies.get(issuer_id).map(|a| {
+							self.accuracies.get(&canon_issuer_id).map(|a| {
 								a.level().expect("accuracies map should not contain zero entries")
 							}),
 							&self.scope,
