@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::io::IsTerminal;
 use std::str::FromStr;
+use std::time;
 use std::time::Duration;
 
 use clap::Parser as ClapParser;
@@ -14,6 +15,7 @@ use num::BigUint;
 use sha3::Digest;
 use thiserror::Error as ThisError;
 use tonic::transport::Channel;
+use tracing::level_filters::LevelFilter;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -159,6 +161,15 @@ enum DomainParamParseError {
 }
 
 #[derive(Debug, ThisError)]
+enum EndpointParamParseError {
+	#[error("missing equal sign in endpoint-bound parameter")]
+	MissingEqualSign,
+
+	#[error("invalid endpoint URL: {0}")]
+	InvalidUrl(url::ParseError),
+}
+
+#[derive(Debug, ThisError)]
 enum SnapStatusError {
 	#[error("invalid snap status {0:?}")]
 	InvalidStatus(String),
@@ -179,11 +190,11 @@ enum UpdateBody {
 fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<dyn Error>> {
 	// trace!(source = vc_json, "parsing StatusCredential");
 	let vc: VerifiableCredential = serde_json::from_str(vc_json)?;
-	if !vc.type_.matches("StatusCredential") {
+	if !vc.type_.matches("ReviewCredential") {
 		return Err(MainError::NotStatusCredential(vc.type_).into());
 	}
 	let vc: StatusCredential = serde_json::from_str(vc_json)?;
-	trace!(parsed = ?vc, "parsed StatusCredential");
+	// info!(parsed = ?vc, "parsed ReviewCredential");
 	Ok((
 		vc.credential_subject.id,
 		vc.issuer,
@@ -227,6 +238,7 @@ struct Domain {
 	status_schema: String,
 	s3_output_urls: Vec<Url>,
 	post_scores_endpoints: Vec<Url>,
+	api_keys: HashMap<Url, String>,
 	// Local trust updates received from LC but not sent to ET yet.
 	local_trust_updates: BTreeMap<Timestamp, TrustMatrix>,
 	// Peer index (x/y/i/j) <-> peer ID mappings.
@@ -249,6 +261,7 @@ struct Domain {
 	snap_statuses: SnapStatuses,
 	snap_scores: SnapScores,
 	accuracies: BTreeMap<IssuerId, Accuracy>,
+	start_timestamp: u64,
 }
 
 impl Domain {
@@ -317,9 +330,12 @@ impl Domain {
 						"performing core compute"
 					);
 					self.last_compute_ts = ts_window;
-					self.peer_did_to_id = Self::fetch_did_mapping(lc_client).await?;
-					self.peer_id_to_did =
-						self.peer_did_to_id.iter().map(|(did, id)| (*id, did.clone())).collect();
+					self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
+					self.peer_did_to_id = self
+						.peer_id_to_did
+						.iter()
+						.map(|(id, did)| (did.to_lowercase(), *id))
+						.collect();
 
 					let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
 					let pt = read_tv(pt_ent).await?;
@@ -502,10 +518,10 @@ impl Domain {
 
 	async fn fetch_did_mapping(
 		lc_client: &mut LinearCombinerClient<Channel>,
-	) -> Result<BTreeMap<String, u32>, Box<dyn Error>> {
+	) -> Result<BTreeMap<u32, String>, Box<dyn Error>> {
 		let mut start = 0;
 		let mut more = true;
-		let mut peer_did_to_id = BTreeMap::new();
+		let mut peer_id_to_did = BTreeMap::new();
 		while more {
 			let mut mapping_stream = lc_client
 				.get_did_mapping(combiner::MappingQuery { start, size: 100 })
@@ -517,7 +533,7 @@ impl Domain {
 				match binascii::hex2bin(entry.did.as_bytes(), did_bytes.as_mut_slice()) {
 					Ok(decoded) => match String::from_utf8(Vec::from(decoded)) {
 						Ok(did) => {
-							peer_did_to_id.insert(did.clone(), entry.id);
+							peer_id_to_did.insert(entry.id, Self::canonicalize_eip155(&did));
 						},
 						Err(e) => {
 							error!(err = ?e, "invalid UTF-8 DID encountered");
@@ -531,14 +547,30 @@ impl Domain {
 				more = true;
 			}
 		}
-		Ok(peer_did_to_id)
+		Ok(peer_id_to_did)
 	}
 
 	async fn publish_scores(
 		&mut self, ts_window: Timestamp, tp_d: f64,
 		distrusters: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
 	) -> Result<(), Box<dyn Error>> {
-		let manifest = Self::make_manifest(issuer_id, ts_window).await?;
+		let ts_window = if ts_window < self.start_timestamp {
+			info!(
+				self.start_timestamp,
+				"using clipped timestamp for historic data",
+			);
+			self.start_timestamp += 1;
+			self.start_timestamp - 1
+		} else {
+			ts_window
+		};
+		let mut locations = Vec::new();
+		for url in &self.s3_output_urls {
+			locations.push(url.join(&format!("{}.zip", ts_window))?.to_string());
+		}
+		info!(?locations, "uploading manifest");
+		let mut manifest = Self::make_manifest(issuer_id, ts_window).await?;
+		manifest.locations = Some(locations);
 		let manifest_path = std::path::Path::new("spd_scores.json");
 		let zip_path = std::path::Path::new("spd_scores.zip");
 		{
@@ -600,8 +632,14 @@ impl Domain {
 		}
 		let post_scores_client = reqwest::Client::new();
 		for url in &self.post_scores_endpoints {
-			info!(%url, "sending manifest");
-			match post_scores_client.post(url.join("scores/new")?).json(&manifest).send().await {
+			// info!(%url, "sending manifest");
+			let api_key = self.api_keys.get(&url);
+			let req = post_scores_client.post(url.clone());
+			let req = match api_key {
+				Some(api_key) => req.header("X-API-Key", api_key),
+				None => req,
+			};
+			match req.json(&manifest).send().await {
 				Ok(res) => match res.error_for_status() {
 					Ok(res) => info!(%url, status = %res.status(), "sent manifest"),
 					Err(err) => warn!(?err, %url, "cannot send manifest"),
@@ -670,6 +708,15 @@ impl Domain {
 		Ok((gtp, gt))
 	}
 
+	fn canonicalize_eip155(did: &str) -> String {
+		if did.to_lowercase().starts_with("did:pkh:eip155:") {
+			let components: Vec<&str> = did.split(':').collect();
+			format!("did:pkh:eip155:1:{}", components[4])
+		} else {
+			did.to_string()
+		}
+	}
+
 	async fn compute_snap_scores(&mut self, tp_d: f64) -> Result<(), Box<dyn Error>> {
 		self.snap_scores.clear();
 		self.accuracies.clear();
@@ -679,7 +726,9 @@ impl Domain {
 			for (issuer_did, opinion) in opinions {
 				let issuer_did = issuer_did.clone();
 				trace!(issuer = issuer_did, opinion, "one opinion");
-				if let Some(id) = self.peer_did_to_id.get(&issuer_did) {
+				if let Some(id) =
+					self.peer_did_to_id.get(&Self::canonicalize_eip155(&issuer_did).to_lowercase())
+				{
 					trace!(did = issuer_did, id, "issuer mapping");
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
 					trace!(issuer = issuer_did, weight, "issuer score (weight)");
@@ -688,7 +737,18 @@ impl Domain {
 						score.confidence += weight;
 					}
 				} else {
-					warn!(did = issuer_did, "unknown issuer");
+					// TODO(ek): This happens when someone hasn't received/sent TrustCredential
+					//   but still issued ReviewCredential.  Since peer_did_to_id is populated by
+					//   LC (which doesn't see ReviewCredentials), it may be missing there.
+					//   In this case, the peer's trust score is necessarily zero, so skipping
+					//   their opinion is only natural.  Nevertheless, split addr-index management
+					//   out of LC and into a separate component.
+					// warn!(
+					// 	did = issuer_did,
+					// 	canon = Self::canonicalize_eip155(&issuer_did),
+					// 	mapping = ?self.peer_did_to_id,
+					// 	"unknown issuer"
+					// );
 				}
 			}
 			if score.confidence != 0.0 {
@@ -888,6 +948,38 @@ impl Main {
 		Ok(m)
 	}
 
+	fn parse_endpoint_param(spec: &str) -> Result<(Url, String), EndpointParamParseError> {
+		if let Some((endpoint, arg)) = spec.split_once('=') {
+			match endpoint.parse() {
+				Ok(url) => Ok((url, arg.to_string())),
+				Err(err) => Err(EndpointParamParseError::InvalidUrl(err)),
+			}
+		} else {
+			Err(EndpointParamParseError::MissingEqualSign)
+		}
+	}
+
+	fn parse_endpoint_params(
+		src: &Vec<String>,
+	) -> Result<Vec<(Url, String)>, EndpointParamParseError> {
+		Ok(src.iter().map(|s| Self::parse_endpoint_param(&s)).try_collect()?)
+	}
+
+	fn url_starts_with(u1: &Url, u2: &Url) -> bool {
+		u1.scheme() == u2.scheme()
+			&& u1.host_str() == u2.host_str()
+			&& u2.path().ends_with('/')
+			&& u1.path().starts_with(u2.path())
+	}
+
+	fn get_endpoint_param(url: &Url, params: &Vec<(Url, String)>) -> Option<String> {
+		params
+			.iter()
+			.find(|(prefix, _)| Self::url_starts_with(url, prefix))
+			.map(|(_, param)| param)
+			.cloned()
+	}
+
 	pub fn new(args: Args) -> Result<Box<Self>, Box<dyn Error>> {
 		let mut lt_ids = Self::parse_domain_params(&args.lt_ids)?;
 		let mut pt_ids = Self::parse_domain_params(&args.pt_ids)?;
@@ -897,6 +989,7 @@ impl Main {
 		let mut scopes = Self::parse_domain_params(&args.scopes)?;
 		let mut s3_urls = Self::parse_domain_vec(&args.s3_output_urls)?;
 		let mut post_scores_endpoints = Self::parse_domain_vec(&args.post_scores_endpoints)?;
+		let post_scores_api_keys = Self::parse_endpoint_params(&args.post_scores_api_keys)?;
 		let mut domain_ids = BTreeSet::new();
 		domain_ids.extend(&args.domains);
 		domain_ids.extend(lt_ids.keys());
@@ -906,6 +999,10 @@ impl Main {
 		domain_ids.extend(status_schemas.keys());
 		let domains = BTreeMap::new();
 		let mut main = Box::new(Self { args, domains });
+		let start_timestamp =
+			time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH).unwrap().as_secs()
+				* 1000;
+		info!(ts = &start_timestamp, "starting");
 		for domain_id in domain_ids {
 			let s3_output_urls = match s3_urls.remove(&domain_id) {
 				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
@@ -915,6 +1012,13 @@ impl Main {
 				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
 				None => vec![],
 			};
+			let api_keys = post_scores_endpoints
+				.iter()
+				.cloned()
+				.filter_map(|url| {
+					Self::get_endpoint_param(&url, &post_scores_api_keys).map(|key| (url, key))
+				})
+				.collect();
 			main.domains.insert(
 				domain_id,
 				Domain {
@@ -929,6 +1033,7 @@ impl Main {
 					status_schema: status_schemas.remove(&domain_id).unwrap_or_default(),
 					s3_output_urls,
 					post_scores_endpoints,
+					api_keys,
 					local_trust_updates: BTreeMap::new(),
 					peer_did_to_id: BTreeMap::new(),
 					peer_id_to_did: BTreeMap::new(),
@@ -944,6 +1049,7 @@ impl Main {
 					snap_statuses: SnapStatuses::new(),
 					snap_scores: SnapScores::new(),
 					accuracies: BTreeMap::new(),
+					start_timestamp,
 				},
 			);
 		}
@@ -1091,44 +1197,7 @@ fn write_full(w: &mut dyn std::io::Write, buf: &[u8]) -> std::io::Result<()> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 	let args = Args::parse();
-	{
-		let log_format = args.log_format.clone().unwrap_or_else(|| {
-			if std::io::stderr().is_terminal() {
-				LogFormatArg::Ansi
-			} else {
-				LogFormatArg::Json
-			}
-		});
-		let env_filter = tracing_subscriber::EnvFilter::builder()
-			.with_env_var("SPD_SSC_LOG")
-			.from_env()?
-			.add_directive(tracing_subscriber::filter::LevelFilter::WARN.into())
-			.add_directive(
-				format!("snap_score_computer={}", args.log_level)
-					.parse()
-					.expect("hard-coded filter is wrong"),
-			);
-		let builder = tracing_subscriber::FmtSubscriber::builder();
-		match log_format {
-			LogFormatArg::Ansi => {
-				let subscriber = builder
-					.with_env_filter(env_filter)
-					.with_writer(std::io::stderr)
-					.with_ansi(true)
-					.finish();
-				tracing::subscriber::set_global_default(subscriber)?;
-			},
-			LogFormatArg::Json => {
-				let subscriber = builder
-					.with_env_filter(env_filter)
-					.with_writer(std::io::stdout)
-					.with_ansi(false)
-					.json()
-					.finish();
-				tracing::subscriber::set_global_default(subscriber)?;
-			},
-		}
-	}
+	setup_logging(&args.log_format, &args.log_level)?;
 	let mut m = Main::new(args).map_err(|e| MainError::Init(e))?;
 	match m.main().await {
 		Ok(()) => Ok(()),
@@ -1137,4 +1206,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			Err(e)
 		},
 	}
+}
+
+fn setup_logging(format: &Option<LogFormatArg>, level: &LevelFilter) -> Result<(), Box<dyn Error>> {
+	let log_format = format.clone().unwrap_or_else(|| {
+		if std::io::stderr().is_terminal() {
+			LogFormatArg::Ansi
+		} else {
+			LogFormatArg::Json
+		}
+	});
+	let env_filter = tracing_subscriber::EnvFilter::builder()
+		.with_env_var("SPD_SSC_LOG")
+		.from_env()?
+		.add_directive(LevelFilter::WARN.into())
+		.add_directive(
+			format!("snap_score_computer={}", level).parse().expect("hard-coded filter is wrong"),
+		);
+	let builder = tracing_subscriber::FmtSubscriber::builder();
+	match log_format {
+		LogFormatArg::Ansi => {
+			let subscriber = builder
+				.with_env_filter(env_filter)
+				.with_writer(std::io::stderr)
+				.with_ansi(true)
+				.finish();
+			tracing::subscriber::set_global_default(subscriber)?;
+		},
+		LogFormatArg::Json => {
+			let subscriber = builder
+				.with_env_filter(env_filter)
+				.with_writer(std::io::stdout)
+				.with_ansi(false)
+				.json()
+				.finish();
+			tracing::subscriber::set_global_default(subscriber)?;
+		},
+	};
+	Ok(())
 }

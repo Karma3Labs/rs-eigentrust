@@ -42,9 +42,52 @@ impl LinearCombinerService {
 		)
 		.map_err(LcError::DbError)?;
 		CheckpointManager::init(&db)?;
+		let mut offset = CheckpointManager::read_checkpoint(&db)?;
+		// TODO(ek): Turn into CLI parameters.
+		for did in vec![
+			"did:pkh:eip155:59144:0x44dc4e3309b80ef7abf41c7d0a68f0337a88f044",
+			"did:pkh:eip155:59144:0x4EBee6bA2771C19aDf9AF348985bCf06d3270d42",
+			"did:pkh:eip155:59144:0xe77162b7D2CEb3625a4993Bab557403a7B706F18",
+			"did:pkh:eip155:59144:0x47170ceaE335a9db7e96B72de630389669b33471",
+			"did:pkh:eip155:59144:0xa2e73c800aE76d506d46e002cB14d1D4A08D3199",
+			"did:pkh:eip155:59144:0x982ae6031EBE31e1A01490dd4D3270003d732830",
+			"did:pkh:eip155:59144:0x932F1d969F13D314f3d0A234a3FFcc88372CDFf1",
+			"did:pkh:eip155:59144:0x02c15D12240E1dFE098F89E6Ef9eF5BC4e477025",
+			"did:pkh:eip155:59144:0xE5aF1B8619E3FbD91aFDFB710b0cF688Ce1a4fCF",
+			"did:pkh:eip155:59144:0xfA045B2F2A25ad0B7365010eaf9AC2Dd9905895c",
+			"did:pkh:eip155:59144:0x10A772110e02BaA56BeF4A56778F3E692E4373ac",
+			"did:pkh:eip155:59144:0x4a12D8389696eff9294DEcE42A648588eda0F56d",
+			"did:pkh:eip155:59144:0x23d86aA31D4198A78Baa98e49bb2dA52CD15c6f0",
+			"did:pkh:eip155:59144:0xE5aF1B8619E3FbD91aFDFB710b0cF688Ce1a4fCF",
+			"did:pkh:eip155:59144:0x6eCfD8252C19aC2Bf4bd1cBdc026C001C93E179D",
+			"did:pkh:eip155:59144:0x224b11F0747c7688a10aCC15F785354aA6493ED6",
+			"did:pkh:eip155:59144:0xd14BF29e486DFC3836757b9B8CCFc95a5160A56D",
+			"did:pkh:eip155:59144:0x65a4CeC9f1c6060f3b987d9332Bedf26e8E86D17",
+			"did:pkh:eip155:59144:0x8Ef9328D63203230a295FA9Bf9fCd8C5384349C2",
+			"did:pkh:eip155:59144:0x3959ae2c154C443fc744861b6140dA6C8c97a3e3",
+		] {
+			get_index(&db, did, &mut offset)?;
+		}
+		CheckpointManager::write_checkpoint(&db, offset)?;
 
 		Ok(Self { db_url: db_url.to_string() })
 	}
+}
+
+fn get_index(db: &DB, did: &str, offset: &mut u32) -> Result<[u8; 4], LcError> {
+	let did = if did.to_lowercase().starts_with("did:pkh:eip155:") {
+		// Erase chain ID, de-checksum to lowercase
+		let components: Vec<&str> = did.split(':').collect();
+		format!("did:pkh:eip155:1:{}", components[4])
+	} else {
+		did.to_string()
+	};
+	let (idx, is_new) = IndexManager::get_index(db, did.to_lowercase(), *offset)?;
+	if is_new {
+		MappingManager::write_mapping(db, idx.to_vec(), did.clone())?;
+		*offset += 1;
+	}
+	Ok(idx)
 }
 
 #[tonic::async_trait]
@@ -71,24 +114,8 @@ impl LinearCombiner for LinearCombinerService {
 			let domain = term.domain.to_be_bytes();
 			let form = term.form.to_be_bytes();
 
-			let (x, is_x_new) = IndexManager::get_index(&db, term.from.clone(), offset)
-				.map_err(|e| e.into_status())?;
-
-			// If x is new, write new mapping and increment the offset
-			if is_x_new {
-				MappingManager::write_mapping(&db, x.to_vec(), term.from.clone())
-					.map_err(|e| e.into_status())?;
-				offset += 1;
-			}
-			let (y, is_y_new) = IndexManager::get_index(&db, term.to.clone(), offset)
-				.map_err(|e| e.into_status())?;
-
-			// If y is new, write new mapping and increment the offset
-			if is_y_new {
-				MappingManager::write_mapping(&db, y.to_vec(), term.to.clone())
-					.map_err(|e| e.into_status())?;
-				offset += 1;
-			}
+			let x = get_index(&db, &term.from, &mut offset).map_err(LcError::into_status)?;
+			let y = get_index(&db, &term.to, &mut offset).map_err(LcError::into_status)?;
 
 			let mut key = Vec::new();
 			key.extend_from_slice(&domain);
@@ -203,7 +230,7 @@ impl LinearCombiner for LinearCombinerService {
 		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))
 			.map_err(|e| e.into_status())?;
 
-		debug!(?items, "read items");
+		// trace!(?items, "read items");
 
 		let (tx, rx) = channel(4);
 		tokio::spawn(async move {
