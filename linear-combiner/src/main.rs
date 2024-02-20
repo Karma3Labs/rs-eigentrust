@@ -117,6 +117,11 @@ impl LinearCombiner for LinearCombinerService {
 			let x = get_index(&db, &term.from, &mut offset).map_err(LcError::into_status)?;
 			let y = get_index(&db, &term.to, &mut offset).map_err(LcError::into_status)?;
 
+			let timestamp = chrono::NaiveDateTime::from_timestamp_millis(term.timestamp as i64)
+				.unwrap()
+				.and_utc()
+				.to_rfc3339();
+
 			let mut key = Vec::new();
 			key.extend_from_slice(&domain);
 			key.extend_from_slice(&form);
@@ -124,10 +129,13 @@ impl LinearCombiner for LinearCombinerService {
 			key.extend_from_slice(&y);
 
 			debug!(
+				timestamp,
+				term.from,
+				x = u32::from_be_bytes(x),
+				term.to,
+				y = u32::from_be_bytes(y),
 				term.domain,
 				term.form,
-				x = u32::from_be_bytes(x),
-				y = u32::from_be_bytes(y),
 				term.weight,
 				"received item"
 			);
