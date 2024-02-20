@@ -81,9 +81,9 @@ impl Accuracy {
 #[derive(Debug, Eq, PartialEq)]
 pub enum SnapSecurityLabel {
 	Unverified = 0,
-	Reported = 1,
+	Endorsed = 1,
 	InReview = 2,
-	Endorsed = 3,
+	Reported = 3,
 }
 
 impl SnapSecurityLabel {
