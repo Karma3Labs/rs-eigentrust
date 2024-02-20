@@ -451,9 +451,10 @@ impl Domain {
 				*batch.entry((msg.x, msg.y)).or_default() += (msg.value as f64) * weight;
 			}
 		}
-		if let Some(ts) = last_timestamp {
-			updates.entry(ts + 600000).or_default();
-		}
+		// Force recompute for testing
+		// if let Some(ts) = last_timestamp {
+		// 	updates.entry(ts + 600000).or_default();
+		// }
 		Ok(())
 	}
 
