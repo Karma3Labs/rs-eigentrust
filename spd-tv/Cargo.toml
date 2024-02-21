@@ -19,3 +19,4 @@ num = "0.4"
 binascii = "0.1"
 thiserror = "1.0"
 itertools = "0.12"
+mm-spd-did.workspace = true
