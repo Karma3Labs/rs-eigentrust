@@ -582,10 +582,15 @@ impl Domain {
 		info!(?locations, "uploading manifest");
 		let mut manifest = Self::make_manifest(issuer_id, ts_window).await?;
 		manifest.locations = Some(locations);
-		let manifest_path = std::path::Path::new("spd_scores.json");
-		let zip_path = std::path::Path::new("spd_scores.zip");
+		let output_root = std::path::PathBuf::from("spd_scores");
+		let output_dir = output_root.join(self.domain_id.to_string());
+		std::fs::create_dir_all(&output_dir)?;
+		let base_name = std::path::PathBuf::from(ts_window.to_string());
+		let manifest_filename = base_name.with_extension("json");
+		let zip_filename = base_name.with_extension("zip");
+		let zip_path = output_dir.join(&zip_filename);
 		{
-			let zip_file = std::fs::File::create(zip_path)?;
+			let zip_file = std::fs::File::create(&zip_path)?;
 			let mut zip = zip::ZipWriter::new(zip_file);
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
@@ -596,6 +601,8 @@ impl Domain {
 			serde_jcs::to_writer(&mut zip, &manifest)?;
 			zip.finish()?;
 		}
+		force_symlink(&manifest_filename, output_dir.join("latest.json"))?;
+		force_symlink(&zip_filename, output_dir.join("latest.zip"))?;
 		// TODO(ek): Read in chunks, not everything
 		// TODO(ek): Fix CID generation
 		// let h = Code::Keccak512.digest(std::fs::read(zip_path)?.as_slice());
@@ -610,7 +617,7 @@ impl Domain {
 		// };
 		// locations.push("ipfs://".to_owned() + &cid);
 		{
-			let manifest_file = std::fs::File::create(manifest_path)?;
+			let manifest_file = std::fs::File::create(output_dir.join(&manifest_filename))?;
 			serde_jcs::to_writer(manifest_file, &manifest)?;
 		}
 		for url in &self.s3_output_urls {
@@ -631,7 +638,7 @@ impl Domain {
 			let bucket = url.host().unwrap().to_string();
 			match client
 				.put_object()
-				.body(ByteStream::from_path(zip_path).await?)
+				.body(ByteStream::from_path(&zip_path).await?)
 				.bucket(url.host().unwrap().to_string())
 				.key(&path)
 				.send()
@@ -927,6 +934,21 @@ impl Domain {
 			locations: None,
 			proof: ManifestProof {},
 		})
+	}
+}
+
+pub fn force_symlink<P: AsRef<std::path::Path>, Q: AsRef<std::path::Path>>(
+	original: P, link: Q,
+) -> std::io::Result<()> {
+	loop {
+		match std::os::unix::fs::symlink(original.as_ref(), link.as_ref()) {
+			Ok(()) => return Ok(()),
+			Err(err) => match err.kind() {
+				std::io::ErrorKind::AlreadyExists => {},
+				_ => return Err(err),
+			},
+		}
+		std::fs::remove_file(link.as_ref())?;
 	}
 }
 
