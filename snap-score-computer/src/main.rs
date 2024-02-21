@@ -785,7 +785,7 @@ impl Domain {
 	) -> Result<(), Box<dyn Error>> {
 		let empty_distrusters = HashSet::<Truster>::new();
 		let mut score_ranks = BTreeMap::<OrderedFloat<Value>, usize>::new();
-		for (_, &score_value) in &self.gt {
+		for &score_value in self.gt.values() {
 			*(score_ranks.entry(score_value.into()).or_default()) += 1;
 		}
 		let mut cumulative_rank = 1;
@@ -981,7 +981,7 @@ impl Main {
 	}
 
 	fn parse_endpoint_params(
-		src: &Vec<String>,
+		src: &[String],
 	) -> Result<Vec<(Url, String)>, EndpointParamParseError> {
 		src.iter().map(|s| Self::parse_endpoint_param(s)).try_collect()
 	}
@@ -993,7 +993,7 @@ impl Main {
 			&& u1.path().starts_with(u2.path())
 	}
 
-	fn get_endpoint_param(url: &Url, params: &Vec<(Url, String)>) -> Option<String> {
+	fn get_endpoint_param(url: &Url, params: &[(Url, String)]) -> Option<String> {
 		params
 			.iter()
 			.find(|(prefix, _)| Self::url_starts_with(url, prefix))
