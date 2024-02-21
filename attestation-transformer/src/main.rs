@@ -100,8 +100,7 @@ impl Transformer for TransformerService {
 		)
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let (ch_offset, ct_offset) =
-			CheckpointManager::read_checkpoint(&db).map_err(|e| e.into_status())?;
+		let (ch_offset, ct_offset) = CheckpointManager::read_checkpoint(&db)?;
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
@@ -136,17 +135,16 @@ impl Transformer for TransformerService {
 		info!(count = terms.len(), "received terms");
 
 		let num_new_term_groups =
-			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError.into_status())?;
+			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError)?;
 		let new_checkpoint = ch_offset + num_new_term_groups;
 
 		let (new_count, indexed_terms) = TermManager::get_indexed_terms(ct_offset, terms)
-			.map_err(|_| AttTrError::SerialisationError.into_status())?;
+			.map_err(|_| AttTrError::SerialisationError)?;
 
 		info!(new_count, "received terms");
 
-		TermManager::write_terms(&db, indexed_terms).map_err(|e| e.into_status())?;
-		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)
-			.map_err(|e| e.into_status())?;
+		TermManager::write_terms(&db, indexed_terms)?;
+		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)?;
 
 		let event_result = EventResult { num_terms: new_count - ct_offset, total_count: new_count };
 		Ok(Response::new(event_result))
@@ -170,7 +168,7 @@ impl Transformer for TransformerService {
 		)
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let terms = TermManager::read_terms(&db, inner).map_err(|e| e.into_status())?;
+		let terms = TermManager::read_terms(&db, inner)?;
 		let num_terms = terms.len();
 
 		let mut client = LinearCombinerClient::connect(self.lt_endpoint.clone())
@@ -178,8 +176,7 @@ impl Transformer for TransformerService {
 			.map_err(|e| Status::from_error(Box::new(e)))?;
 		client.sync_transformer(Request::new(iter(terms))).await?;
 
-		let term_size =
-			u32::try_from(num_terms).map_err(|_| AttTrError::SerialisationError.into_status())?;
+		let term_size = u32::try_from(num_terms).map_err(|_| AttTrError::SerialisationError)?;
 		let res = TermResult { size: term_size };
 
 		Ok(Response::new(res))

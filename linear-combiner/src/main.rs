@@ -102,7 +102,7 @@ impl LinearCombiner for LinearCombinerService {
 		)
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let mut offset = CheckpointManager::read_checkpoint(&db).map_err(|e| e.into_status())?;
+		let mut offset = CheckpointManager::read_checkpoint(&db)?;
 
 		let mut terms = Vec::new();
 		let mut stream = request.into_inner();
@@ -114,8 +114,8 @@ impl LinearCombiner for LinearCombinerService {
 			let domain = term.domain.to_be_bytes();
 			let form = term.form.to_be_bytes();
 
-			let x = get_index(&db, &term.from, &mut offset).map_err(LcError::into_status)?;
-			let y = get_index(&db, &term.to, &mut offset).map_err(LcError::into_status)?;
+			let x = get_index(&db, &term.from, &mut offset)?;
+			let y = get_index(&db, &term.to, &mut offset)?;
 
 			let timestamp = chrono::NaiveDateTime::from_timestamp_millis(term.timestamp as i64)
 				.unwrap()
@@ -140,13 +140,11 @@ impl LinearCombiner for LinearCombinerService {
 				"received item"
 			);
 
-			let value = ItemManager::update_value(&db, key.clone(), term.weight, term.timestamp)
-				.map_err(|e| e.into_status())?;
-			UpdateManager::set_value(&db, key.clone(), value, term.timestamp)
-				.map_err(|e| e.into_status())?;
+			let value = ItemManager::update_value(&db, key.clone(), term.weight, term.timestamp)?;
+			UpdateManager::set_value(&db, key.clone(), value, term.timestamp)?;
 		}
 
-		CheckpointManager::write_checkpoint(&db, offset).map_err(|e| e.into_status())?;
+		CheckpointManager::write_checkpoint(&db, offset)?;
 
 		Ok(Response::new(Void {}))
 	}
@@ -159,8 +157,7 @@ impl LinearCombiner for LinearCombinerService {
 			DB::open_cf_for_read_only(&Options::default(), &self.db_url, vec!["mapping"], false)
 				.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let mappings = MappingManager::read_mappings(&db, mapping_query.start, mapping_query.size)
-			.map_err(|e| e.into_status())?;
+		let mappings = MappingManager::read_mappings(&db, mapping_query.start, mapping_query.size)?;
 
 		let (tx, rx) = channel(4);
 		tokio::spawn(async move {
@@ -189,8 +186,7 @@ impl LinearCombiner for LinearCombinerService {
 		let mut prefix = Vec::new();
 		prefix.extend_from_slice(&batch.domain.to_be_bytes());
 		prefix.extend_from_slice(&batch.form.to_be_bytes());
-		let items = UpdateManager::read_batch(&db, prefix.clone(), batch.size)
-			.map_err(|e| e.into_status())?;
+		let items = UpdateManager::read_batch(&db, prefix.clone(), batch.size)?;
 
 		let items_to_send = items.clone();
 		let (tx, rx) = channel(4);
@@ -202,7 +198,7 @@ impl LinearCombiner for LinearCombinerService {
 		});
 
 		// TODO: Uncomment when fixed
-		// UpdateManager::delete_batch(&db, prefix, items).map_err(|e| e.into_status())?;
+		// UpdateManager::delete_batch(&db, prefix, items)?;
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -235,8 +231,7 @@ impl LinearCombiner for LinearCombinerService {
 		prefix.extend_from_slice(&domain_bytes);
 		prefix.extend_from_slice(&form_bytes);
 
-		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))
-			.map_err(|e| e.into_status())?;
+		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))?;
 
 		// trace!(?items, "read items");
 
