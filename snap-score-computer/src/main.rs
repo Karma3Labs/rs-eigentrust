@@ -21,6 +21,7 @@ use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 use compute::ComputeClient;
+use mm_spd_did::{canonicalize_peer_did, CanonicalizePeerDidError};
 use mm_spd_vc::{
 	Manifest, ManifestProof, OneOrMore, StatusCredential, TrustScore, TrustScoreCredential,
 	TrustScoreCredentialProof, TrustScoreCredentialSubject, VerifiableCredential,
@@ -172,7 +173,13 @@ enum EndpointParamParseError {
 
 #[derive(Debug, ThisError)]
 enum SnapStatusError {
-	#[error("invalid snap status {0:?}")]
+	#[error("invalid JSON")]
+	InvalidJson(serde_json::Error),
+	#[error("VC is not a ReviewCredential but {0:?}")]
+	NotReviewCredential(OneOrMore<String>),
+	#[error("invalid issuer DID: {0}")]
+	InvalidIssuer(CanonicalizePeerDidError),
+	#[error("invalid snap currentStatus {0:?}")]
 	InvalidStatus(String),
 }
 
@@ -188,27 +195,27 @@ enum UpdateBody {
 	SnapStatuses(SnapStatuses),
 }
 
-fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), Box<dyn Error>> {
-	// trace!(source = vc_json, "parsing StatusCredential");
-	let vc: VerifiableCredential = serde_json::from_str(vc_json)?;
-	if !vc.type_.matches("ReviewCredential") {
-		return Err(MainError::NotStatusCredential(vc.type_).into());
+fn snap_status_value(status: &str) -> Result<Value, SnapStatusError> {
+	match status {
+		"Endorsed" => Ok(1.0),
+		"Disputed" => Ok(0.0),
+		_ => Err(SnapStatusError::InvalidStatus(status.to_string())),
 	}
-	let vc: StatusCredential = serde_json::from_str(vc_json)?;
+}
+
+fn snap_status_from_vc(vc_json: &str) -> Result<(SnapId, IssuerId, Value), SnapStatusError> {
+	// trace!(source = vc_json, "parsing ReviewCredential");
+	let vc: VerifiableCredential =
+		serde_json::from_str(vc_json).map_err(SnapStatusError::InvalidJson)?;
+	if !vc.type_.matches("ReviewCredential") {
+		return Err(SnapStatusError::NotReviewCredential(vc.type_));
+	}
+	let vc: StatusCredential =
+		serde_json::from_str(vc_json).map_err(SnapStatusError::InvalidJson)?;
 	// info!(parsed = ?vc, "parsed ReviewCredential");
-	Ok((
-		vc.credential_subject.id,
-		vc.issuer,
-		match vc.credential_subject.current_status.as_str() {
-			"Endorsed" => 1.0,
-			"Disputed" => 0.0,
-			_ => {
-				return Err(
-					SnapStatusError::InvalidStatus(vc.credential_subject.current_status).into(),
-				);
-			},
-		},
-	))
+	let issuer = canonicalize_peer_did(&vc.issuer).map_err(SnapStatusError::InvalidIssuer)?;
+	let value = snap_status_value(vc.credential_subject.current_status.as_str())?;
+	Ok((vc.credential_subject.id, issuer, value))
 }
 
 #[derive(Debug, ThisError)]
@@ -225,8 +232,6 @@ enum MainError {
 	LoadSnapStatuses(Box<dyn Error>),
 	#[error("cannot convert binary to hex: {0:?}")]
 	ConvertToHex(binascii::ConvertError),
-	#[error("not a StatusCredential but {0:?}")]
-	NotStatusCredential(OneOrMore<String>),
 }
 
 struct Domain {
@@ -499,7 +504,9 @@ impl Domain {
 							.insert(issuer_id, value);
 					},
 					Err(_err) => {
-						if !format!("{:?}", _err).starts_with("NotStatusCredential(") {
+						if let SnapStatusError::NotReviewCredential(_) = _err {
+							// ignore for now, indexer cannot do schema filtering yet
+						} else {
 							warn!(src = &entry.schema_value, err = ?_err, "cannot process entry");
 						}
 					},
@@ -528,16 +535,15 @@ impl Domain {
 				let mut did_bytes = vec![0u8; (entry.did.len() + 1) / 2];
 				match binascii::hex2bin(entry.did.as_bytes(), did_bytes.as_mut_slice()) {
 					Ok(decoded) => match String::from_utf8(Vec::from(decoded)) {
-						Ok(did) => {
-							peer_id_to_did.insert(entry.id, Self::canonicalize_eip155(&did));
+						Ok(did) => match canonicalize_peer_did(&did) {
+							Ok(did) => {
+								peer_id_to_did.insert(entry.id, did);
+							},
+							Err(err) => error!(?err, did, "cannot canonicalize peer DID"),
 						},
-						Err(e) => {
-							error!(err = ?e, "invalid UTF-8 DID encountered");
-						},
+						Err(e) => error!(err = ?e, "invalid UTF-8 DID encountered"),
 					},
-					Err(e) => {
-						error!(err = ?e, "invalid hex DID encountered");
-					},
+					Err(e) => error!(err = ?e, "invalid hex DID encountered"),
 				}
 				start = entry.id + 1;
 				more = true;
@@ -551,7 +557,7 @@ impl Domain {
 	) -> Result<(), Box<dyn Error>> {
 		self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
 		self.peer_did_to_id =
-			self.peer_id_to_did.iter().map(|(id, did)| (did.to_lowercase(), *id)).collect();
+			self.peer_id_to_did.iter().map(|(id, did)| (did.clone(), *id)).collect();
 		Ok(())
 	}
 
@@ -713,15 +719,6 @@ impl Domain {
 		Ok((gtp, gt))
 	}
 
-	fn canonicalize_eip155(did: &str) -> String {
-		if did.to_lowercase().starts_with("did:pkh:eip155:") {
-			let components: Vec<&str> = did.split(':').collect();
-			format!("did:pkh:eip155:1:{}", components[4])
-		} else {
-			did.to_string()
-		}
-	}
-
 	async fn compute_snap_scores(&mut self, tp_d: f64) -> Result<(), Box<dyn Error>> {
 		self.snap_scores.clear();
 		self.accuracies.clear();
@@ -731,9 +728,7 @@ impl Domain {
 			for (issuer_did, opinion) in opinions {
 				let issuer_did = issuer_did.clone();
 				trace!(issuer = issuer_did, opinion, "one opinion");
-				if let Some(id) =
-					self.peer_did_to_id.get(&Self::canonicalize_eip155(&issuer_did).to_lowercase())
-				{
+				if let Some(id) = self.peer_did_to_id.get(&issuer_did) {
 					trace!(did = issuer_did, id, "issuer mapping");
 					let weight = self.gt.get(id).map_or(0.0, |t| *t);
 					trace!(issuer = issuer_did, weight, "issuer score (weight)");
@@ -774,8 +769,10 @@ impl Domain {
 					} else {
 						SnapSecurityLabel::Reported
 					};
-					let canon_issuer_did = Self::canonicalize_eip155(issuer_did).to_lowercase();
-					self.accuracies.entry(canon_issuer_did).or_default().record(verdict == opinion);
+					self.accuracies
+						.entry(issuer_did.clone())
+						.or_default()
+						.record(verdict == opinion);
 				}
 			}
 		}
@@ -798,45 +795,52 @@ impl Domain {
 			cumulative_rank += count;
 		}
 		for (peer_id, score_value) in &self.gt {
-			if let Some(peer_did) = self.peer_id_to_did.get(peer_id) {
-				let result_label = {
-					if *score_value >= tp_d {
-						1
-					} else if distrusts
-						.get(peer_id)
-						.unwrap_or(&empty_distrusters)
-						.iter()
-						.map(|distruster| self.gt.get(distruster).cloned().unwrap_or(0.0))
-						.fold(0.0, |acc, v| acc + v)
-						> tp_d
-					{
-						-1
-					} else {
-						0
-					}
-				};
-				let canon_issuer_id = Self::canonicalize_eip155(issuer_id).to_lowercase();
-				write_full(
-					output,
-					(self
-						.make_trust_score_vc(
-							issuer_id,
-							timestamp,
-							peer_did,
-							"EigenTrust",
-							*score_value,
-							None,
-							Some(result_label),
-							self.accuracies.get(&canon_issuer_id).map(|a| {
-								a.level().expect("accuracies map should not contain zero entries")
-							}),
-							score_ranks.get(score_value.into()).map(|rank| *rank as u64),
-							&self.scope,
-						)
-						.await? + "\n")
-						.as_bytes(),
-				)?;
-			}
+			let peer_did = match self.peer_id_to_did.get(peer_id) {
+				Some(did) => did,
+				None => {
+					error!(
+						peer_id,
+						score_value, "global trust subject peer ID not known"
+					);
+					continue;
+				},
+			};
+			let result_label = {
+				if *score_value >= tp_d {
+					1
+				} else if distrusts
+					.get(peer_id)
+					.unwrap_or(&empty_distrusters)
+					.iter()
+					.map(|distruster| self.gt.get(distruster).cloned().unwrap_or(0.0))
+					.fold(0.0, |acc, v| acc + v)
+					> tp_d
+				{
+					-1
+				} else {
+					0
+				}
+			};
+			write_full(
+				output,
+				(self
+					.make_trust_score_vc(
+						issuer_id,
+						timestamp,
+						peer_did,
+						"EigenTrust",
+						*score_value,
+						None,
+						Some(result_label),
+						self.accuracies.get(issuer_id).map(|a| {
+							a.level().expect("accuracies map should not contain zero entries")
+						}),
+						score_ranks.get(score_value.into()).map(|rank| *rank as u64),
+						&self.scope,
+					)
+					.await? + "\n")
+					.as_bytes(),
+			)?;
 		}
 		Ok(())
 	}

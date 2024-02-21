@@ -12,6 +12,7 @@ use managers::{
 	checkpoint::CheckpointManager, index::IndexManager, item::ItemManager, mapping::MappingManager,
 	update::UpdateManager,
 };
+use mm_spd_did::canonicalize_peer_did;
 use proto_buf::{
 	combiner::{
 		linear_combiner_server::{LinearCombiner, LinearCombinerServer},
@@ -76,14 +77,8 @@ impl LinearCombinerService {
 }
 
 fn get_index(db: &DB, did: &str, offset: &mut u32) -> Result<[u8; 4], LcError> {
-	let did = if did.to_lowercase().starts_with("did:pkh:eip155:") {
-		// Erase chain ID, de-checksum to lowercase
-		let components: Vec<&str> = did.split(':').collect();
-		format!("did:pkh:eip155:1:{}", components[4])
-	} else {
-		did.to_string()
-	};
-	let (idx, is_new) = IndexManager::get_index(db, did.to_lowercase(), *offset)?;
+	let did = canonicalize_peer_did(did).map_err(LcError::InvalidPeerDid)?;
+	let (idx, is_new) = IndexManager::get_index(db, did.clone(), *offset)?;
 	if is_new {
 		MappingManager::write_mapping(db, idx.to_vec(), did.clone())?;
 		*offset += 1;

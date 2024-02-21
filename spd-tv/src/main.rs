@@ -6,6 +6,7 @@ use num::{BigUint, Zero};
 use tonic::transport::{Channel, Endpoint};
 use tracing_subscriber::filter::LevelFilter;
 
+use mm_spd_did::canonicalize_peer_did;
 use proto_buf::combiner;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use thiserror::Error as ThisError;
@@ -221,6 +222,7 @@ impl UpdateCmd {
 			.into_iter()
 			.map(|(id, did)| (did, id))
 			.collect();
+		println!("mapping={m:?}");
 		let mut updates = BTreeMap::new();
 		for (line_no, line) in std::io::stdin().lines().enumerate() {
 			let line = line?;
@@ -232,7 +234,8 @@ impl UpdateCmd {
 					continue;
 				},
 			};
-			let id = match m.get(did) {
+			let did = canonicalize_peer_did(did)?;
+			let id = match m.get(&did) {
 				Some(v) => v,
 				None => {
 					error!(line = line_no, did = did, "DID unknown to LC");
