@@ -15,7 +15,8 @@ use managers::{
 use proto_buf::{
 	combiner::{
 		linear_combiner_server::{LinearCombiner, LinearCombinerServer},
-		LtBatch, LtHistoryBatch, LtObject, Mapping, MappingQuery,
+		GetIndexForDidRequest, GetIndexForDidResponse, LtBatch, LtHistoryBatch, LtObject, Mapping,
+		MappingQuery,
 	},
 	common::Void,
 	transformer::TermObject,
@@ -244,6 +245,20 @@ impl LinearCombiner for LinearCombinerService {
 		});
 
 		Ok(Response::new(ReceiverStream::new(rx)))
+	}
+	async fn get_index_for_did(
+		&self, request: Request<GetIndexForDidRequest>,
+	) -> Result<Response<GetIndexForDidResponse>, Status> {
+		let db = DB::open_cf(
+			&Options::default(),
+			&self.db_url,
+			vec!["checkpoint", "index"],
+		)
+		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
+		let mut offset = CheckpointManager::read_checkpoint(&db)?;
+		let index = u32::from_be_bytes(get_index(&db, &request.into_inner().did, &mut offset)?);
+		CheckpointManager::write_checkpoint(&db, offset)?;
+		Ok(Response::new(GetIndexForDidResponse { index }))
 	}
 }
 

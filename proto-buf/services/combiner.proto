@@ -9,6 +9,7 @@ service LinearCombiner {
     rpc GetDidMapping (MappingQuery) returns (stream Mapping);
     rpc GetNewData (LtBatch) returns (stream LtObject);
     rpc GetHistoricData (LtHistoryBatch) returns (stream LtObject);
+    rpc GetIndexForDid(GetIndexForDidRequest) returns (GetIndexForDidResponse);
 }
 
 message MappingQuery {
@@ -41,4 +42,12 @@ message LtObject {
     uint32 y = 2;
     float value = 3;
     uint64 timestamp = 4;
+}
+
+message GetIndexForDidRequest {
+    string did = 1;
+}
+
+message GetIndexForDidResponse {
+    uint32 index = 1;
 }
