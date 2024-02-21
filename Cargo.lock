@@ -189,6 +189,7 @@ dependencies = [
  "futures",
  "hex",
  "itertools 0.12.0",
+ "mm-spd-did",
  "mm-spd-vc",
  "prost",
  "proto-buf",

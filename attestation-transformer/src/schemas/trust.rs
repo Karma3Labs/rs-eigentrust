@@ -4,8 +4,10 @@ use crate::{
 	error::AttTrError,
 	term::{Term, TermForm},
 };
+use mm_spd_did::canonicalize_peer_did;
 use mm_spd_vc::OneOrMore;
 use serde_derive::{Deserialize, Serialize};
+// use tracing::info;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct DomainTrust {
@@ -81,14 +83,31 @@ impl IntoTerm for TrustSchema {
 		// if from_did != self.issuer {
 		// 	return Err(AttTrError::VerificationError);
 		// }
+		let issuer = canonicalize_peer_did(&self.issuer).map_err(AttTrError::InvalidPeerDid)?;
+		// if issuer != self.issuer {
+		// 	info!(
+		// 		original = self.issuer,
+		// 		canonical = issuer,
+		// 		"issuer DID canonicalized"
+		// 	);
+		// }
+		let subject = canonicalize_peer_did(&self.credential_subject.id)
+			.map_err(AttTrError::InvalidPeerDid)?;
+		// if subject != self.credential_subject.id {
+		// 	info!(
+		// 		original = self.credential_subject.id,
+		// 		canonical = subject,
+		// 		"subject DID canonicalized"
+		// 	);
+		// }
 
 		let mut terms = Vec::new();
 		for trust_arc in &self.credential_subject.trustworthiness {
 			let form = if trust_arc.level >= 0. { TermForm::Trust } else { TermForm::Distrust };
 			let term_group = match trust_arc.scope {
 				Domain::SoftwareDevelopment => vec![Term::new(
-					self.issuer.clone(),
-					self.credential_subject.id.clone(),
+					issuer.clone(),
+					subject.clone(),
 					trust_arc.level.abs() * 10.,
 					Domain::SoftwareDevelopment.into(),
 					form,
@@ -96,8 +115,8 @@ impl IntoTerm for TrustSchema {
 				)],
 				Domain::SoftwareSecurity => {
 					vec![Term::new(
-						self.issuer.clone(),
-						self.credential_subject.id.clone(),
+						issuer.clone(),
+						subject.clone(),
 						trust_arc.level.abs() * 10.,
 						Domain::SoftwareSecurity.into(),
 						form,
@@ -107,16 +126,16 @@ impl IntoTerm for TrustSchema {
 				Domain::Honesty => {
 					vec![
 						Term::new(
-							self.issuer.clone(),
-							self.credential_subject.id.clone(),
+							issuer.clone(),
+							subject.clone(),
 							trust_arc.level.abs() * 1.,
 							Domain::SoftwareDevelopment.into(),
 							form.clone(),
 							timestamp,
 						),
 						Term::new(
-							self.issuer.clone(),
-							self.credential_subject.id.clone(),
+							issuer.clone(),
+							subject.clone(),
 							trust_arc.level.abs() * 1.,
 							Domain::SoftwareSecurity.into(),
 							form,
