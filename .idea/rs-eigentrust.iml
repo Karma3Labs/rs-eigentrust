@@ -15,6 +15,7 @@
       <sourceFolder url="file://$MODULE_DIR$/trustmatrix/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/compute/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/mm-spd-vc/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/mm-spd-did/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
