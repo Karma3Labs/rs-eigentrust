@@ -67,19 +67,38 @@ pub trait IntoTerm: Validation {
 	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError>;
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum SchemaTypeError {
+	#[error("invalid schema type number {0}")]
+	InvalidNumber(u32),
+}
+
 pub enum SchemaType {
 	SecurityCredential,
 	StatusCredential,
 	TrustCredential,
 }
 
-impl From<u32> for SchemaType {
-	fn from(value: u32) -> Self {
+// impl From<u32> for SchemaType {
+// 	fn from(value: u32) -> Self {
+// 		match value {
+// 			0 => Self::SecurityCredential,
+// 			1 => Self::StatusCredential,
+// 			2 => Self::TrustCredential,
+// 			_ => panic!("Invalid Schema type"),
+// 		}
+// 	}
+// }
+
+impl TryFrom<u32> for SchemaType {
+	type Error = SchemaTypeError;
+
+	fn try_from(value: u32) -> Result<Self, Self::Error> {
 		match value {
-			0 => Self::SecurityCredential,
-			1 => Self::StatusCredential,
-			2 => Self::TrustCredential,
-			_ => panic!("Invalid Schema type"),
+			0 => Ok(Self::SecurityCredential),
+			1 => Ok(Self::StatusCredential),
+			2 => Ok(Self::TrustCredential),
+			_ => Err(SchemaTypeError::InvalidNumber(value)),
 		}
 	}
 }
