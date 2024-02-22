@@ -939,8 +939,7 @@ impl Domain {
 	}
 
 	fn is_security_domain(&self) -> bool {
-		// TODO(ek): Make configurable
-		self.domain_id == 2
+		!self.status_schema.is_empty()
 	}
 }
 
