@@ -595,8 +595,10 @@ impl Domain {
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
 			self.write_peer_vcs(tp_d, distrusters, issuer_id, ts_window, &mut zip).await?;
-			zip.start_file("snap_scores.jsonl", options)?;
-			self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
+			if self.is_security_domain() {
+				zip.start_file("snap_scores.jsonl", options)?;
+				self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
+			}
 			zip.start_file("MANIFEST.json", options)?;
 			serde_jcs::to_writer(&mut zip, &manifest)?;
 			zip.finish()?;
@@ -905,7 +907,7 @@ impl Domain {
 					value: score_value,
 					confidence: score_confidence,
 					result,
-					accuracy,
+					accuracy: if self.is_security_domain() { accuracy } else { None },
 					rank,
 					scope: scope.to_string(),
 				},
@@ -934,6 +936,11 @@ impl Domain {
 			locations: None,
 			proof: ManifestProof {},
 		})
+	}
+
+	fn is_security_domain(&self) -> bool {
+		// TODO(ek): Make configurable
+		self.domain_id == 2
 	}
 }
 
