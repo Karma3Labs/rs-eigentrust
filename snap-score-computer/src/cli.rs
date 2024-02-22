@@ -61,7 +61,7 @@ pub struct Args {
 	/// Trust score scope for domain.
 	///
 	/// May be repeated.
-	#[arg(long = "scope", value_name = "DOMAIN=SCOPE", default_values = ["2=SoftwareSecurity", "3=SoftwareDevelopment"])]
+	#[arg(long = "scope", value_name = "DOMAIN=SCOPE", default_values = ["2=SoftwareSecurity", "1=SoftwareDevelopment"])]
 	pub scopes: Vec<String>,
 
 	/// Status schema for domain.
