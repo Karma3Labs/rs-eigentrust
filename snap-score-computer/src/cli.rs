@@ -27,7 +27,7 @@ pub struct Args {
 	/// Domain number to process.
 	///
 	/// May be repeated.
-	#[arg(long = "domain", value_name = "DOMAIN", default_values = ["2"])]
+	#[arg(long = "domain", value_name = "DOMAIN", default_values = ["1", "2"])]
 	pub domains: Vec<DomainId>,
 
 	/// Local trust matrix ID for domain.
