@@ -41,27 +41,27 @@ pub struct Args {
 	///
 	/// May be repeated.
 	/// Every domain must have one.
-	#[arg(long = "pt-id", value_name = "DOMAIN=ID")]
+	#[arg(long = "pt-id", value_name = "DOMAIN=ID", default_values = ["1=pt", "2=pt"])]
 	pub pt_ids: Vec<String>,
 
 	/// Global trust vector ID for domain.
 	///
 	/// May be repeated.
 	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "gt-id", value_name = "DOMAIN=ID")]
+	#[arg(long = "gt-id", value_name = "DOMAIN=ID", default_values = ["1=gt1", "2=gt2"])]
 	pub gt_ids: Vec<String>,
 
 	/// Positive-only global trust vector ID for domain.
 	///
 	/// May be repeated.
 	/// If not specified (for a domain), a new one is created and its ID logged.
-	#[arg(long = "gtp-id", value_name = "DOMAIN=ID")]
+	#[arg(long = "gtp-id", value_name = "DOMAIN=ID", default_values = ["1=gtp1", "2=gtp2"])]
 	pub gtp_ids: Vec<String>,
 
 	/// Trust score scope for domain.
 	///
 	/// May be repeated.
-	#[arg(long = "scope", value_name = "DOMAIN=SCOPE", default_values = ["2=SoftwareSecurity", "1=SoftwareDevelopment"])]
+	#[arg(long = "scope", value_name = "DOMAIN=SCOPE", default_values = ["1=SoftwareDevelopment", "2=SoftwareSecurity"])]
 	pub scopes: Vec<String>,
 
 	/// Status schema for domain.
