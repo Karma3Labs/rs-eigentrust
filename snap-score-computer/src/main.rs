@@ -280,12 +280,9 @@ impl Domain {
 		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
 	) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
-		Self::fetch_local_trust(
-			self.domain_id, lc_client, &mut self.lt_fetch_ts_form1, &mut self.lt_fetch_ts_form0,
-			&mut local_trust_updates,
-		)
-		.await
-		.map_err(|e| MainError::LoadLocalTrust(e))?;
+		self.fetch_local_trust(lc_client, &mut local_trust_updates)
+			.await
+			.map_err(|e| MainError::LoadLocalTrust(e))?;
 		let mut snap_status_updates = self.snap_status_updates.clone();
 		if !self.status_schema.is_empty() {
 			Self::fetch_snap_statuses(
@@ -423,15 +420,14 @@ impl Domain {
 	}
 
 	async fn fetch_local_trust(
-		domain_id: DomainId, lc_client: &mut LinearCombinerClient<Channel>,
-		form1_timestamp: &mut Timestamp, form0_timestamp: &mut Timestamp,
+		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
 		updates: &mut BTreeMap<Timestamp, TrustMatrix>,
 	) -> Result<(), Box<dyn Error>> {
 		for (form, weight, timestamp) in
-			vec![(1i32, 1.0, form1_timestamp), (0, -1.0, form0_timestamp)]
+			vec![(1i32, 1.0, &mut self.lt_fetch_ts_form1), (0, -1.0, &mut self.lt_fetch_ts_form0)]
 		{
 			let batch_req =
-				LtHistoryBatch { domain: domain_id, form, x0: 0, y0: 0, x1: 500, y1: 500 };
+				LtHistoryBatch { domain: self.domain_id, form, x0: 0, y0: 0, x1: 500, y1: 500 };
 			let mut lc_stream = lc_client.get_historic_data(batch_req).await?.into_inner();
 			while let Some(msg) = lc_stream.message().await? {
 				*timestamp = msg.timestamp;
