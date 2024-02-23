@@ -345,18 +345,28 @@ impl Domain {
 			let update = next_update.unwrap();
 			let ts = update.timestamp;
 			self.gt.clear();
-			if ts >= self.last_update_ts {
-				self.last_update_ts = ts;
-				let ts_window = ts / self.interval * self.interval;
-				if self.last_compute_ts < ts_window {
-					info!(
-						window_from = self.last_compute_ts,
-						window_to = ts_window,
-						triggering_timestamp = ts,
-						"performing core compute"
-					);
-					self.recompute(tv_client, tm_client, lc_client, et_client, ts_window).await?;
-				}
+			if ts < self.last_update_ts {
+				warn!(
+					?update,
+					self.last_update_ts, "update stream went backward in time!"
+				);
+			}
+			if ts < self.last_compute_ts {
+				info!(
+					?update,
+					self.last_compute_ts, "update is older than last compute snapshot"
+				);
+			}
+			self.last_update_ts = ts;
+			let ts_window = ts / self.interval * self.interval;
+			if self.last_compute_ts < ts_window {
+				info!(
+					window_from = self.last_compute_ts,
+					window_to = ts_window,
+					triggering_timestamp = ts,
+					"performing core compute"
+				);
+				self.recompute(tv_client, tm_client, lc_client, et_client, ts_window).await?;
 			}
 			// for debugging
 			// self.update_did_mappings(lc_client).await?;
