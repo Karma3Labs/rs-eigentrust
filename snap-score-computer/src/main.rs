@@ -440,7 +440,6 @@ impl Domain {
 		form1_timestamp: &mut Timestamp, form0_timestamp: &mut Timestamp,
 		updates: &mut BTreeMap<Timestamp, TrustMatrix>,
 	) -> Result<(), Box<dyn Error>> {
-		let mut last_timestamp = None; // TODO(ek): Hack due to no heartbeat
 		for (form, weight, timestamp) in
 			vec![(1i32, 1.0, form1_timestamp), (0, -1.0, form0_timestamp)]
 		{
@@ -449,24 +448,10 @@ impl Domain {
 			let mut lc_stream = lc_client.get_historic_data(batch_req).await?.into_inner();
 			while let Some(msg) = lc_stream.message().await? {
 				*timestamp = msg.timestamp;
-				match last_timestamp {
-					None => {
-						last_timestamp = Some(msg.timestamp);
-					},
-					Some(ts) => {
-						if ts < msg.timestamp {
-							last_timestamp = Some(msg.timestamp)
-						}
-					},
-				}
 				let batch = updates.entry(msg.timestamp).or_default();
 				*batch.entry((msg.x, msg.y)).or_default() += (msg.value as f64) * weight;
 			}
 		}
-		// Force recompute for testing
-		// if let Some(ts) = last_timestamp {
-		// 	updates.entry(ts + 600000).or_default();
-		// }
 		Ok(())
 	}
 
@@ -474,7 +459,6 @@ impl Domain {
 		idx_client: &mut IndexerClient<Channel>, fetch_offset: &mut u32, schema_id: &str,
 		updates: &mut BTreeMap<Timestamp, SnapStatuses>,
 	) -> Result<(), Box<dyn Error>> {
-		let mut last_timestamp = None; // TODO(ek): Hack due to no heartbeat
 		let mut more = true;
 		while more {
 			let mut stream = idx_client
@@ -490,16 +474,6 @@ impl Domain {
 			while let Some(entry) = stream.message().await? {
 				more = true;
 				*fetch_offset = entry.id + 1;
-				match last_timestamp {
-					None => {
-						last_timestamp = Some(entry.timestamp);
-					},
-					Some(ts) => {
-						if ts < entry.timestamp {
-							last_timestamp = Some(entry.timestamp)
-						}
-					},
-				}
 				match snap_status_from_vc(entry.schema_value.as_str()) {
 					Ok((snap_id, issuer_id, value)) => {
 						updates
@@ -518,9 +492,6 @@ impl Domain {
 					},
 				}
 			}
-		}
-		if let Some(ts) = last_timestamp {
-			updates.entry(ts + 600000).or_default();
 		}
 		Ok(())
 	}
