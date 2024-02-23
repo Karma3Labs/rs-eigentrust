@@ -236,12 +236,15 @@ enum MainError {
 
 struct Domain {
 	domain_id: DomainId,
+	interval: Timestamp,
 	scope: String,
 	lt_id: String,
 	pt_id: String,
 	gt_id: String,
 	gtp_id: String,
+	alpha: Option<f64>,
 	status_schema: String,
+	issuer_id: String,
 	s3_output_urls: Vec<Url>,
 	post_scores_endpoints: Vec<Url>,
 	api_keys: HashMap<Url, String>,
@@ -271,12 +274,10 @@ struct Domain {
 }
 
 impl Domain {
-	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn run_once(
 		&mut self, idx_client: &mut IndexerClient<Channel>,
 		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
 		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
-		interval: Timestamp, alpha: Option<f64>, issuer_id: &str,
 	) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
 		Self::fetch_local_trust(
@@ -327,7 +328,7 @@ impl Domain {
 			self.gt.clear();
 			if ts >= self.last_update_ts {
 				self.last_update_ts = ts;
-				let ts_window = ts / interval * interval;
+				let ts_window = ts / self.interval * self.interval;
 				if self.last_compute_ts < ts_window {
 					info!(
 						window_from = self.last_compute_ts,
@@ -358,12 +359,7 @@ impl Domain {
 						.collect();
 					debug!(?ht_dids, "highly trusted peers");
 
-					match Self::run_et(
-						&self.lt_id, &self.pt_id, &self.gt_id, &self.gtp_id, alpha, et_client,
-						tv_client,
-					)
-					.await
-					{
+					match self.run_et(et_client, tv_client).await {
 						Ok((gtp, gt)) => {
 							self.gtp = gtp;
 							self.gt = gt;
@@ -394,7 +390,7 @@ impl Domain {
 					}
 					debug!(tp_d, "minimum highly trusted peer trust");
 					self.compute_snap_scores(tp_d).await?;
-					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
+					self.publish_scores(ts_window, tp_d, &inbound_distrusts).await?;
 				}
 				// for debugging
 				// self.update_did_mappings(lc_client).await?;
@@ -573,7 +569,7 @@ impl Domain {
 
 	async fn publish_scores(
 		&mut self, ts_window: Timestamp, tp_d: f64,
-		distrusters: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
+		distrusters: &HashMap<Trustee, HashSet<Truster>>,
 	) -> Result<(), Box<dyn Error>> {
 		let ts_window = if ts_window < self.start_timestamp {
 			info!(
@@ -590,7 +586,7 @@ impl Domain {
 			locations.push(url.join(&format!("{}.zip", ts_window))?.to_string());
 		}
 		info!(?locations, "uploading manifest");
-		let manifest = Self::make_manifest(issuer_id, ts_window, locations, tp_d).await?;
+		let manifest = self.make_manifest(ts_window, locations, tp_d).await?;
 		let manifest_path = std::path::Path::new("spd_scores.json");
 		let zip_path = std::path::Path::new("spd_scores.zip");
 		{
@@ -598,9 +594,9 @@ impl Domain {
 			let mut zip = zip::ZipWriter::new(zip_file);
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
-			self.write_peer_vcs(tp_d, distrusters, issuer_id, ts_window, &mut zip).await?;
+			self.write_peer_vcs(tp_d, distrusters, ts_window, &mut zip).await?;
 			zip.start_file("snap_scores.jsonl", options)?;
-			self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
+			self.write_snap_vcs(tp_d, ts_window, &mut zip).await?;
 			zip.start_file("MANIFEST.json", options)?;
 			serde_jcs::to_writer(&mut zip, &manifest)?;
 			zip.finish()?;
@@ -699,29 +695,27 @@ impl Domain {
 		Ok(())
 	}
 
-	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn run_et(
-		lt_id: &str, pt_id: &str, gt_id: &str, gtp_id: &str, alpha: Option<f64>,
-		et_client: &mut ComputeClient<Channel>, tv_client: &mut TrustVectorClient<Channel>,
+		&self, et_client: &mut ComputeClient<Channel>, tv_client: &mut TrustVectorClient<Channel>,
 	) -> Result<(TrustVector, TrustVector), Box<dyn Error>> {
-		Self::copy_vector(tv_client, pt_id, gt_id).await?;
+		Self::copy_vector(tv_client, &self.pt_id, &self.gt_id).await?;
 		et_client
 			.basic_compute(compute::Params {
-				local_trust_id: lt_id.to_string(),
-				pre_trust_id: pt_id.to_string(),
-				alpha,
+				local_trust_id: self.lt_id.clone(),
+				pre_trust_id: self.pt_id.clone(),
+				alpha: self.alpha,
 				epsilon: None,
-				global_trust_id: gt_id.to_string(),
-				positive_global_trust_id: gtp_id.to_string(),
+				global_trust_id: self.gt_id.clone(),
+				positive_global_trust_id: self.gtp_id.clone(),
 				max_iterations: 0,
 				destinations: vec![],
 			})
 			.await?;
-		let (_timestamp, entries) = tv_client.get(gtp_id).await?;
+		let (_timestamp, entries) = tv_client.get(&self.gtp_id).await?;
 		pin_mut!(entries);
 		let gtp = read_tv(entries).await?;
 		trace!(?gtp, "undiscounted global trust");
-		let (_timestamp, entries) = tv_client.get(gt_id).await?;
+		let (_timestamp, entries) = tv_client.get(&self.gt_id).await?;
 		pin_mut!(entries);
 		let gt = read_tv(entries).await?;
 		trace!(?gt, "discounted global trust");
@@ -789,8 +783,8 @@ impl Domain {
 	}
 
 	async fn write_peer_vcs(
-		&mut self, tp_d: f64, distrusts: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
-		timestamp: Timestamp, output: &mut impl std::io::Write,
+		&mut self, tp_d: f64, distrusts: &HashMap<Trustee, HashSet<Truster>>, timestamp: Timestamp,
+		output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		let empty_distrusters = HashSet::<Truster>::new();
 		let mut score_ranks = BTreeMap::<OrderedFloat<Value>, usize>::new();
@@ -835,7 +829,6 @@ impl Domain {
 				output,
 				(self
 					.make_trust_score_vc(
-						issuer_id,
 						timestamp,
 						peer_did,
 						"EigenTrust",
@@ -843,7 +836,7 @@ impl Domain {
 						Some(score_value_before_discount),
 						None,
 						Some(result_label),
-						self.accuracies.get(issuer_id).map(|a| {
+						self.accuracies.get(peer_did).map(|a| {
 							a.level().expect("accuracies map should not contain zero entries")
 						}),
 						score_ranks.get(score_value.into()).map(|rank| *rank as u64),
@@ -857,8 +850,7 @@ impl Domain {
 	}
 
 	async fn write_snap_vcs(
-		&mut self, tp_d: f64, issuer_id: &str, timestamp: Timestamp,
-		output: &mut impl std::io::Write,
+		&mut self, tp_d: f64, timestamp: Timestamp, output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		for (snap_id, score) in &self.snap_scores {
 			let result_label = SnapSecurityLabel::from_snap_score(score, tp_d) as i32;
@@ -866,7 +858,6 @@ impl Domain {
 				output,
 				(self
 					.make_trust_score_vc(
-						issuer_id,
 						timestamp,
 						snap_id,
 						"IssuerTrustWeightedAverage",
@@ -887,7 +878,7 @@ impl Domain {
 
 	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn make_trust_score_vc(
-		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
+		&self, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
 		score_value: SnapScoreValue, score_value_before_discount: Option<SnapScoreValue>,
 		score_confidence: Option<SnapScoreConfidence>, result: Option<i32>, accuracy: Option<f64>,
 		rank: Option<u64>, scope: &str,
@@ -899,7 +890,7 @@ impl Domain {
 				"VerifiableCredential".to_string(),
 				"TrustScoreCredential".to_string(),
 			]),
-			issuer: String::from(issuer_id),
+			issuer: self.issuer_id.clone(),
 			issuance_date: format!(
 				"{:?}",
 				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
@@ -930,10 +921,10 @@ impl Domain {
 	}
 
 	async fn make_manifest(
-		issuer_id: &str, timestamp: Timestamp, locations: Vec<String>, trust_threshold: f64,
+		&self, timestamp: Timestamp, locations: Vec<String>, trust_threshold: f64,
 	) -> Result<Manifest, Box<dyn Error>> {
 		Ok(Manifest {
-			issuer: String::from(issuer_id),
+			issuer: self.issuer_id.clone(),
 			issuance_date: format!(
 				"{:?}",
 				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
@@ -1059,6 +1050,7 @@ impl Main {
 				domain_id,
 				Domain {
 					domain_id,
+					interval: main.args.interval,
 					scope: scopes
 						.remove(&domain_id)
 						.unwrap_or_else(|| format!("Domain{}", domain_id)),
@@ -1066,7 +1058,9 @@ impl Main {
 					pt_id: pt_ids.remove(&domain_id).unwrap_or_default(),
 					gt_id: gt_ids.remove(&domain_id).unwrap_or_default(),
 					gtp_id: gtp_ids.remove(&domain_id).unwrap_or_default(),
+					alpha: main.args.alpha,
 					status_schema: status_schemas.remove(&domain_id).unwrap_or_default(),
+					issuer_id: main.args.issuer_id.clone(),
 					s3_output_urls,
 					post_scores_endpoints,
 					api_keys,
@@ -1208,12 +1202,8 @@ impl Main {
 		let et_client = &mut self.et_client().await?;
 		for (&domain_id, domain) in &mut self.domains {
 			// trace!(id = domain_id, "processing domain");
-			if let Err(e) = domain
-				.run_once(
-					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
-					self.args.alpha, &self.args.issuer_id,
-				)
-				.await
+			if let Err(e) =
+				domain.run_once(idx_client, lc_client, tm_client, tv_client, et_client).await
 			{
 				error!(err = ?e, id = domain_id, "cannot process domain");
 			}
