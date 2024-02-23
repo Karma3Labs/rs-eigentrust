@@ -336,61 +336,7 @@ impl Domain {
 						triggering_timestamp = ts,
 						"performing core compute"
 					);
-					self.last_compute_ts = ts_window;
-					self.update_did_mappings(lc_client).await?;
-
-					let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
-					let pt = read_tv(pt_ent).await?;
-					let (_lt_ts, lt_ent) = tm_client.get(&self.lt_id).await?;
-					let (outbound_trusts, inbound_distrusts) = read_trusts(lt_ent).await?;
-					let mut ht = HashSet::<u32>::new();
-					for (&pt_peer, _) in pt.iter() {
-						if let Some(trusted_by_pt_peer) = outbound_trusts.get(&pt_peer) {
-							for &ht_peer in trusted_by_pt_peer {
-								ht.insert(ht_peer);
-							}
-						}
-					}
-					let ht_dids: Vec<String> = ht
-						.iter()
-						.map(|peer| {
-							self.peer_id_to_did.get(peer).cloned().unwrap_or(peer.to_string())
-						})
-						.collect();
-					debug!(?ht_dids, "highly trusted peers");
-
-					match self.run_et(et_client, tv_client).await {
-						Ok((gtp, gt)) => {
-							self.gtp = gtp;
-							self.gt = gt;
-							// In case gt was discounted exactly to 0.0,
-							// gtp will have an entry but gt won't.  Add it back.
-							for &peer_id in self.gtp.keys() {
-								self.gt.entry(peer_id).or_default();
-							}
-							// In case a peer has only discounts,
-							// gt will have an entry but gtp won't.  Add it back.
-							for &peer_id in self.gt.keys() {
-								self.gtp.entry(peer_id).or_default();
-							}
-						},
-						Err(e) => {
-							error!(
-								err = ?e,
-								"compute failed, Snap scores will be based on old peer scores",
-							);
-						},
-					}
-					let mut tp_d = 1f64;
-					for ht_peer in ht {
-						let tp = self.gtp.get(&ht_peer).cloned().unwrap_or(0f64);
-						if tp_d > tp {
-							tp_d = tp;
-						}
-					}
-					debug!(tp_d, "minimum highly trusted peer trust");
-					self.compute_snap_scores(tp_d).await?;
-					self.publish_scores(ts_window, tp_d, &inbound_distrusts).await?;
+					self.recompute(tv_client, tm_client, lc_client, et_client, ts_window).await?;
 				}
 				// for debugging
 				// self.update_did_mappings(lc_client).await?;
@@ -535,6 +481,67 @@ impl Domain {
 		self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
 		self.peer_did_to_id =
 			self.peer_id_to_did.iter().map(|(id, did)| (did.clone(), *id)).collect();
+		Ok(())
+	}
+
+	async fn recompute(
+		&mut self, tv_client: &mut TrustVectorClient<Channel>,
+		tm_client: &mut TrustMatrixClient<Channel>, lc_client: &mut LinearCombinerClient<Channel>,
+		et_client: &mut ComputeClient<Channel>, ts_window: Timestamp,
+	) -> Result<(), Box<dyn Error>> {
+		self.last_compute_ts = ts_window;
+		self.update_did_mappings(lc_client).await?;
+
+		let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
+		let pt = read_tv(pt_ent).await?;
+		let (_lt_ts, lt_ent) = tm_client.get(&self.lt_id).await?;
+		let (outbound_trusts, inbound_distrusts) = read_trusts(lt_ent).await?;
+		let mut ht = HashSet::<u32>::new();
+		for (&pt_peer, _) in pt.iter() {
+			if let Some(trusted_by_pt_peer) = outbound_trusts.get(&pt_peer) {
+				for &ht_peer in trusted_by_pt_peer {
+					ht.insert(ht_peer);
+				}
+			}
+		}
+		let ht_dids: Vec<String> = ht
+			.iter()
+			.map(|peer| self.peer_id_to_did.get(peer).cloned().unwrap_or(peer.to_string()))
+			.collect();
+		debug!(?ht_dids, "highly trusted peers");
+
+		match self.run_et(et_client, tv_client).await {
+			Ok((gtp, gt)) => {
+				self.gtp = gtp;
+				self.gt = gt;
+				// In case gt was discounted exactly to 0.0,
+				// gtp will have an entry but gt won't.  Add it back.
+				for &peer_id in self.gtp.keys() {
+					self.gt.entry(peer_id).or_default();
+				}
+				// In case a peer has only discounts,
+				// gt will have an entry but gtp won't.  Add it back.
+				for &peer_id in self.gt.keys() {
+					self.gtp.entry(peer_id).or_default();
+				}
+			},
+			Err(e) => {
+				error!(
+					err = ?e,
+					"compute failed, Snap scores will be based on old peer scores",
+				);
+			},
+		}
+		let mut tp_d = 1f64;
+		for ht_peer in ht {
+			let tp = self.gtp.get(&ht_peer).cloned().unwrap_or(0f64);
+			if tp_d > tp {
+				tp_d = tp;
+			}
+		}
+		debug!(tp_d, "minimum highly trusted peer trust");
+		self.compute_snap_scores(tp_d).await?;
+		self.publish_scores(ts_window, tp_d, &inbound_distrusts).await?;
 		Ok(())
 	}
 
