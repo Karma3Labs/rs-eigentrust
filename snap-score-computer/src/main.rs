@@ -465,7 +465,7 @@ impl Domain {
 			more = false;
 			while let Some(entry) = stream.message().await? {
 				more = true;
-				*fetch_offset = entry.id + 1;
+				*fetch_offset += 1;
 				match snap_status_from_vc(entry.schema_value.as_str()) {
 					Ok((snap_id, issuer_id, value)) => {
 						updates
