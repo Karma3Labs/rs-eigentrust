@@ -250,12 +250,12 @@ struct Domain {
 	api_keys: HashMap<Url, String>,
 	// Local trust updates received from LC but not sent to ET yet.
 	local_trust_updates: BTreeMap<Timestamp, TrustMatrix>,
+	// TODO(ek): Remove this.  Needed because we can't fetch incrementally from LC yet.
+	lt_form1: TrustMatrix,
+	lt_form0: TrustMatrix,
 	// Peer index (x/y/i/j) <-> peer ID mappings.
 	peer_id_to_did: BTreeMap<u32, String>,
 	peer_did_to_id: BTreeMap<String, u32>,
-	// Timestamp of the latest LT entry fetched from LC.
-	lt_fetch_ts_form1: Timestamp,
-	lt_fetch_ts_form0: Timestamp,
 	// Timestamp of the latest snap status update fetched from indexer.
 	ss_fetch_offset: u32,
 	// Timestamp of the latest snap status update merged into the master copy.
@@ -423,16 +423,22 @@ impl Domain {
 		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
 		updates: &mut BTreeMap<Timestamp, TrustMatrix>,
 	) -> Result<(), Box<dyn Error>> {
-		for (form, weight, timestamp) in
-			vec![(1i32, 1.0, &mut self.lt_fetch_ts_form1), (0, -1.0, &mut self.lt_fetch_ts_form0)]
+		for (form, weight, lt) in
+			vec![(1i32, 1.0, &mut self.lt_form1), (0i32, -1.0, &mut self.lt_form0)]
 		{
 			let batch_req =
 				LtHistoryBatch { domain: self.domain_id, form, x0: 0, y0: 0, x1: 500, y1: 500 };
 			let mut lc_stream = lc_client.get_historic_data(batch_req).await?.into_inner();
 			while let Some(msg) = lc_stream.message().await? {
-				*timestamp = msg.timestamp;
+				let new_value = (msg.value as f64) * weight;
+				if let Some(&old_value) = lt.get(&(msg.x, msg.y)) {
+					if new_value == old_value {
+						continue;
+					}
+				}
+				lt.insert((msg.x, msg.y), new_value);
 				let batch = updates.entry(msg.timestamp).or_default();
-				*batch.entry((msg.x, msg.y)).or_default() += (msg.value as f64) * weight;
+				*batch.entry((msg.x, msg.y)).or_default() += new_value;
 			}
 		}
 		Ok(())
@@ -1080,10 +1086,10 @@ impl Main {
 					post_scores_endpoints,
 					api_keys,
 					local_trust_updates: BTreeMap::new(),
+					lt_form1: TrustMatrix::new(),
+					lt_form0: TrustMatrix::new(),
 					peer_did_to_id: BTreeMap::new(),
 					peer_id_to_did: BTreeMap::new(),
-					lt_fetch_ts_form1: 0,
-					lt_fetch_ts_form0: 0,
 					ss_fetch_offset: 0,
 					ss_update_ts: 0,
 					last_update_ts: 0,
