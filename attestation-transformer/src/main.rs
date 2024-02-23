@@ -58,7 +58,7 @@ impl TransformerService {
 
 	fn parse_event(event: IndexerEvent) -> Result<Vec<Term>, AttTrError> {
 		let schema_id = event.schema_id;
-		let schema_type = SchemaType::from(schema_id);
+		let schema_type = SchemaType::try_from(schema_id).map_err(AttTrError::InvalidSchema)?;
 		let terms = match schema_type {
 			SchemaType::SecurityCredential => {
 				// let parsed_att: SecurityReportSchema =

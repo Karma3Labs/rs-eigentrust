@@ -1,3 +1,4 @@
+use crate::schemas::SchemaTypeError;
 use hex::FromHexError;
 use mm_spd_did::CanonicalizePeerDidError;
 use rocksdb::Error as RocksDbError;
@@ -30,6 +31,9 @@ pub enum AttTrError {
 
 	#[error("invalid subject or issuer DID: {0}")]
 	InvalidPeerDid(CanonicalizePeerDidError),
+
+	#[error("invalid schema type: {0}")]
+	InvalidSchema(SchemaTypeError),
 
 	#[error("ParseError")]
 	ParseError,
