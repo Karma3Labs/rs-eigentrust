@@ -295,17 +295,36 @@ impl Domain {
 			.await
 			.map_err(|e| MainError::LoadSnapStatuses(e))?;
 		}
+		// TODO(ek): Real-time mode; None if for simulated inputs (means we consume everything).
+		let now = Some(
+			std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+				as u64,
+		);
 		let mut fetch_next_lt_update = || {
-			local_trust_updates.pop_first().map(|(timestamp, trust_matrix)| Update {
-				timestamp,
-				body: UpdateBody::LocalTrust(trust_matrix),
-			})
+			let first = match local_trust_updates.first_entry() {
+				Some(entry) => entry,
+				None => return None,
+			};
+			let timestamp = *first.key();
+			if now.is_some() && timestamp >= now.unwrap() {
+				info!(timestamp, "ignoring post-dated LT update for now");
+				return None;
+			}
+			let trust_matrix = first.remove();
+			Some(Update { timestamp, body: UpdateBody::LocalTrust(trust_matrix) })
 		};
 		let mut fetch_next_ss_update = || {
-			snap_status_updates.pop_first().map(|(timestamp, snap_statuses)| Update {
-				timestamp,
-				body: UpdateBody::SnapStatuses(snap_statuses),
-			})
+			let first = match snap_status_updates.first_entry() {
+				Some(entry) => entry,
+				None => return None,
+			};
+			let timestamp = *first.key();
+			if now.is_some() && timestamp >= now.unwrap() {
+				info!(timestamp, "ignoring post-dated SS update for now");
+				return None;
+			}
+			let snap_statuses = first.remove();
+			Some(Update { timestamp, body: UpdateBody::SnapStatuses(snap_statuses) })
 		};
 		let mut next_lt_update = fetch_next_lt_update();
 		let mut next_ss_update = fetch_next_ss_update();
@@ -338,31 +357,43 @@ impl Domain {
 					);
 					self.recompute(tv_client, tm_client, lc_client, et_client, ts_window).await?;
 				}
-				// for debugging
-				// self.update_did_mappings(lc_client).await?;
-				trace!(domain = self.domain_id, ?update, "processing update");
-				match update.body {
-					UpdateBody::LocalTrust(lt) => {
-						if !lt.is_empty() {
-							self.upload_lt(tm_client, update.timestamp, &lt).await?
+			}
+			// for debugging
+			// self.update_did_mappings(lc_client).await?;
+			trace!(domain = self.domain_id, ?update, "processing update");
+			match update.body {
+				UpdateBody::LocalTrust(lt) => {
+					if !lt.is_empty() {
+						self.upload_lt(tm_client, update.timestamp, &lt).await?
+					}
+				},
+				UpdateBody::SnapStatuses(statuses) => {
+					for (snap_id, opinions) in statuses {
+						let target = self.snap_statuses.entry(snap_id).or_default();
+						for (issuer_id, value) in opinions {
+							target.insert(issuer_id, value);
 						}
-					},
-					UpdateBody::SnapStatuses(statuses) => {
-						for (snap_id, opinions) in statuses {
-							let target = self.snap_statuses.entry(snap_id).or_default();
-							for (issuer_id, value) in opinions {
-								target.insert(issuer_id, value);
-							}
-						}
-						self.ss_update_ts = update.timestamp;
-					},
-				}
+					}
+					self.ss_update_ts = update.timestamp;
+				},
 			}
 			if next_lt_update.is_none() {
 				next_lt_update = fetch_next_lt_update();
 			}
 			if next_ss_update.is_none() {
 				next_ss_update = fetch_next_ss_update();
+			}
+		}
+		if let Some(now) = now {
+			let now_window = now / self.interval * self.interval;
+			if self.last_compute_ts < now_window {
+				info!(
+					window_from = self.last_compute_ts,
+					window_to = now_window,
+					triggering_timestamp = now,
+					"performing core compute (now)"
+				);
+				self.recompute(tv_client, tm_client, lc_client, et_client, now_window).await?;
 			}
 		}
 		// Return unconsumed ones back to the pending list.
