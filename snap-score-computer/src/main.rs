@@ -325,6 +325,7 @@ impl Domain {
 		};
 		let mut next_lt_update = fetch_next_lt_update();
 		let mut next_ss_update = fetch_next_ss_update();
+		let mut has_pending_update = false;
 		while next_lt_update.is_some() || next_ss_update.is_some() {
 			let next_update = if next_lt_update.is_none() {
 				next_ss_update.take()
@@ -342,6 +343,7 @@ impl Domain {
 			let update = next_update.unwrap();
 			let ts = update.timestamp;
 			self.gt.clear();
+			has_pending_update = true;
 			if ts < self.last_update_ts {
 				warn!(
 					?update,
@@ -364,6 +366,7 @@ impl Domain {
 					"performing core compute"
 				);
 				self.recompute(tv_client, tm_client, lc_client, et_client, ts_window).await?;
+				has_pending_update = false;
 			}
 			// for debugging
 			// self.update_did_mappings(lc_client).await?;
@@ -393,7 +396,7 @@ impl Domain {
 		}
 		if let Some(now) = now {
 			let now_window = now / self.interval * self.interval;
-			if self.last_compute_ts < now_window {
+			if self.last_compute_ts < now_window && has_pending_update {
 				info!(
 					window_from = self.last_compute_ts,
 					window_to = now_window,
