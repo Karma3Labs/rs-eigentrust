@@ -67,6 +67,7 @@ impl LinearCombinerService {
 			"did:pkh:eip155:59144:0x65a4CeC9f1c6060f3b987d9332Bedf26e8E86D17",
 			"did:pkh:eip155:59144:0x8Ef9328D63203230a295FA9Bf9fCd8C5384349C2",
 			"did:pkh:eip155:59144:0x3959ae2c154C443fc744861b6140dA6C8c97a3e3",
+			"did:pkh:eip155:59144:0x690fcde0b69b8b66342ac390a82092845c6f7f1c",
 		] {
 			get_index(&db, did, &mut offset)?;
 		}
