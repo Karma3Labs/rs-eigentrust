@@ -364,9 +364,19 @@ impl Domain {
 					)
 					.await
 					{
-						Ok((gtp1, gt1)) => {
-							self.gtp = gtp1;
-							self.gt = gt1;
+						Ok((gtp, gt)) => {
+							self.gtp = gtp;
+							self.gt = gt;
+							// In case gt was discounted exactly to 0.0,
+							// gtp will have an entry but gt won't.  Add it back.
+							for &peer_id in self.gtp.keys() {
+								self.gt.entry(peer_id).or_default();
+							}
+							// In case a peer has only discounts,
+							// gt will have an entry but gtp won't.  Add it back.
+							for &peer_id in self.gt.keys() {
+								self.gtp.entry(peer_id).or_default();
+							}
 						},
 						Err(e) => {
 							error!(
@@ -580,8 +590,7 @@ impl Domain {
 			locations.push(url.join(&format!("{}.zip", ts_window))?.to_string());
 		}
 		info!(?locations, "uploading manifest");
-		let mut manifest = Self::make_manifest(issuer_id, ts_window).await?;
-		manifest.locations = Some(locations);
+		let manifest = Self::make_manifest(issuer_id, ts_window, locations, tp_d).await?;
 		let manifest_path = std::path::Path::new("spd_scores.json");
 		let zip_path = std::path::Path::new("spd_scores.zip");
 		{
@@ -795,6 +804,7 @@ impl Domain {
 			cumulative_rank += count;
 		}
 		for (peer_id, score_value) in &self.gt {
+			let score_value_before_discount = self.gtp.get(peer_id).copied().unwrap_or(0.0);
 			let peer_did = match self.peer_id_to_did.get(peer_id) {
 				Some(did) => did,
 				None => {
@@ -830,6 +840,7 @@ impl Domain {
 						peer_did,
 						"EigenTrust",
 						*score_value,
+						Some(score_value_before_discount),
 						None,
 						Some(result_label),
 						self.accuracies.get(issuer_id).map(|a| {
@@ -860,6 +871,7 @@ impl Domain {
 						snap_id,
 						"IssuerTrustWeightedAverage",
 						score.value,
+						None,
 						Some(score.confidence),
 						Some(result_label),
 						None,
@@ -876,8 +888,9 @@ impl Domain {
 	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn make_trust_score_vc(
 		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
-		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidence>,
-		result: Option<i32>, accuracy: Option<f64>, rank: Option<u64>, scope: &str,
+		score_value: SnapScoreValue, score_value_before_discount: Option<SnapScoreValue>,
+		score_confidence: Option<SnapScoreConfidence>, result: Option<i32>, accuracy: Option<f64>,
+		rank: Option<u64>, scope: &str,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
@@ -896,6 +909,7 @@ impl Domain {
 				trust_score_type: score_type.to_string(),
 				trust_score: TrustScore {
 					value: score_value,
+					value_before_discount: score_value_before_discount,
 					confidence: score_confidence,
 					result,
 					accuracy,
@@ -916,7 +930,7 @@ impl Domain {
 	}
 
 	async fn make_manifest(
-		issuer_id: &str, timestamp: Timestamp,
+		issuer_id: &str, timestamp: Timestamp, locations: Vec<String>, trust_threshold: f64,
 	) -> Result<Manifest, Box<dyn Error>> {
 		Ok(Manifest {
 			issuer: String::from(issuer_id),
@@ -924,7 +938,8 @@ impl Domain {
 				"{:?}",
 				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
 			),
-			locations: None,
+			locations,
+			trust_threshold,
 			proof: ManifestProof {},
 		})
 	}

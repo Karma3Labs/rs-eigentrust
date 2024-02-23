@@ -71,6 +71,8 @@ pub struct TrustScoreCredentialSubject {
 pub struct TrustScore {
 	pub value: f64,
 	#[serde(skip_serializing_if = "Option::is_none")]
+	pub value_before_discount: Option<f64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub confidence: Option<f64>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub result: Option<i32>,
@@ -90,7 +92,8 @@ pub struct TrustScoreCredentialProof {}
 pub struct Manifest {
 	pub issuer: String,
 	pub issuance_date: String,
-	pub locations: Option<Vec<String>>,
+	pub locations: Vec<String>,
+	pub trust_threshold: f64,
 	pub proof: ManifestProof,
 }
 
