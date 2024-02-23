@@ -222,7 +222,6 @@ impl UpdateCmd {
 			.into_iter()
 			.map(|(id, did)| (did, id))
 			.collect();
-		println!("mapping={m:?}");
 		let mut updates = BTreeMap::new();
 		for (line_no, line) in std::io::stdin().lines().enumerate() {
 			let line = line?;

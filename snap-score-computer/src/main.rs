@@ -370,7 +370,10 @@ impl Domain {
 			}
 			// for debugging
 			// self.update_did_mappings(lc_client).await?;
-			trace!(domain = self.domain_id, ?update, "processing update");
+			debug!(
+				domain = self.domain_id,
+				update.timestamp, "processing update"
+			);
 			match update.body {
 				UpdateBody::LocalTrust(lt) => {
 					if !lt.is_empty() {
@@ -554,7 +557,7 @@ impl Domain {
 			.iter()
 			.map(|peer| self.peer_id_to_did.get(peer).cloned().unwrap_or(peer.to_string()))
 			.collect();
-		debug!(?ht_dids, "highly trusted peers");
+		trace!(domain = self.domain_id, ?ht_dids, "highly trusted peers");
 
 		match self.run_et(et_client, tv_client).await {
 			Ok((gtp, gt)) => {
@@ -573,8 +576,9 @@ impl Domain {
 			},
 			Err(e) => {
 				error!(
+					domain = self.domain_id,
 					err = ?e,
-					"compute failed, Snap scores will be based on old peer scores",
+					"compute failed, Snap scores will be based on old peer scores"
 				);
 			},
 		}
@@ -585,7 +589,10 @@ impl Domain {
 				tp_d = tp;
 			}
 		}
-		debug!(tp_d, "minimum highly trusted peer trust");
+		debug!(
+			domain = self.domain_id,
+			tp_d, "minimum highly trusted peer trust"
+		);
 		self.compute_snap_scores(tp_d).await?;
 		self.publish_scores(ts_window, tp_d, &inbound_distrusts).await?;
 		Ok(())
@@ -596,9 +603,9 @@ impl Domain {
 		distrusters: &HashMap<Trustee, HashSet<Truster>>,
 	) -> Result<(), Box<dyn Error>> {
 		let ts_window = if ts_window < self.start_timestamp {
-			info!(
-				self.start_timestamp,
-				"using clipped timestamp for historic data",
+			debug!(
+				domain = self.domain_id,
+				self.start_timestamp, "using clipped timestamp for historic data"
 			);
 			self.start_timestamp += 1;
 			self.start_timestamp - 1
@@ -609,7 +616,7 @@ impl Domain {
 		for url in &self.s3_output_urls {
 			locations.push(url.join(&format!("{}.zip", ts_window))?.to_string());
 		}
-		info!(?locations, "uploading manifest");
+		trace!(domain = self.domain_id, ?locations, "uploading manifest");
 		let manifest = self.make_manifest(ts_window, locations, tp_d).await?;
 		let manifest_path = std::path::Path::new("spd_scores.json");
 		let zip_path = std::path::Path::new("spd_scores.zip");
@@ -666,8 +673,19 @@ impl Domain {
 				.send()
 				.await
 			{
-				Ok(_res) => debug!(bucket, path = &path, "uploaded to S3"),
-				Err(err) => warn!(?err, bucket, path = &path, "cannot upload to S3"),
+				Ok(_res) => debug!(
+					domain = self.domain_id,
+					bucket,
+					path = &path,
+					"uploaded to S3"
+				),
+				Err(err) => warn!(
+					domain = self.domain_id,
+					?err,
+					bucket,
+					path = &path,
+					"cannot upload to S3"
+				),
 			}
 		}
 		let post_scores_client = reqwest::Client::new();
@@ -681,10 +699,15 @@ impl Domain {
 			};
 			match req.json(&manifest).send().await {
 				Ok(res) => match res.error_for_status() {
-					Ok(res) => info!(%url, status = %res.status(), "sent manifest"),
-					Err(err) => warn!(?err, %url, "cannot send manifest"),
+					Ok(res) => {
+						info!(
+							domain = self.domain_id, ?url, status = %res.status(),
+							"sent manifest"
+						)
+					},
+					Err(err) => warn!(domain = self.domain_id, ?err, %url, "cannot send manifest"),
 				},
-				Err(err) => warn!(?err, %url, "cannot send manifest"),
+				Err(err) => warn!(domain = self.domain_id, ?err, %url, "cannot send manifest"),
 			}
 		}
 		Ok(())
