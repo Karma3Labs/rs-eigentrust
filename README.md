@@ -188,9 +188,8 @@ trusted auditors (that is, $d$ is the “weakest dissident”).
 
 - If $d$ is the only one that reported the Snap whereas everyone else endorsed
   it:
-
-  $$R(s,p) = \begin{cases} 1\text{ if }p \ne d \\
-  0\text{ if }p = d \end{cases}$$
+  
+  $$R(s,p) = 1\text{ if }p \ne d\text{, }0\text{ if }p = d$$
 
   This results in the highest Snap score value threshold where the Snap is still
   “In Review” state, due to the sole dissident. That is:
