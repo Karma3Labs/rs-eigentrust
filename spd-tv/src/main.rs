@@ -35,7 +35,10 @@ async fn get_did_mapping(
 			.await?
 			.into_inner();
 		while let Some(mapping) = stream.message().await? {
-			m.insert(mapping.id, unhexlify(&mapping.did)?);
+			m.insert(
+				mapping.id,
+				canonicalize_peer_did(&unhexlify(&mapping.did)?)?,
+			);
 			more = true;
 			start += 1;
 		}
