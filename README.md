@@ -121,7 +121,7 @@ as peers directly endorsed by the pre-trusted peers. – end note]
 $P_h \subset P$ denotes the set of all highly trusted auditors in the network.
 
 Given a Snap $s$, $O(s) \subset P$ is the set of peers who opined (filed a
-StatusCredential) on $s$. For $p \in O(s)$ $p \in O(s)$$R(s,p) \in [0..1]$
+StatusCredential) on $s$. For $p \in O(s)$, $R(s,p) \in [0..1]$
 denotes the peer $p$’s status opinion about the Snap $s$.
 
 We define the security score for the Snap $s$ as a set of two numbers:
@@ -189,23 +189,18 @@ trusted auditors (that is, $d$ is the “weakest dissident”).
 - If $d$ is the only one that reported the Snap whereas everyone else endorsed
   it:
 
-  $$
-  R(s,p) = \begin{cases} 1\text{ if }p \ne d \\ 0\text{ if }p = d \end{cases}
-  $$
+  $$R(s,p) = \begin{cases} 1\text{ if }p \ne d \\ 0\text{ if }p = d
+  \end{cases}$$
 
   This results in the highest Snap score value threshold where the Snap is still
   “In Review” state, due to the sole dissident. That is:
 
-  $$
-  R_E = {C(s)-T^+(d) \over {C(s)}}=1-{T^+(d) \over C(s)}
-  $$
+  $$R_E = {C(s)-T^+(d) \over {C(s)}}=1-{T^+(d) \over C(s)}$$
 
 - Similarly, if $d$ is the only one that endorsed the Snap whereas everyone else
   reported it:
 
-  $$
-  R_R = {T^+(d) \over {C(s)}}
-  $$
+  $$R_R = {T^+(d) \over {C(s)}}$$
 
 All in all, the Snap $s$ earns:
 
