@@ -274,19 +274,15 @@ struct Domain {
 }
 
 impl Domain {
-	async fn run_once(
-		&mut self, idx_client: &mut IndexerClient<Channel>,
-		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
-		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
-	) -> Result<(), Box<dyn Error>> {
+	async fn run_once(&mut self, clients: &mut Clients) -> Result<(), Box<dyn Error>> {
 		let mut local_trust_updates = self.local_trust_updates.clone();
-		self.fetch_local_trust(lc_client, &mut local_trust_updates)
+		self.fetch_local_trust(&mut clients.lc, &mut local_trust_updates)
 			.await
 			.map_err(|e| MainError::LoadLocalTrust(e))?;
 		let mut snap_status_updates = self.snap_status_updates.clone();
 		if !self.status_schema.is_empty() {
 			Self::fetch_snap_statuses(
-				idx_client, &mut self.ss_fetch_offset, &self.status_schema,
+				&mut clients.idx, &mut self.ss_fetch_offset, &self.status_schema,
 				&mut snap_status_updates,
 			)
 			.await
@@ -365,11 +361,11 @@ impl Domain {
 					triggering_timestamp = ts,
 					"performing core compute"
 				);
-				self.recompute(tv_client, tm_client, lc_client, et_client, ts_window).await?;
+				self.recompute(clients, ts_window).await?;
 				has_pending_update = false;
 			}
 			// for debugging
-			// self.update_did_mappings(lc_client).await?;
+			// self.update_did_mappings(&mut clients.lc).await?;
 			debug!(
 				domain = self.domain_id,
 				update.timestamp, "processing update"
@@ -377,7 +373,7 @@ impl Domain {
 			match update.body {
 				UpdateBody::LocalTrust(lt) => {
 					if !lt.is_empty() {
-						self.upload_lt(tm_client, update.timestamp, &lt).await?
+						self.upload_lt(&mut clients.tm, update.timestamp, &lt).await?
 					}
 				},
 				UpdateBody::SnapStatuses(statuses) => {
@@ -406,7 +402,7 @@ impl Domain {
 					triggering_timestamp = now,
 					"performing core compute (now)"
 				);
-				self.recompute(tv_client, tm_client, lc_client, et_client, now_window).await?;
+				self.recompute(clients, now_window).await?;
 			}
 		}
 		// Return unconsumed ones back to the pending list.
@@ -534,16 +530,14 @@ impl Domain {
 	}
 
 	async fn recompute(
-		&mut self, tv_client: &mut TrustVectorClient<Channel>,
-		tm_client: &mut TrustMatrixClient<Channel>, lc_client: &mut LinearCombinerClient<Channel>,
-		et_client: &mut ComputeClient<Channel>, ts_window: Timestamp,
+		&mut self, clients: &mut Clients, ts_window: Timestamp,
 	) -> Result<(), Box<dyn Error>> {
 		self.last_compute_ts = ts_window;
-		self.update_did_mappings(lc_client).await?;
+		self.update_did_mappings(&mut clients.lc).await?;
 
-		let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
+		let (_pt_ts, pt_ent) = clients.tv.get(&self.pt_id).await?;
 		let pt = read_tv(pt_ent).await?;
-		let (_lt_ts, lt_ent) = tm_client.get(&self.lt_id).await?;
+		let (_lt_ts, lt_ent) = clients.tm.get(&self.lt_id).await?;
 		let (outbound_trusts, inbound_distrusts) = read_trusts(lt_ent).await?;
 		let mut ht = HashSet::<u32>::new();
 		for (&pt_peer, _) in pt.iter() {
@@ -559,7 +553,7 @@ impl Domain {
 			.collect();
 		trace!(domain = self.domain_id, ?ht_dids, "highly trusted peers");
 
-		match self.run_et(et_client, tv_client).await {
+		match self.run_et(&mut clients.et, &mut clients.tv).await {
 			Ok((gtp, gt)) => {
 				self.gtp = gtp;
 				self.gt = gt;
@@ -1011,6 +1005,14 @@ pub fn force_symlink<P: AsRef<std::path::Path>, Q: AsRef<std::path::Path>>(
 	}
 }
 
+struct Clients {
+	idx: IndexerClient<Channel>,
+	lc: LinearCombinerClient<Channel>,
+	tv: TrustVectorClient<Channel>,
+	tm: TrustMatrixClient<Channel>,
+	et: ComputeClient<Channel>,
+}
+
 struct Main {
 	args: Args,
 	domains: BTreeMap<DomainId, Domain>,
@@ -1186,6 +1188,16 @@ impl Main {
 		}
 	}
 
+	async fn make_clients(&self) -> Result<Clients, Box<dyn Error>> {
+		Ok(Clients {
+			idx: self.idx_client().await?,
+			lc: self.lc_client().await?,
+			tm: self.tm_client().await?,
+			tv: self.tv_client().await?,
+			et: self.et_client().await?,
+		})
+	}
+
 	async fn lc_client(&self) -> Result<LinearCombinerClient<Channel>, Box<dyn Error>> {
 		Ok(LinearCombinerClient::connect(self.args.linear_combiner_grpc.clone()).await?)
 	}
@@ -1270,16 +1282,10 @@ impl Main {
 	}
 
 	async fn run_once(&mut self) -> Result<(), Box<dyn Error>> {
-		let idx_client = &mut self.idx_client().await?;
-		let lc_client = &mut self.lc_client().await?;
-		let tm_client = &mut self.tm_client().await?;
-		let tv_client = &mut self.tv_client().await?;
-		let et_client = &mut self.et_client().await?;
+		let mut clients = self.make_clients().await?;
 		for (&domain_id, domain) in &mut self.domains {
 			// trace!(id = domain_id, "processing domain");
-			if let Err(e) =
-				domain.run_once(idx_client, lc_client, tm_client, tv_client, et_client).await
-			{
+			if let Err(e) = domain.run_once(&mut clients).await {
 				error!(err = ?e, id = domain_id, "cannot process domain");
 			}
 		}
