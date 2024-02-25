@@ -3,7 +3,7 @@
 We perform [EigenTrust](https://nlp.stanford.edu/pubs/eigentrust.pdf) algorithm
 on peer-to-peer trust signals.
 These signals include both trust and distrust credentials, conforming to this
-[**draft CAIP](https://github.com/dayksx/CAIPs/blob/main/CAIPs/caip-x.md).**
+**[draft CAIP](https://github.com/dayksx/CAIPs/blob/main/CAIPs/caip-x.md).**
 The results of the compute provide reputation score for users in two contexts -
 Software Security and Software Development. These User reputation scores are
 used to calculate Snap scores and Community Sentiment, which helps surface Snaps
@@ -114,9 +114,10 @@ score) of the peer (in the “security” scope), and $T^+(p) \in [0..1]$ denote
 the positive-local-trust-only trust standing (pure EigenTrust score without
 distrust adjustment) of the peer.
 
-We appoint some peers (auditors) so that their opinion immediately matters (
-precise definition is given below). We call them *highly trusted
-auditors.  [Note –* Under the current trust graph model, we define highly trusted auditors as peers directly endorsed by the pre-trusted peers. *– end note]*
+We appoint some peers (auditors) so that their opinion immediately matters
+(precise definition is given below). We call them *highly trusted auditors.*
+[Note – Under the current trust graph model, we define highly trusted auditors
+as peers directly endorsed by the pre-trusted peers. – end note]
 $P_h \subset P$ denotes the set of all highly trusted auditors in the network.
 
 Given a Snap $s$, $O(s) \subset P$ is the set of peers who opined (filed a
@@ -149,7 +150,10 @@ threshold is set in such a way that any highly trusted auditor opining is
 sufficient, i.e. $C(s) \ge T^+(d)$, where $d$ is the weakest highly trusted
 auditor (weakest = with lowest positive-LT-only trust score).
 
-*[Note* – We use positive-LT-only trust score as the threshold criteria to keep the bar high. If we used negative-adjusted trust score, the bar could be brought arbitrarily low if a highly trusted auditor became targeted by other highly trusted peers with distrust credentials. – *end note]*
+[Note – We use positive-LT-only trust score as the threshold criteria
+to keep the bar high. If we used negative-adjusted trust score,
+the bar could be brought arbitrarily low if a highly trusted auditor became
+targeted by other highly trusted peers with distrust credentials. – end note]
 
 We consider $R_c(s)$ by comparing it against two thresholds $R_E$ and $R_R$ (
 $0 < R_R < R_E < 1$):
