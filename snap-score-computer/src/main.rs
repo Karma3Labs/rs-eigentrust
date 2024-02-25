@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Debug;
@@ -257,12 +258,10 @@ struct Domain {
 	peer_did_to_id: BTreeMap<String, u32>,
 	// Timestamp of the latest snap status update fetched from indexer.
 	ss_fetch_offset: u32,
-	// Timestamp of the latest snap status update merged into the master copy.
-	ss_update_ts: Timestamp,
-	// Timestamp of the latest update received in the merged update stream.
-	last_update_ts: Timestamp,
-	// Last compute timestamp;
+	// Last compute timestamp.
 	last_compute_ts: Timestamp,
+	// When the next compute cycle is due; None if nothing is scheduled yet.
+	compute_ts: Option<Timestamp>,
 	gtp: TrustVector,
 	gt: TrustVector,
 	snap_status_updates: BTreeMap<Timestamp, SnapStatuses>,
@@ -286,7 +285,6 @@ impl Domain {
 		);
 		let mut next_lt_update = self.fetch_next_lt_update(now);
 		let mut next_ss_update = self.fetch_next_ss_update(now);
-		let mut has_pending_update = false;
 		while next_lt_update.is_some() || next_ss_update.is_some() {
 			let next_update = if next_lt_update.is_none() {
 				next_ss_update.take()
@@ -302,38 +300,50 @@ impl Domain {
 				}
 			};
 			let update = next_update.unwrap();
-			let ts = update.timestamp;
-			self.gt.clear();
-			has_pending_update = true;
-			if ts < self.last_update_ts {
-				warn!(
-					?update,
-					self.last_update_ts, "update stream went backward in time!"
-				);
+			let update_compute_ts = (update.timestamp / self.interval + 1) * self.interval;
+			match self.compute_ts {
+				None => {
+					info!(
+						domain = self.domain_id,
+						update_compute = update_compute_ts.to_iso8601(),
+						"scheduling compute"
+					);
+					self.compute_ts = Some(update_compute_ts);
+				},
+				Some(compute_ts) => {
+					match compute_ts.cmp(&update_compute_ts) {
+						Ordering::Less => {
+							// compute_ts <= update.timestamp <= now
+							assert!(now.map_or(true, |now| compute_ts <= now));
+							// The scheduled compute cycle is due now
+							info!(
+								domain = self.domain_id,
+								from = self.last_compute_ts.to_iso8601(),
+								to = compute_ts.to_iso8601(),
+								update = update.timestamp.to_iso8601(),
+								"performing core compute"
+							);
+							self.recompute(clients).await?;
+							self.last_compute_ts = compute_ts;
+							self.compute_ts = Some(update_compute_ts);
+						},
+						Ordering::Equal => {},
+						Ordering::Greater => {
+							warn!(
+								domain = self.domain_id,
+								update = update.timestamp.to_iso8601(),
+								update_compute = update_compute_ts.to_iso8601(),
+								compute = compute_ts.to_iso8601(),
+								"received update that belonged to a previous compute cycle!"
+							);
+						},
+					}
+				},
 			}
-			if ts < self.last_compute_ts {
-				info!(
-					?update,
-					self.last_compute_ts, "update is older than last compute snapshot"
-				);
-			}
-			self.last_update_ts = ts;
-			let ts_window = ts / self.interval * self.interval;
-			if self.last_compute_ts < ts_window {
-				info!(
-					window_from = self.last_compute_ts,
-					window_to = ts_window,
-					triggering_timestamp = ts,
-					"performing core compute"
-				);
-				self.recompute(clients, ts_window).await?;
-				has_pending_update = false;
-			}
-			// for debugging
-			// self.update_did_mappings(&mut clients.lc).await?;
 			debug!(
 				domain = self.domain_id,
-				update.timestamp, "processing update"
+				timestamp = update.timestamp.to_iso8601(),
+				"processing update"
 			);
 			match update.body {
 				UpdateBody::LocalTrust(lt) => {
@@ -348,7 +358,6 @@ impl Domain {
 							target.insert(issuer_id, value);
 						}
 					}
-					self.ss_update_ts = update.timestamp;
 				},
 			}
 			if next_lt_update.is_none() {
@@ -356,18 +365,6 @@ impl Domain {
 			}
 			if next_ss_update.is_none() {
 				next_ss_update = self.fetch_next_ss_update(now);
-			}
-		}
-		if let Some(now) = now {
-			let now_window = now / self.interval * self.interval;
-			if self.last_compute_ts < now_window && has_pending_update {
-				info!(
-					window_from = self.last_compute_ts,
-					window_to = now_window,
-					triggering_timestamp = now,
-					"performing core compute (now)"
-				);
-				self.recompute(clients, now_window).await?;
 			}
 		}
 		// Return unconsumed ones back to the pending list.
@@ -379,6 +376,33 @@ impl Domain {
 				UpdateBody::SnapStatuses(ss) => {
 					self.snap_status_updates.insert(update.timestamp, ss);
 				},
+			}
+		}
+		// No more updates.
+		// Check if compute is due one last time.
+		// TODO(ek): For now this happens only in realtime mode.
+		if let Some(compute_ts) = self.compute_ts {
+			let compute_is_due = if let Some(now) = now {
+				// Realtime mode.
+				// Check if it's too late for any events to arrive for the scheduled compute;
+				// allow up to 5 seconds of propagation delay.
+				compute_ts + 5_000 <= now
+			} else {
+				// Non-realtime mode; assume we fetched everything.
+				// TODO(ek): Input tombstone (EOF)
+				true
+			};
+			if compute_is_due {
+				info!(
+					domain = self.domain_id,
+					from = self.last_compute_ts.to_iso8601(),
+					to = compute_ts.to_iso8601(),
+					now = now.map_or("(non-realtime mode)".into(), |ts| ts.to_iso8601()),
+					"performing core compute (no more events allowed for the currently scheduled)"
+				);
+				self.recompute(clients).await?;
+				self.last_compute_ts = compute_ts;
+				self.compute_ts = None;
 			}
 		}
 		Ok(())
@@ -491,7 +515,10 @@ impl Domain {
 		};
 		let timestamp = *first.key();
 		if now.is_some() && timestamp >= now.unwrap() {
-			info!(timestamp, "ignoring post-dated LT update for now");
+			info!(
+				timestamp = timestamp.to_iso8601(),
+				"ignoring post-dated LT update for now"
+			);
 			return None;
 		}
 		let trust_matrix = first.remove();
@@ -505,17 +532,17 @@ impl Domain {
 		};
 		let timestamp = *first.key();
 		if now.is_some() && timestamp >= now.unwrap() {
-			info!(timestamp, "ignoring post-dated SS update for now");
+			info!(
+				timestamp = timestamp.to_iso8601(),
+				"ignoring post-dated SS update for now"
+			);
 			return None;
 		}
 		let snap_statuses = first.remove();
 		Some(Update { timestamp, body: UpdateBody::SnapStatuses(snap_statuses) })
 	}
 
-	async fn recompute(
-		&mut self, clients: &mut Clients, ts_window: Timestamp,
-	) -> Result<(), Box<dyn Error>> {
-		self.last_compute_ts = ts_window;
+	async fn recompute(&mut self, clients: &mut Clients) -> Result<(), Box<dyn Error>> {
 		self.fetch_did_mappings(&mut clients.lc).await?;
 
 		let (_pt_ts, pt_ent) = clients.tv.get(&self.pt_id).await?;
@@ -566,39 +593,42 @@ impl Domain {
 				tp_d = tp;
 			}
 		}
-		debug!(
+		trace!(
 			domain = self.domain_id,
-			tp_d, "minimum highly trusted peer trust"
+			tp_d,
+			"minimum highly trusted peer trust"
 		);
 		self.compute_snap_scores(tp_d).await?;
-		self.publish_scores(ts_window, tp_d, &inbound_distrusts).await?;
+		self.publish_scores(tp_d, &inbound_distrusts).await?;
 		Ok(())
 	}
 
 	async fn publish_scores(
-		&mut self, ts_window: Timestamp, tp_d: f64,
-		distrusters: &HashMap<Trustee, HashSet<Truster>>,
+		&mut self, tp_d: f64, distrusters: &HashMap<Trustee, HashSet<Truster>>,
 	) -> Result<(), Box<dyn Error>> {
-		let ts_window = if ts_window < self.start_timestamp {
+		let compute_ts = self.compute_ts.expect("no compute timestamp while publishing");
+		let snapshot_ts = if compute_ts < self.start_timestamp {
 			debug!(
 				domain = self.domain_id,
-				self.start_timestamp, "using clipped timestamp for historic data"
+				original = self.compute_ts.unwrap().to_iso8601(),
+				clipped = self.start_timestamp.to_iso8601(),
+				"using clipped timestamp for historic data"
 			);
 			self.start_timestamp += 1;
 			self.start_timestamp - 1
 		} else {
-			ts_window
+			compute_ts
 		};
 		let mut locations = Vec::new();
 		for url in &self.s3_output_urls {
-			locations.push(url.join(&format!("{}.zip", ts_window))?.to_string());
+			locations.push(url.join(&format!("{}.zip", snapshot_ts))?.to_string());
 		}
 		trace!(domain = self.domain_id, ?locations, "uploading manifest");
-		let manifest = self.make_manifest(ts_window, locations, tp_d).await?;
+		let manifest = self.make_manifest(snapshot_ts, locations, tp_d).await?;
 		let output_root = std::path::PathBuf::from("spd_scores");
 		let output_dir = output_root.join(self.domain_id.to_string());
 		std::fs::create_dir_all(&output_dir)?;
-		let base_name = std::path::PathBuf::from(ts_window.to_string());
+		let base_name = std::path::PathBuf::from(snapshot_ts.to_string());
 		let manifest_filename = base_name.with_extension("json");
 		let zip_filename = base_name.with_extension("zip");
 		let zip_path = output_dir.join(&zip_filename);
@@ -607,10 +637,10 @@ impl Domain {
 			let mut zip = zip::ZipWriter::new(zip_file);
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
-			self.write_peer_vcs(tp_d, distrusters, ts_window, &mut zip).await?;
+			self.write_peer_vcs(tp_d, distrusters, snapshot_ts, &mut zip).await?;
 			if self.is_security_domain() {
 				zip.start_file("snap_scores.jsonl", options)?;
-				self.write_snap_vcs(tp_d, ts_window, &mut zip).await?;
+				self.write_snap_vcs(tp_d, snapshot_ts, &mut zip).await?;
 			}
 			zip.start_file("MANIFEST.json", options)?;
 			serde_jcs::to_writer(&mut zip, &manifest)?;
@@ -649,7 +679,7 @@ impl Domain {
 			if !path.is_empty() {
 				path += "/";
 			}
-			let path = format!("{}{}.zip", path, ts_window);
+			let path = format!("{}{}.zip", path, snapshot_ts);
 			let bucket = url.host().unwrap().to_string();
 			match client
 				.put_object()
@@ -1133,9 +1163,8 @@ impl Main {
 					peer_did_to_id: BTreeMap::new(),
 					peer_id_to_did: BTreeMap::new(),
 					ss_fetch_offset: 0,
-					ss_update_ts: 0,
-					last_update_ts: 0,
 					last_compute_ts: 0,
+					compute_ts: None,
 					gt: TrustVector::new(),
 					gtp: TrustVector::new(),
 					snap_status_updates: BTreeMap::new(),
@@ -1337,4 +1366,18 @@ fn setup_logging(format: &Option<LogFormatArg>, level: &LevelFilter) -> Result<(
 		},
 	};
 	Ok(())
+}
+
+trait ToIso8601 {
+	fn to_iso8601(&self) -> String;
+}
+
+impl ToIso8601 for Timestamp {
+	fn to_iso8601(&self) -> String {
+		let (secs, msecs) = num::integer::div_rem(*self, 1_000);
+		chrono::DateTime::from_timestamp(secs as i64, (msecs * 1_000_000) as u32)
+			.map_or("<INVALID>".into(), |dt| {
+				dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+			})
+	}
 }
