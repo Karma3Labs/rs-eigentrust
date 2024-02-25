@@ -268,7 +268,8 @@ struct Domain {
 	snap_statuses: SnapStatuses,
 	snap_scores: SnapScores,
 	accuracies: BTreeMap<IssuerId, Accuracy>,
-	start_timestamp: u64,
+	start_ts: Timestamp,
+	alt_pub_ts: Timestamp,
 }
 
 impl Domain {
@@ -340,7 +341,7 @@ impl Domain {
 					}
 				},
 			}
-			debug!(
+			trace!(
 				domain = self.domain_id,
 				timestamp = update.timestamp.to_iso8601(),
 				"processing update"
@@ -607,28 +608,28 @@ impl Domain {
 		&mut self, tp_d: f64, distrusters: &HashMap<Trustee, HashSet<Truster>>,
 	) -> Result<(), Box<dyn Error>> {
 		let compute_ts = self.compute_ts.expect("no compute timestamp while publishing");
-		let snapshot_ts = if compute_ts < self.start_timestamp {
-			debug!(
+		let publish_ts = if compute_ts < self.alt_pub_ts {
+			trace!(
 				domain = self.domain_id,
 				original = self.compute_ts.unwrap().to_iso8601(),
-				clipped = self.start_timestamp.to_iso8601(),
+				clipped = self.alt_pub_ts.to_iso8601(),
 				"using clipped timestamp for historic data"
 			);
-			self.start_timestamp += 1;
-			self.start_timestamp - 1
+			self.alt_pub_ts += 1;
+			self.alt_pub_ts - 1
 		} else {
 			compute_ts
 		};
 		let mut locations = Vec::new();
 		for url in &self.s3_output_urls {
-			locations.push(url.join(&format!("{}.zip", snapshot_ts))?.to_string());
+			locations.push(url.join(&format!("{}.zip", publish_ts))?.to_string());
 		}
 		trace!(domain = self.domain_id, ?locations, "uploading manifest");
-		let manifest = self.make_manifest(snapshot_ts, locations, tp_d).await?;
+		let manifest = self.make_manifest(publish_ts, compute_ts, locations, tp_d).await?;
 		let output_root = std::path::PathBuf::from("spd_scores");
 		let output_dir = output_root.join(self.domain_id.to_string());
 		std::fs::create_dir_all(&output_dir)?;
-		let base_name = std::path::PathBuf::from(snapshot_ts.to_string());
+		let base_name = std::path::PathBuf::from(publish_ts.to_string());
 		let manifest_filename = base_name.with_extension("json");
 		let zip_filename = base_name.with_extension("zip");
 		let zip_path = output_dir.join(&zip_filename);
@@ -637,10 +638,10 @@ impl Domain {
 			let mut zip = zip::ZipWriter::new(zip_file);
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
-			self.write_peer_vcs(tp_d, distrusters, snapshot_ts, &mut zip).await?;
+			self.write_peer_vcs(tp_d, distrusters, publish_ts, &mut zip).await?;
 			if self.is_security_domain() {
 				zip.start_file("snap_scores.jsonl", options)?;
-				self.write_snap_vcs(tp_d, snapshot_ts, &mut zip).await?;
+				self.write_snap_vcs(tp_d, publish_ts, &mut zip).await?;
 			}
 			zip.start_file("MANIFEST.json", options)?;
 			serde_jcs::to_writer(&mut zip, &manifest)?;
@@ -679,7 +680,7 @@ impl Domain {
 			if !path.is_empty() {
 				path += "/";
 			}
-			let path = format!("{}{}.zip", path, snapshot_ts);
+			let path = format!("{}{}.zip", path, publish_ts);
 			let bucket = url.host().unwrap().to_string();
 			match client
 				.put_object()
@@ -984,14 +985,21 @@ impl Domain {
 	}
 
 	async fn make_manifest(
-		&self, timestamp: Timestamp, locations: Vec<String>, trust_threshold: f64,
+		&self, issuance_date: Timestamp, effective_date: Timestamp, locations: Vec<String>,
+		trust_threshold: f64,
 	) -> Result<Manifest, Box<dyn Error>> {
 		Ok(Manifest {
 			issuer: self.issuer_id.clone(),
+			// TODO(ek): Convert to .to_iso8601() after checking with MM about ms timestamps.
 			issuance_date: format!(
 				"{:?}",
-				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
+				chrono::NaiveDateTime::from_timestamp_millis(issuance_date as i64)
+					.unwrap()
+					.and_utc()
 			),
+			effective_date: effective_date.to_iso8601(),
+			epoch: self.start_ts.to_iso8601(),
+			scope: self.scope.clone(),
 			locations,
 			trust_threshold,
 			proof: ManifestProof {},
@@ -1171,7 +1179,8 @@ impl Main {
 					snap_statuses: SnapStatuses::new(),
 					snap_scores: SnapScores::new(),
 					accuracies: BTreeMap::new(),
-					start_timestamp,
+					start_ts: start_timestamp,
+					alt_pub_ts: start_timestamp,
 				},
 			);
 		}
@@ -1186,12 +1195,12 @@ impl Main {
 			"gRPC endpoints",
 		);
 
-		let mut interval = tokio::time::interval(time::Duration::from_secs(10));
+		let mut interval = tokio::time::interval(time::Duration::from_secs(5));
 		info!("initializing go-eigentrust");
 		self.init_et().await?;
 		loop {
-			debug!("scheduling next run");
 			interval.tick().await;
+			debug!("starting run");
 			match self.run_once().await {
 				Ok(_) => {
 					trace!("finished run");

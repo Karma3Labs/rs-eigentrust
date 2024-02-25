@@ -92,6 +92,9 @@ pub struct TrustScoreCredentialProof {}
 pub struct Manifest {
 	pub issuer: String,
 	pub issuance_date: String,
+	pub effective_date: String,
+	pub epoch: String,
+	pub scope: String,
 	pub locations: Vec<String>,
 	pub trust_threshold: f64,
 	pub proof: ManifestProof,
