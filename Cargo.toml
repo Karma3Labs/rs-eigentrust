@@ -12,12 +12,18 @@ members = [
     "trustmatrix",
     "compute",
     "proto-buf",
-    "spd-tv"
+    "spd-tv",
+    "mm-spd-vc",
+    "mm-spd-did",
 ]
 
 [workspace.package]
 version = "0.0.1"
-authors = ["Eugene Kim, Jenya Nepoimannykh, Filip Lazovic"]
+authors = [
+    "Eugene Kim <ek@karma3labs.com>",
+    "Jenya Nepoimannykh <jenya@karma3labs.com>",
+    "Filip Lazovic <filip@karma3labs.com>",
+]
 edition = "2021"
 
 [workspace.dependencies]
@@ -30,4 +36,5 @@ proto-buf.path = "proto-buf"
 trustvector.path = "trustvector"
 trustmatrix.path = "trustmatrix"
 compute.path = "compute"
+mm-spd-vc.path = "mm-spd-vc"
 mm-spd-did.path = "mm-spd-did"
