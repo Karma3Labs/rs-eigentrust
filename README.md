@@ -134,7 +134,8 @@ trust standing; the score value is the sum of all opiners’ trust standings:
 
 $$
 \begin{align*}C(s) &= \sum_{p \in O(s)} T(p)\\
-R_c(s) &= {{\sum_p R(s,p)T(p)} \over {\sum_p T(p)}} \\ &= {{\sum_p R(s,p)T(p)}
+R_c(s) &= {{\sum_p R(s,p)T(p)} \over {\sum_p T(p)}} \\
+&= {{\sum_p R(s,p)T(p)}
 \over C(s)} \end{align*}
 $$
 
