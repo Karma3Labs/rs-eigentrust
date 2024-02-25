@@ -4,7 +4,6 @@ use std::fmt::Debug;
 use std::io::IsTerminal;
 use std::str::FromStr;
 use std::time;
-use std::time::Duration;
 
 use clap::Parser as ClapParser;
 use cli::{Args, LogFormatArg};
@@ -275,52 +274,18 @@ struct Domain {
 
 impl Domain {
 	async fn run_once(&mut self, clients: &mut Clients) -> Result<(), Box<dyn Error>> {
-		let mut local_trust_updates = self.local_trust_updates.clone();
-		self.fetch_local_trust(&mut clients.lc, &mut local_trust_updates)
-			.await
-			.map_err(|e| MainError::LoadLocalTrust(e))?;
-		let mut snap_status_updates = self.snap_status_updates.clone();
+		self.fetch_local_trust(&mut clients.lc).await.map_err(|e| MainError::LoadLocalTrust(e))?;
 		if !self.status_schema.is_empty() {
-			Self::fetch_snap_statuses(
-				&mut clients.idx, &mut self.ss_fetch_offset, &self.status_schema,
-				&mut snap_status_updates,
-			)
-			.await
-			.map_err(|e| MainError::LoadSnapStatuses(e))?;
+			self.fetch_snap_statuses(&mut clients.idx)
+				.await
+				.map_err(|e| MainError::LoadSnapStatuses(e))?;
 		}
 		// TODO(ek): Real-time mode; None if for simulated inputs (means we consume everything).
 		let now = Some(
-			std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
-				as u64,
+			time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_millis() as u64,
 		);
-		let mut fetch_next_lt_update = || {
-			let first = match local_trust_updates.first_entry() {
-				Some(entry) => entry,
-				None => return None,
-			};
-			let timestamp = *first.key();
-			if now.is_some() && timestamp >= now.unwrap() {
-				info!(timestamp, "ignoring post-dated LT update for now");
-				return None;
-			}
-			let trust_matrix = first.remove();
-			Some(Update { timestamp, body: UpdateBody::LocalTrust(trust_matrix) })
-		};
-		let mut fetch_next_ss_update = || {
-			let first = match snap_status_updates.first_entry() {
-				Some(entry) => entry,
-				None => return None,
-			};
-			let timestamp = *first.key();
-			if now.is_some() && timestamp >= now.unwrap() {
-				info!(timestamp, "ignoring post-dated SS update for now");
-				return None;
-			}
-			let snap_statuses = first.remove();
-			Some(Update { timestamp, body: UpdateBody::SnapStatuses(snap_statuses) })
-		};
-		let mut next_lt_update = fetch_next_lt_update();
-		let mut next_ss_update = fetch_next_ss_update();
+		let mut next_lt_update = self.fetch_next_lt_update(now);
+		let mut next_ss_update = self.fetch_next_ss_update(now);
 		let mut has_pending_update = false;
 		while next_lt_update.is_some() || next_ss_update.is_some() {
 			let next_update = if next_lt_update.is_none() {
@@ -387,10 +352,10 @@ impl Domain {
 				},
 			}
 			if next_lt_update.is_none() {
-				next_lt_update = fetch_next_lt_update();
+				next_lt_update = self.fetch_next_lt_update(now);
 			}
 			if next_ss_update.is_none() {
-				next_ss_update = fetch_next_ss_update();
+				next_ss_update = self.fetch_next_ss_update(now);
 			}
 		}
 		if let Some(now) = now {
@@ -416,14 +381,11 @@ impl Domain {
 				},
 			}
 		}
-		self.local_trust_updates = local_trust_updates;
-		self.snap_status_updates = snap_status_updates;
 		Ok(())
 	}
 
 	async fn fetch_local_trust(
 		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
-		updates: &mut BTreeMap<Timestamp, TrustMatrix>,
 	) -> Result<(), Box<dyn Error>> {
 		for (form, weight, lt) in
 			vec![(1i32, 1.0, &mut self.lt_form1), (0i32, -1.0, &mut self.lt_form0)]
@@ -439,7 +401,7 @@ impl Domain {
 					}
 				}
 				lt.insert((msg.x, msg.y), new_value);
-				let batch = updates.entry(msg.timestamp).or_default();
+				let batch = self.local_trust_updates.entry(msg.timestamp).or_default();
 				*batch.entry((msg.x, msg.y)).or_default() += new_value;
 			}
 		}
@@ -447,16 +409,15 @@ impl Domain {
 	}
 
 	async fn fetch_snap_statuses(
-		idx_client: &mut IndexerClient<Channel>, fetch_offset: &mut u32, schema_id: &str,
-		updates: &mut BTreeMap<Timestamp, SnapStatuses>,
+		&mut self, idx_client: &mut IndexerClient<Channel>,
 	) -> Result<(), Box<dyn Error>> {
 		let mut more = true;
 		while more {
 			let mut stream = idx_client
 				.subscribe(IndexerQuery {
 					source_address: "".to_string(),
-					schema_id: vec![String::from(schema_id)],
-					offset: *fetch_offset,
+					schema_id: vec![self.status_schema.clone()],
+					offset: self.ss_fetch_offset,
 					count: 1000000,
 				})
 				.await?
@@ -464,10 +425,10 @@ impl Domain {
 			more = false;
 			while let Some(entry) = stream.message().await? {
 				more = true;
-				*fetch_offset += 1;
+				self.ss_fetch_offset += 1;
 				match snap_status_from_vc(entry.schema_value.as_str()) {
 					Ok((snap_id, issuer_id, value)) => {
-						updates
+						self.snap_status_updates
 							.entry(entry.timestamp)
 							.or_default()
 							.entry(snap_id)
@@ -487,9 +448,9 @@ impl Domain {
 		Ok(())
 	}
 
-	async fn fetch_did_mapping(
-		lc_client: &mut LinearCombinerClient<Channel>,
-	) -> Result<BTreeMap<u32, String>, Box<dyn Error>> {
+	async fn fetch_did_mappings(
+		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
+	) -> Result<(), Box<dyn Error>> {
 		let mut start = 0;
 		let mut more = true;
 		let mut peer_id_to_did = BTreeMap::new();
@@ -517,23 +478,45 @@ impl Domain {
 				more = true;
 			}
 		}
-		Ok(peer_id_to_did)
-	}
-
-	async fn update_did_mappings(
-		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
-	) -> Result<(), Box<dyn Error>> {
-		self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
+		self.peer_id_to_did = peer_id_to_did;
 		self.peer_did_to_id =
 			self.peer_id_to_did.iter().map(|(id, did)| (did.clone(), *id)).collect();
 		Ok(())
+	}
+
+	fn fetch_next_lt_update(&mut self, now: Option<Timestamp>) -> Option<Update> {
+		let first = match self.local_trust_updates.first_entry() {
+			Some(entry) => entry,
+			None => return None,
+		};
+		let timestamp = *first.key();
+		if now.is_some() && timestamp >= now.unwrap() {
+			info!(timestamp, "ignoring post-dated LT update for now");
+			return None;
+		}
+		let trust_matrix = first.remove();
+		Some(Update { timestamp, body: UpdateBody::LocalTrust(trust_matrix) })
+	}
+
+	fn fetch_next_ss_update(&mut self, now: Option<Timestamp>) -> Option<Update> {
+		let first = match self.snap_status_updates.first_entry() {
+			Some(entry) => entry,
+			None => return None,
+		};
+		let timestamp = *first.key();
+		if now.is_some() && timestamp >= now.unwrap() {
+			info!(timestamp, "ignoring post-dated SS update for now");
+			return None;
+		}
+		let snap_statuses = first.remove();
+		Some(Update { timestamp, body: UpdateBody::SnapStatuses(snap_statuses) })
 	}
 
 	async fn recompute(
 		&mut self, clients: &mut Clients, ts_window: Timestamp,
 	) -> Result<(), Box<dyn Error>> {
 		self.last_compute_ts = ts_window;
-		self.update_did_mappings(&mut clients.lc).await?;
+		self.fetch_did_mappings(&mut clients.lc).await?;
 
 		let (_pt_ts, pt_ent) = clients.tv.get(&self.pt_id).await?;
 		let pt = read_tv(pt_ent).await?;
@@ -1083,6 +1066,14 @@ impl Main {
 			.map(|(_, param)| param)
 			.cloned()
 	}
+	fn pop_urls_for_domain_id(
+		urls: &mut HashMap<DomainId, Vec<String>>, id: DomainId,
+	) -> Result<Vec<Url>, Box<dyn Error>> {
+		Ok(match urls.remove(&id) {
+			Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
+			None => vec![],
+		})
+	}
 
 	pub fn new(args: Args) -> Result<Box<Self>, Box<dyn Error>> {
 		let mut lt_ids = Self::parse_domain_params(&args.lt_ids)?;
@@ -1108,14 +1099,9 @@ impl Main {
 				* 1000;
 		info!(ts = &start_timestamp, "starting");
 		for domain_id in domain_ids {
-			let s3_output_urls = match s3_urls.remove(&domain_id) {
-				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
-				None => vec![],
-			};
-			let post_scores_endpoints = match post_scores_endpoints.remove(&domain_id) {
-				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
-				None => vec![],
-			};
+			let s3_output_urls = Self::pop_urls_for_domain_id(&mut s3_urls, domain_id)?;
+			let post_scores_endpoints =
+				Self::pop_urls_for_domain_id(&mut post_scores_endpoints, domain_id)?;
 			let api_keys = post_scores_endpoints
 				.iter()
 				.cloned()
@@ -1171,7 +1157,7 @@ impl Main {
 			"gRPC endpoints",
 		);
 
-		let mut interval = tokio::time::interval(Duration::from_secs(10));
+		let mut interval = tokio::time::interval(time::Duration::from_secs(10));
 		info!("initializing go-eigentrust");
 		self.init_et().await?;
 		loop {
