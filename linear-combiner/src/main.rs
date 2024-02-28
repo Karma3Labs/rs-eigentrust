@@ -59,7 +59,7 @@ impl LinearCombiner for LinearCombinerService {
 		)
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let mut offset = CheckpointManager::read_checkpoint(&db).map_err(|e| e.into_status())?;
+		let mut offset = CheckpointManager::read_checkpoint(&db)?;
 
 		let mut terms = Vec::new();
 		let mut stream = request.into_inner();
@@ -71,22 +71,18 @@ impl LinearCombiner for LinearCombinerService {
 			let domain = term.domain.to_be_bytes();
 			let form = term.form.to_be_bytes();
 
-			let (x, is_x_new) = IndexManager::get_index(&db, term.from.clone(), offset)
-				.map_err(|e| e.into_status())?;
+			let (x, is_x_new) = IndexManager::get_index(&db, term.from.clone(), offset)?;
 
 			// If x is new, write new mapping and increment the offset
 			if is_x_new {
-				MappingManager::write_mapping(&db, x.to_vec(), term.from.clone())
-					.map_err(|e| e.into_status())?;
+				MappingManager::write_mapping(&db, x.to_vec(), term.from.clone())?;
 				offset += 1;
 			}
-			let (y, is_y_new) = IndexManager::get_index(&db, term.to.clone(), offset)
-				.map_err(|e| e.into_status())?;
+			let (y, is_y_new) = IndexManager::get_index(&db, term.to.clone(), offset)?;
 
 			// If y is new, write new mapping and increment the offset
 			if is_y_new {
-				MappingManager::write_mapping(&db, y.to_vec(), term.to.clone())
-					.map_err(|e| e.into_status())?;
+				MappingManager::write_mapping(&db, y.to_vec(), term.to.clone())?;
 				offset += 1;
 			}
 
@@ -103,13 +99,11 @@ impl LinearCombiner for LinearCombinerService {
 				term.weight
 			);
 
-			let value = ItemManager::update_value(&db, key.clone(), term.weight, term.timestamp)
-				.map_err(|e| e.into_status())?;
-			UpdateManager::set_value(&db, key.clone(), value, term.timestamp)
-				.map_err(|e| e.into_status())?;
+			let value = ItemManager::update_value(&db, key.clone(), term.weight, term.timestamp)?;
+			UpdateManager::set_value(&db, key.clone(), value, term.timestamp)?;
 		}
 
-		CheckpointManager::write_checkpoint(&db, offset).map_err(|e| e.into_status())?;
+		CheckpointManager::write_checkpoint(&db, offset)?;
 
 		Ok(Response::new(Void {}))
 	}
@@ -121,8 +115,7 @@ impl LinearCombiner for LinearCombinerService {
 		let db = DB::open_cf(&Options::default(), &self.db_url, vec!["mapping"])
 			.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let mappings = MappingManager::read_mappings(&db, mapping_query.start, mapping_query.size)
-			.map_err(|e| e.into_status())?;
+		let mappings = MappingManager::read_mappings(&db, mapping_query.start, mapping_query.size)?;
 
 		let (tx, rx) = channel(1);
 		for x in mappings.clone() {
@@ -144,8 +137,7 @@ impl LinearCombiner for LinearCombinerService {
 		let mut prefix = Vec::new();
 		prefix.extend_from_slice(&batch.domain.to_be_bytes());
 		prefix.extend_from_slice(&batch.form.to_be_bytes());
-		let items = UpdateManager::read_batch(&db, prefix.clone(), batch.size)
-			.map_err(|e| e.into_status())?;
+		let items = UpdateManager::read_batch(&db, prefix.clone(), batch.size)?;
 
 		let (tx, rx) = channel(1);
 		for x in items.clone() {
@@ -155,7 +147,7 @@ impl LinearCombiner for LinearCombinerService {
 			}
 		}
 
-		UpdateManager::delete_batch(&db, prefix, items).map_err(|e| e.into_status())?;
+		UpdateManager::delete_batch(&db, prefix, items)?;
 
 		Ok(Response::new(ReceiverStream::new(rx)))
 	}
@@ -186,8 +178,7 @@ impl LinearCombiner for LinearCombinerService {
 		prefix.extend_from_slice(&domain_bytes);
 		prefix.extend_from_slice(&form_bytes);
 
-		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))
-			.map_err(|e| e.into_status())?;
+		let items = ItemManager::read_window(&db, prefix, (x_start, y_start), (x_end, y_end))?;
 
 		println!("Read items: {:?}", items);
 
