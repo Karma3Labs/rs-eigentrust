@@ -3,7 +3,6 @@ use rocksdb::Error as RocksDbError;
 use secp256k1::Error as SecpError;
 use serde_json::Error;
 use thiserror::Error;
-use tonic::Status;
 
 #[derive(Debug, Error)]
 pub enum AttTrError {
@@ -32,8 +31,8 @@ pub enum AttTrError {
 	ParseError,
 }
 
-impl AttTrError {
-	pub fn into_status(self) -> Status {
-		Status::internal(format!("Internal error: {}", self))
+impl From<AttTrError> for tonic::Status {
+	fn from(value: AttTrError) -> Self {
+		Self::internal(format!("Internal error: {}", value))
 	}
 }

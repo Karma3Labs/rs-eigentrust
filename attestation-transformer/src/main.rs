@@ -1,5 +1,12 @@
-use error::AttTrError;
+use std::error::Error;
+
 use futures::stream::iter;
+use rocksdb::{Options, DB};
+use serde_json::from_str;
+use tonic::transport::Channel;
+use tonic::{transport::Server, Request, Response, Status};
+
+use error::AttTrError;
 use managers::checkpoint::CheckpointManager;
 use managers::term::TermManager;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
@@ -7,17 +14,11 @@ use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
-use rocksdb::{Options, DB};
 use schemas::security::SecurityReportSchema;
 use schemas::status::StatusSchema;
 use schemas::trust::TrustSchema;
 use schemas::{IntoTerm, SchemaType};
-use serde_json::from_str;
-use std::error::Error;
 use term::Term;
-
-use tonic::transport::Channel;
-use tonic::{transport::Server, Request, Response, Status};
 
 pub mod did;
 pub mod error;
@@ -95,8 +96,7 @@ impl Transformer for TransformerService {
 		)
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let (ch_offset, ct_offset) =
-			CheckpointManager::read_checkpoint(&db).map_err(|e| e.into_status())?;
+		let (ch_offset, ct_offset) = CheckpointManager::read_checkpoint(&db)?;
 
 		let indexer_query = Query {
 			source_address: ATTESTATION_SOURCE_ADDRESS.to_owned(),
@@ -115,24 +115,23 @@ impl Transformer for TransformerService {
 		let mut terms = Vec::new();
 		// ResponseStream
 		while let Ok(Some(res)) = response.message().await {
-			let parsed_terms = Self::parse_event(res).map_err(|e| e.into_status())?;
+			let parsed_terms = Self::parse_event(res)?;
 			terms.push(parsed_terms);
 		}
 		println!("Received num events: {}", terms.len());
 		println!("Received terms: {:#?}", terms);
 
 		let num_new_term_groups =
-			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError.into_status())?;
+			u32::try_from(terms.len()).map_err(|_| AttTrError::SerialisationError)?;
 		let new_checkpoint = ch_offset + num_new_term_groups;
 
 		let (new_count, indexed_terms) = TermManager::get_indexed_terms(ct_offset, terms)
-			.map_err(|_| AttTrError::SerialisationError.into_status())?;
+			.map_err(|_| AttTrError::SerialisationError)?;
 
 		println!("Received num terms: {}", new_count);
 
-		TermManager::write_terms(&db, indexed_terms).map_err(|e| e.into_status())?;
-		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)
-			.map_err(|e| e.into_status())?;
+		TermManager::write_terms(&db, indexed_terms)?;
+		CheckpointManager::write_checkpoint(&db, new_checkpoint, new_count)?;
 
 		let event_result = EventResult { num_terms: new_count - ct_offset, total_count: new_count };
 		Ok(Response::new(event_result))
@@ -156,14 +155,13 @@ impl Transformer for TransformerService {
 		)
 		.map_err(|e| Status::internal(format!("Internal error: {}", e)))?;
 
-		let terms = TermManager::read_terms(&db, inner).map_err(|e| e.into_status())?;
+		let terms = TermManager::read_terms(&db, inner)?;
 		let num_terms = terms.len();
 
 		let mut client = LinearCombinerClient::new(self.lt_channel.clone());
 		client.sync_transformer(Request::new(iter(terms))).await?;
 
-		let term_size =
-			u32::try_from(num_terms).map_err(|_| AttTrError::SerialisationError.into_status())?;
+		let term_size = u32::try_from(num_terms).map_err(|_| AttTrError::SerialisationError)?;
 		let res = TermResult { size: term_size };
 
 		Ok(Response::new(res))
@@ -184,7 +182,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-	use crate::did::Did;
+	use secp256k1::rand::thread_rng;
+	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
+	use serde_json::to_string;
+	use sha3::{Digest, Keccak256};
+
+	use proto_buf::indexer::IndexerEvent;
+
+	use crate::did::{Did, Schema};
 	use crate::schemas::status::{CredentialSubject, CurrentStatus, StatusSchema};
 	use crate::schemas::trust::{
 		CredentialSubject as CredentialSubjectTrust, DomainTrust, TrustSchema,
@@ -193,11 +198,6 @@ mod test {
 	use crate::term::Term;
 	use crate::utils::address_from_ecdsa_key;
 	use crate::TransformerService;
-	use proto_buf::indexer::IndexerEvent;
-	use secp256k1::rand::thread_rng;
-	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
-	use serde_json::to_string;
-	use sha3::{Digest, Keccak256};
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
@@ -231,7 +231,38 @@ mod test {
 			StatusSchema::new(kind, issuer, cs, proof)
 		}
 
-		pub fn generate_from_sk(
+		pub fn generate_from_sk(id: String, current_status: CurrentStatus, sk: SecretKey) -> Self {
+			let did = Did::parse_snap(id.clone()).unwrap();
+			let mut keccak = Keccak256::default();
+			keccak.update([did.schema.into()]);
+			keccak.update(&did.key);
+			keccak.update([current_status.clone().into()]);
+			let digest = keccak.finalize();
+
+			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
+
+			let secp = Secp256k1::new();
+			let pk = sk.public_key(&secp);
+
+			let res = secp.sign_ecdsa_recoverable(&message, &sk);
+			let (rec_id, sig_bytes) = res.serialize_compact();
+			let rec_id_i32 = rec_id.to_i32();
+
+			let mut bytes = Vec::new();
+			bytes.extend_from_slice(&sig_bytes);
+			bytes.push(rec_id_i32.to_le_bytes()[0]);
+			let encoded_sig = hex::encode(bytes);
+
+			let kind = "StatusCredential".to_string();
+			let addr = address_from_ecdsa_key(&pk);
+			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
+			let cs = CredentialSubject::new(id, current_status);
+			let proof = Proof::new(encoded_sig);
+
+			StatusSchema::new(kind, issuer, cs, proof)
+		}
+
+		pub fn generate_from_sk_string(
 			id: String, current_status: CurrentStatus, sk_string: String,
 		) -> Self {
 			let did = Did::parse_snap(id.clone()).unwrap();
@@ -268,7 +299,41 @@ mod test {
 	}
 
 	impl TrustSchema {
-		pub fn generate_from_sk(
+		pub fn generate_from_sk(did_string: String, trust_arc: DomainTrust, sk: SecretKey) -> Self {
+			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
+
+			let mut keccak = Keccak256::default();
+			keccak.update([did.schema.into()]);
+			keccak.update(&did.key);
+			keccak.update([trust_arc.scope.clone().into()]);
+			// keccak.update(&trust_arc.level.to_be_bytes());
+
+			let digest = keccak.finalize();
+
+			let message = Message::from_digest_slice(digest.as_ref()).unwrap();
+
+			let secp = Secp256k1::new();
+			let pk = sk.public_key(&secp);
+
+			let res = secp.sign_ecdsa_recoverable(&message, &sk);
+			let (rec_id, sig_bytes) = res.serialize_compact();
+			let rec_id = rec_id.to_i32().to_le_bytes()[0];
+
+			let mut bytes = Vec::new();
+			bytes.extend_from_slice(&sig_bytes);
+			bytes.push(rec_id);
+			let sig_string = hex::encode(bytes);
+
+			let kind = "TrustCredential".to_string();
+			let addr = address_from_ecdsa_key(&pk);
+			let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
+			let cs = CredentialSubjectTrust::new(did_string, vec![trust_arc]);
+			let proof = Proof::new(sig_string);
+
+			TrustSchema::new(kind, issuer, cs, proof)
+		}
+
+		pub fn generate_from_sk_string(
 			did_string: String, trust_arc: DomainTrust, sk_string: String,
 		) -> Self {
 			let did = Did::parse_pkh_eth(did_string.clone()).unwrap();
@@ -361,34 +426,43 @@ mod test {
 		// q => s2 - Status Credential - Endorse
 		// x => s1 - Status Credential - Endorse
 
-		let p_x1 = TrustSchema::generate_from_sk(
+		let p_x1 = TrustSchema::generate_from_sk_string(
 			x.clone(),
 			DomainTrust::new(Domain::Honesty, 1., Vec::new()),
 			p_sk.clone(),
 		);
-		let x_z = TrustSchema::generate_from_sk(
+		let x_z = TrustSchema::generate_from_sk_string(
 			z.clone(),
 			DomainTrust::new(Domain::Honesty, 1., Vec::new()),
 			x_sk.clone(),
 		);
 
-		let p_x2 = TrustSchema::generate_from_sk(
+		let p_x2 = TrustSchema::generate_from_sk_string(
 			x.clone(),
 			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
 			p_sk.clone(),
 		);
-		let q_y = TrustSchema::generate_from_sk(
+		let q_y = TrustSchema::generate_from_sk_string(
 			y.clone(),
 			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
 			q_sk.clone(),
 		);
 
-		let q_s2 =
-			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Endorsed, q_sk.clone());
-		let p_s1 =
-			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Endorsed, p_sk.clone());
-		let x_s1 =
-			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Endorsed, x_sk.clone());
+		let q_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Endorsed,
+			q_sk.clone(),
+		);
+		let p_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Endorsed,
+			p_sk.clone(),
+		);
+		let x_s1 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Endorsed,
+			x_sk.clone(),
+		);
 
 		// Distrust
 		// p => y - Trust Credential - Honest - distrust
@@ -397,28 +471,37 @@ mod test {
 		// y => s2 - Status Credential - Dispute
 		// z => s1 - Status Credential - Dispute
 		// z => s2 - Status Credential - Dispute
-		let p_y = TrustSchema::generate_from_sk(
+		let p_y = TrustSchema::generate_from_sk_string(
 			y.clone(),
 			DomainTrust::new(Domain::Honesty, -1., Vec::new()),
 			p_sk.clone(),
 		);
-		let q_x = TrustSchema::generate_from_sk(
+		let q_x = TrustSchema::generate_from_sk_string(
 			x.clone(),
 			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
 			q_sk.clone(),
 		);
-		let y_z = TrustSchema::generate_from_sk(
+		let y_z = TrustSchema::generate_from_sk_string(
 			z.clone(),
 			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
 			y_sk.clone(),
 		);
 
-		let y_s2 =
-			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Disputed, y_sk.clone());
-		let z_s1 =
-			StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Disputed, z_sk.clone());
-		let z_s2 =
-			StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Disputed, z_sk.clone());
+		let y_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Disputed,
+			y_sk.clone(),
+		);
+		let z_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Disputed,
+			z_sk.clone(),
+		);
+		let z_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Disputed,
+			z_sk.clone(),
+		);
 
 		let trust_arcs = [p_x1, p_x2, q_y, x_z, p_y, q_x, y_z];
 		let status_arcs = [q_s2, p_s1, x_s1, y_s2, z_s1, z_s2];
@@ -456,6 +539,487 @@ mod test {
 		}
 
 		for schema_value in status_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: status_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				status_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+	}
+
+	#[test]
+	fn generate_sybil_attack_test_schemas() {
+		let x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
+		let x = "did:pkh:eth:0xa9572220348b1080264e81c0779f77c144790cd6".to_owned();
+
+		let y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
+		let y = "did:pkh:eth:0xba9090181312bd0e40254a3dc29841980dd392d2".to_owned();
+
+		let z_sk = "ac7f0d9eaea4d4bf5438b887e34d0cf87e7f98d97da70eff001850487b2cae23".to_owned();
+		let z = "did:pkh:eth:0x9a2954b87d8745df0b1010291c51d68ae9269d43".to_owned();
+
+		let p_sk = "bbb7d40b7bb8e41c550696fdef78fff6f013bb34627ba50ca2d63b6e84cffa6c".to_owned();
+		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
+
+		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
+		let _q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+
+		// Trust - Direct
+		// x => y - Trust Credential - Software security - trust
+		// x => z - Trust Credential - Software security - trust
+		// y => x - Trust Credential - Software security - trust
+		// y => z - Trust Credential - Software security - trust
+		// z => x - Trust Credential - Software security - trust
+		// z => y - Trust Credential - Software security - trust
+		// q => y - Trust Credential - Software security - trust
+		let x_y = TrustSchema::generate_from_sk_string(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			x_sk.clone(),
+		);
+		let x_z = TrustSchema::generate_from_sk_string(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			x_sk.clone(),
+		);
+		let y_x = TrustSchema::generate_from_sk_string(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			y_sk.clone(),
+		);
+		let y_z = TrustSchema::generate_from_sk_string(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			y_sk.clone(),
+		);
+		let z_x = TrustSchema::generate_from_sk_string(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			z_sk.clone(),
+		);
+		let z_y = TrustSchema::generate_from_sk_string(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			z_sk.clone(),
+		);
+		let q_y = TrustSchema::generate_from_sk_string(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			q_sk.clone(),
+		);
+
+		// Trust - Snap
+		// x => s1 - Status Credential - Endorse
+		// y => s1 - Status Credential - Endorse
+		// z => s1 - Status Credential - Endorse
+		// p => s2 - Status Credential - Endorse
+		// q => s2 - Status Credential - Endorse
+		let x_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Endorsed,
+			x_sk.clone(),
+		);
+		let y_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Endorsed,
+			y_sk.clone(),
+		);
+		let z_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Endorsed,
+			z_sk.clone(),
+		);
+		let p_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Endorsed,
+			p_sk.clone(),
+		);
+		let q_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Endorsed,
+			q_sk.clone(),
+		);
+
+		// Distrust - Direct
+		// p => x - Trust Credential - Software security - distrust
+		// p => y - Trust Credential - Software security - distrust
+		// p => z - Trust Credential - Software security - distrust
+		// x => p - Trust Credential - Software security - distrust
+		// y => p - Trust Credential - Software security - distrust
+		// z => p - Trust Credential - Software security - distrust
+		let p_x = TrustSchema::generate_from_sk_string(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let p_y = TrustSchema::generate_from_sk_string(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let p_z = TrustSchema::generate_from_sk_string(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let x_p = TrustSchema::generate_from_sk_string(
+			p.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			x_sk.clone(),
+		);
+		let y_p = TrustSchema::generate_from_sk_string(
+			p.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			y_sk.clone(),
+		);
+		let z_p = TrustSchema::generate_from_sk_string(
+			p.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			z_sk.clone(),
+		);
+
+		// Distrust - Snap
+		// p => s1 - Status Credential - Dispute
+		// q => s1 - Status Credential - Dispute
+		let p_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Disputed,
+			p_sk.clone(),
+		);
+		let q_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Disputed,
+			q_sk.clone(),
+		);
+
+		let trust_arcs = [x_y, x_z, y_x, y_z, z_x, z_y, q_y, p_x, p_y, p_z, x_p, y_p, z_p];
+		let status_arcs = [x_s1, y_s1, z_s1, p_s2, q_s2, p_s1, q_s1];
+
+		println!("num attestations: {}", trust_arcs.len() + status_arcs.len());
+
+		let mut timestamp = 2397848;
+		let mut id = 1;
+		let trust_schema_id = 2;
+		let status_schema_id = 1;
+
+		println!("id;timestamp;schema_id;schema_value");
+
+		for schema_value in trust_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: trust_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				trust_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+
+		for schema_value in status_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: status_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				status_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+	}
+
+	#[test]
+	fn generate_sleeping_agent_attack_test_schemas() {
+		let _x_sk = "7f6f2ccdb23f2abb7b69278e947c01c6160a31cf02c19d06d0f6e5ab1d768b95".to_owned();
+		let x = "did:pkh:eth:0xa9572220348b1080264e81c0779f77c144790cd6".to_owned();
+
+		let _y_sk = "117be1de549d1d4322c4711f11efa0c5137903124f85fc37c761ffc91ace30cb".to_owned();
+		let y = "did:pkh:eth:0xba9090181312bd0e40254a3dc29841980dd392d2".to_owned();
+
+		let z_sk = "ac7f0d9eaea4d4bf5438b887e34d0cf87e7f98d97da70eff001850487b2cae23".to_owned();
+		let z = "did:pkh:eth:0x9a2954b87d8745df0b1010291c51d68ae9269d43".to_owned();
+
+		let p_sk = "bbb7d40b7bb8e41c550696fdef78fff6f013bb34627ba50ca2d63b6e84cffa6c".to_owned();
+		let p = "did:pkh:eth:0x651a3c584f4c71b54c50ea73f41b936845ab4fdf".to_owned();
+
+		let q_sk = "9a32e1a6638ce87528a3f0303c7a9cecba4ed5fef0551f3afd1c7865bc66308f".to_owned();
+		let q = "did:pkh:eth:0x138aaabbc2ad61f8ea7f2d4155cc7323f26f8775".to_owned();
+
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+
+		// Trust - Direct
+		// P => Q - Trust Credential - Software security - trust
+		// Q => P - Trust Credential - Software security - trust
+		// P => Z - Trust Credential - Software security - trust
+		// Q => Z - Trust Credential - Software security - trust
+		let p_q = TrustSchema::generate_from_sk_string(
+			q.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			p_sk.clone(),
+		);
+		let q_p = TrustSchema::generate_from_sk_string(
+			p.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			q_sk.clone(),
+		);
+		let p_z = TrustSchema::generate_from_sk_string(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			p_sk.clone(),
+		);
+		let q_z = TrustSchema::generate_from_sk_string(
+			z.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, 1., Vec::new()),
+			q_sk.clone(),
+		);
+
+		// Trust - Snap
+		// P => S2 - Status Credential - Endorse
+		// Q => S2 - Status Credential - Endorse
+		// Z => S2 - Status Credential - Endorse
+		let p_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Endorsed,
+			p_sk.clone(),
+		);
+		let q_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Endorsed,
+			q_sk.clone(),
+		);
+		let z_s2 = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Endorsed,
+			z_sk.clone(),
+		);
+
+		// Distrust - Direct
+		// P => X - Trust Credential - Software security - distrust
+		// P => Y - Trust Credential - Software security - distrust
+		// Q => X - Trust Credential - Software security - distrust
+		// Q => Y - Trust Credential - Software security - distrust
+		let p_x = TrustSchema::generate_from_sk_string(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let p_y = TrustSchema::generate_from_sk_string(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			p_sk.clone(),
+		);
+		let q_x = TrustSchema::generate_from_sk_string(
+			x.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			q_sk.clone(),
+		);
+		let q_y = TrustSchema::generate_from_sk_string(
+			y.clone(),
+			DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+			q_sk.clone(),
+		);
+
+		// Distrust - Snap
+		// Z => S2 - Status Credential - Dispute
+		let z_s2_override = StatusSchema::generate_from_sk_string(
+			s2.clone(),
+			CurrentStatus::Disputed,
+			z_sk.clone(),
+		);
+
+		// Trust - Snap
+		// Z => S1 - Status Credential - Endorse
+		let z_s1 = StatusSchema::generate_from_sk_string(
+			s1.clone(),
+			CurrentStatus::Endorsed,
+			z_sk.clone(),
+		);
+
+		// 1st round
+		let trust_arcs = [p_q, q_p, p_z, q_z, p_x, p_y, q_x, q_y];
+		let status_arcs_1st = [p_s2, q_s2, z_s2];
+		// 2nd round
+		let status_arcs_2nd = [z_s1, z_s2_override];
+
+		println!(
+			"num attestations: {}",
+			trust_arcs.len() + status_arcs_1st.len() + status_arcs_2nd.len()
+		);
+
+		let mut timestamp = 2397848;
+		let mut id = 1;
+		let trust_schema_id = 2;
+		let status_schema_id = 1;
+
+		println!("id;timestamp;schema_id;schema_value");
+
+		for schema_value in trust_arcs {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: trust_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				trust_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+
+		for schema_value in [status_arcs_1st.to_vec(), status_arcs_2nd.to_vec()].concat() {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: status_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				status_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+	}
+
+	#[test]
+	fn generate_100_sybils_test_schemas() {
+		let s1 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c2".to_owned();
+		let s2 = "snap://0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1".to_owned();
+
+		let num_trustees = 100;
+		let rng = &mut thread_rng();
+		let secp = Secp256k1::new();
+
+		let mut trustees = Vec::new();
+		let mut sks = Vec::new();
+		trustees.push("did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c5".to_string());
+
+		let mut trust_credentials = Vec::new();
+		let mut status_credentials = Vec::new();
+		for _ in 0..num_trustees {
+			let sk = SecretKey::new(rng);
+			sks.push(sk);
+
+			for trustee in &trustees {
+				let trust_credential = TrustSchema::generate_from_sk(
+					trustee.clone(),
+					DomainTrust::new(Domain::SoftwareSecurity, -1., Vec::new()),
+					sk,
+				);
+				trust_credentials.push(trust_credential);
+			}
+
+			let pk = sk.public_key(&secp);
+			let addr = address_from_ecdsa_key(&pk);
+			let did = Did::new(Schema::PkhEth, addr);
+			let did_string: String = did.into();
+			trustees.push(did_string);
+
+			let endorsment_credential =
+				StatusSchema::generate_from_sk(s1.clone(), CurrentStatus::Endorsed, sk);
+			let dispute_credential =
+				StatusSchema::generate_from_sk(s2.clone(), CurrentStatus::Disputed, sk);
+			status_credentials.push(endorsment_credential);
+			status_credentials.push(dispute_credential);
+		}
+
+		println!(
+			"num attestations: {}",
+			trust_credentials.len() + status_credentials.len()
+		);
+
+		let mut timestamp = 2397848;
+		let mut id = 1;
+		let trust_schema_id = 2;
+		let status_schema_id = 1;
+
+		println!("id;timestamp;schema_id;schema_value");
+
+		for schema_value in trust_credentials {
+			// Validate event
+			let indexed_event = IndexerEvent {
+				id,
+				schema_id: trust_schema_id,
+				schema_value: to_string(&schema_value).unwrap(),
+				timestamp,
+			};
+			let _ = TransformerService::parse_event(indexed_event).unwrap();
+
+			let string = [
+				id.to_string(),
+				timestamp.to_string(),
+				trust_schema_id.to_string(),
+				to_string(&schema_value).unwrap(),
+			]
+			.join(";");
+			println!("{}", string);
+
+			timestamp += 1000;
+			id += 1;
+		}
+
+		for schema_value in status_credentials {
 			// Validate event
 			let indexed_event = IndexerEvent {
 				id,

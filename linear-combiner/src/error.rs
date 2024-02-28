@@ -1,6 +1,5 @@
 use rocksdb::Error as RocksDbError;
 use thiserror::Error;
-pub use tonic::Status;
 
 #[derive(Debug, Error)]
 pub enum LcError {
@@ -17,8 +16,8 @@ pub enum LcError {
 	ParseError,
 }
 
-impl LcError {
-	pub fn into_status(self) -> Status {
-		Status::internal(format!("Internal error: {}", self))
+impl From<LcError> for tonic::Status {
+	fn from(value: LcError) -> Self {
+		Self::internal(format!("Internal error: {}", value))
 	}
 }
