@@ -35,7 +35,10 @@ async fn get_did_mapping(
 			.await?
 			.into_inner();
 		while let Some(mapping) = stream.message().await? {
-			m.insert(mapping.id, unhexlify(&mapping.did)?);
+			m.insert(
+				mapping.id,
+				canonicalize_peer_did(&unhexlify(&mapping.did)?)?,
+			);
 			more = true;
 			start += 1;
 		}
@@ -222,7 +225,6 @@ impl UpdateCmd {
 			.into_iter()
 			.map(|(id, did)| (did, id))
 			.collect();
-		println!("mapping={m:?}");
 		let mut updates = BTreeMap::new();
 		for (line_no, line) in std::io::stdin().lines().enumerate() {
 			let line = line?;

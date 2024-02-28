@@ -1,10 +1,10 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Debug;
 use std::io::IsTerminal;
 use std::str::FromStr;
 use std::time;
-use std::time::Duration;
 
 use clap::Parser as ClapParser;
 use cli::{Args, LogFormatArg};
@@ -236,78 +236,56 @@ enum MainError {
 
 struct Domain {
 	domain_id: DomainId,
+	interval: Timestamp,
 	scope: String,
 	lt_id: String,
 	pt_id: String,
 	gt_id: String,
 	gtp_id: String,
+	alpha: Option<f64>,
 	status_schema: String,
+	issuer_id: String,
 	s3_output_urls: Vec<Url>,
 	post_scores_endpoints: Vec<Url>,
 	api_keys: HashMap<Url, String>,
 	// Local trust updates received from LC but not sent to ET yet.
 	local_trust_updates: BTreeMap<Timestamp, TrustMatrix>,
+	// TODO(ek): Remove this.  Needed because we can't fetch incrementally from LC yet.
+	lt_form1: TrustMatrix,
+	lt_form0: TrustMatrix,
 	// Peer index (x/y/i/j) <-> peer ID mappings.
 	peer_id_to_did: BTreeMap<u32, String>,
 	peer_did_to_id: BTreeMap<String, u32>,
-	// Timestamp of the latest LT entry fetched from LC.
-	lt_fetch_ts_form1: Timestamp,
-	lt_fetch_ts_form0: Timestamp,
 	// Timestamp of the latest snap status update fetched from indexer.
 	ss_fetch_offset: u32,
-	// Timestamp of the latest snap status update merged into the master copy.
-	ss_update_ts: Timestamp,
-	// Timestamp of the latest update received in the merged update stream.
-	last_update_ts: Timestamp,
-	// Last compute timestamp;
+	// Last compute timestamp.
 	last_compute_ts: Timestamp,
+	// When the next compute cycle is due; None if nothing is scheduled yet.
+	compute_ts: Option<Timestamp>,
 	gtp: TrustVector,
 	gt: TrustVector,
 	snap_status_updates: BTreeMap<Timestamp, SnapStatuses>,
 	snap_statuses: SnapStatuses,
 	snap_scores: SnapScores,
 	accuracies: BTreeMap<IssuerId, Accuracy>,
-	start_timestamp: u64,
+	start_ts: Timestamp,
+	alt_pub_ts: Timestamp,
 }
 
 impl Domain {
-	#[allow(clippy::too_many_arguments)] // TODO(ek)
-	async fn run_once(
-		&mut self, idx_client: &mut IndexerClient<Channel>,
-		lc_client: &mut LinearCombinerClient<Channel>, tm_client: &mut TrustMatrixClient<Channel>,
-		tv_client: &mut TrustVectorClient<Channel>, et_client: &mut ComputeClient<Channel>,
-		interval: Timestamp, alpha: Option<f64>, issuer_id: &str,
-	) -> Result<(), Box<dyn Error>> {
-		let mut local_trust_updates = self.local_trust_updates.clone();
-		Self::fetch_local_trust(
-			self.domain_id, lc_client, &mut self.lt_fetch_ts_form1, &mut self.lt_fetch_ts_form0,
-			&mut local_trust_updates,
-		)
-		.await
-		.map_err(|e| MainError::LoadLocalTrust(e))?;
-		let mut snap_status_updates = self.snap_status_updates.clone();
+	async fn run_once(&mut self, clients: &mut Clients) -> Result<(), Box<dyn Error>> {
+		self.fetch_local_trust(&mut clients.lc).await.map_err(|e| MainError::LoadLocalTrust(e))?;
 		if !self.status_schema.is_empty() {
-			Self::fetch_snap_statuses(
-				idx_client, &mut self.ss_fetch_offset, &self.status_schema,
-				&mut snap_status_updates,
-			)
-			.await
-			.map_err(|e| MainError::LoadSnapStatuses(e))?;
+			self.fetch_snap_statuses(&mut clients.idx)
+				.await
+				.map_err(|e| MainError::LoadSnapStatuses(e))?;
 		}
-		let mut fetch_next_lt_update = || {
-			local_trust_updates.pop_first().map(|(timestamp, trust_matrix)| Update {
-				timestamp,
-				body: UpdateBody::LocalTrust(trust_matrix),
-			})
-		};
-		let mut fetch_next_ss_update = || {
-			snap_status_updates.pop_first().map(|(timestamp, snap_statuses)| Update {
-				timestamp,
-				body: UpdateBody::SnapStatuses(snap_statuses),
-			})
-		};
-		let mut next_lt_update = fetch_next_lt_update();
-		let mut next_ss_update = fetch_next_ss_update();
+		// TODO(ek): Real-time mode; None if for simulated inputs (means we consume everything).
+		let now = Some(
+			time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_millis() as u64,
+		);
+		let mut next_lt_update = self.fetch_next_lt_update(now);
+		let mut next_ss_update = self.fetch_next_ss_update(now);
 		while next_lt_update.is_some() || next_ss_update.is_some() {
 			let next_update = if next_lt_update.is_none() {
 				next_ss_update.take()
@@ -323,94 +301,71 @@ impl Domain {
 				}
 			};
 			let update = next_update.unwrap();
-			let ts = update.timestamp;
-			self.gt.clear();
-			if ts >= self.last_update_ts {
-				self.last_update_ts = ts;
-				let ts_window = ts / interval * interval;
-				if self.last_compute_ts < ts_window {
+			let update_compute_ts = (update.timestamp / self.interval + 1) * self.interval;
+			match self.compute_ts {
+				None => {
 					info!(
-						window_from = self.last_compute_ts,
-						window_to = ts_window,
-						triggering_timestamp = ts,
-						"performing core compute"
+						domain = self.domain_id,
+						update_compute = update_compute_ts.to_iso8601(),
+						"scheduling compute"
 					);
-					self.last_compute_ts = ts_window;
-					self.update_did_mappings(lc_client).await?;
-
-					let (_pt_ts, pt_ent) = tv_client.get(&self.pt_id).await?;
-					let pt = read_tv(pt_ent).await?;
-					let (_lt_ts, lt_ent) = tm_client.get(&self.lt_id).await?;
-					let (outbound_trusts, inbound_distrusts) = read_trusts(lt_ent).await?;
-					let mut ht = HashSet::<u32>::new();
-					for (&pt_peer, _) in pt.iter() {
-						if let Some(trusted_by_pt_peer) = outbound_trusts.get(&pt_peer) {
-							for &ht_peer in trusted_by_pt_peer {
-								ht.insert(ht_peer);
-							}
-						}
-					}
-					let ht_dids: Vec<String> = ht
-						.iter()
-						.map(|peer| {
-							self.peer_id_to_did.get(peer).cloned().unwrap_or(peer.to_string())
-						})
-						.collect();
-					debug!(?ht_dids, "highly trusted peers");
-
-					match Self::run_et(
-						&self.lt_id, &self.pt_id, &self.gt_id, &self.gtp_id, alpha, et_client,
-						tv_client,
-					)
-					.await
-					{
-						Ok((gtp1, gt1)) => {
-							self.gtp = gtp1;
-							self.gt = gt1;
+					self.compute_ts = Some(update_compute_ts);
+				},
+				Some(compute_ts) => {
+					match compute_ts.cmp(&update_compute_ts) {
+						Ordering::Less => {
+							// compute_ts <= update.timestamp <= now
+							assert!(now.map_or(true, |now| compute_ts <= now));
+							// The scheduled compute cycle is due now
+							info!(
+								domain = self.domain_id,
+								from = self.last_compute_ts.to_iso8601(),
+								to = compute_ts.to_iso8601(),
+								update = update.timestamp.to_iso8601(),
+								"performing core compute"
+							);
+							self.recompute(clients).await?;
+							self.last_compute_ts = compute_ts;
+							self.compute_ts = Some(update_compute_ts);
 						},
-						Err(e) => {
-							error!(
-								err = ?e,
-								"compute failed, Snap scores will be based on old peer scores",
+						Ordering::Equal => {},
+						Ordering::Greater => {
+							warn!(
+								domain = self.domain_id,
+								update = update.timestamp.to_iso8601(),
+								update_compute = update_compute_ts.to_iso8601(),
+								compute = compute_ts.to_iso8601(),
+								"received update that belonged to a previous compute cycle!"
 							);
 						},
 					}
-					let mut tp_d = 1f64;
-					for ht_peer in ht {
-						let tp = self.gtp.get(&ht_peer).cloned().unwrap_or(0f64);
-						if tp_d > tp {
-							tp_d = tp;
+				},
+			}
+			trace!(
+				domain = self.domain_id,
+				timestamp = update.timestamp.to_iso8601(),
+				"processing update"
+			);
+			match update.body {
+				UpdateBody::LocalTrust(lt) => {
+					if !lt.is_empty() {
+						self.upload_lt(&mut clients.tm, update.timestamp, &lt).await?
+					}
+				},
+				UpdateBody::SnapStatuses(statuses) => {
+					for (snap_id, opinions) in statuses {
+						let target = self.snap_statuses.entry(snap_id).or_default();
+						for (issuer_id, value) in opinions {
+							target.insert(issuer_id, value);
 						}
 					}
-					debug!(tp_d, "minimum highly trusted peer trust");
-					self.compute_snap_scores(tp_d).await?;
-					self.publish_scores(ts_window, tp_d, &inbound_distrusts, issuer_id).await?;
-				}
-				// for debugging
-				// self.update_did_mappings(lc_client).await?;
-				trace!(domain = self.domain_id, ?update, "processing update");
-				match update.body {
-					UpdateBody::LocalTrust(lt) => {
-						if !lt.is_empty() {
-							self.upload_lt(tm_client, update.timestamp, &lt).await?
-						}
-					},
-					UpdateBody::SnapStatuses(statuses) => {
-						for (snap_id, opinions) in statuses {
-							let target = self.snap_statuses.entry(snap_id).or_default();
-							for (issuer_id, value) in opinions {
-								target.insert(issuer_id, value);
-							}
-						}
-						self.ss_update_ts = update.timestamp;
-					},
-				}
+				},
 			}
 			if next_lt_update.is_none() {
-				next_lt_update = fetch_next_lt_update();
+				next_lt_update = self.fetch_next_lt_update(now);
 			}
 			if next_ss_update.is_none() {
-				next_ss_update = fetch_next_ss_update();
+				next_ss_update = self.fetch_next_ss_update(now);
 			}
 		}
 		// Return unconsumed ones back to the pending list.
@@ -424,58 +379,70 @@ impl Domain {
 				},
 			}
 		}
-		self.local_trust_updates = local_trust_updates;
-		self.snap_status_updates = snap_status_updates;
+		// No more updates.
+		// Check if compute is due one last time.
+		// TODO(ek): For now this happens only in realtime mode.
+		if let Some(compute_ts) = self.compute_ts {
+			let compute_is_due = if let Some(now) = now {
+				// Realtime mode.
+				// Check if it's too late for any events to arrive for the scheduled compute;
+				// allow up to 5 seconds of propagation delay.
+				compute_ts + 5_000 <= now
+			} else {
+				// Non-realtime mode; assume we fetched everything.
+				// TODO(ek): Input tombstone (EOF)
+				true
+			};
+			if compute_is_due {
+				info!(
+					domain = self.domain_id,
+					from = self.last_compute_ts.to_iso8601(),
+					to = compute_ts.to_iso8601(),
+					now = now.map_or("(non-realtime mode)".into(), |ts| ts.to_iso8601()),
+					"performing core compute (no more events allowed for the currently scheduled)"
+				);
+				self.recompute(clients).await?;
+				self.last_compute_ts = compute_ts;
+				self.compute_ts = None;
+			}
+		}
 		Ok(())
 	}
 
 	async fn fetch_local_trust(
-		domain_id: DomainId, lc_client: &mut LinearCombinerClient<Channel>,
-		form1_timestamp: &mut Timestamp, form0_timestamp: &mut Timestamp,
-		updates: &mut BTreeMap<Timestamp, TrustMatrix>,
+		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
 	) -> Result<(), Box<dyn Error>> {
-		let mut last_timestamp = None; // TODO(ek): Hack due to no heartbeat
-		for (form, weight, timestamp) in
-			vec![(1i32, 1.0, form1_timestamp), (0, -1.0, form0_timestamp)]
+		for (form, weight, lt) in
+			vec![(1i32, 1.0, &mut self.lt_form1), (0i32, -1.0, &mut self.lt_form0)]
 		{
 			let batch_req =
-				LtHistoryBatch { domain: domain_id, form, x0: 0, y0: 0, x1: 500, y1: 500 };
+				LtHistoryBatch { domain: self.domain_id, form, x0: 0, y0: 0, x1: 500, y1: 500 };
 			let mut lc_stream = lc_client.get_historic_data(batch_req).await?.into_inner();
 			while let Some(msg) = lc_stream.message().await? {
-				*timestamp = msg.timestamp;
-				match last_timestamp {
-					None => {
-						last_timestamp = Some(msg.timestamp);
-					},
-					Some(ts) => {
-						if ts < msg.timestamp {
-							last_timestamp = Some(msg.timestamp)
-						}
-					},
+				let new_value = (msg.value as f64) * weight;
+				if let Some(&old_value) = lt.get(&(msg.x, msg.y)) {
+					if new_value == old_value {
+						continue;
+					}
 				}
-				let batch = updates.entry(msg.timestamp).or_default();
-				*batch.entry((msg.x, msg.y)).or_default() += (msg.value as f64) * weight;
+				lt.insert((msg.x, msg.y), new_value);
+				let batch = self.local_trust_updates.entry(msg.timestamp).or_default();
+				*batch.entry((msg.x, msg.y)).or_default() += new_value;
 			}
 		}
-		// Force recompute for testing
-		// if let Some(ts) = last_timestamp {
-		// 	updates.entry(ts + 600000).or_default();
-		// }
 		Ok(())
 	}
 
 	async fn fetch_snap_statuses(
-		idx_client: &mut IndexerClient<Channel>, fetch_offset: &mut u32, schema_id: &str,
-		updates: &mut BTreeMap<Timestamp, SnapStatuses>,
+		&mut self, idx_client: &mut IndexerClient<Channel>,
 	) -> Result<(), Box<dyn Error>> {
-		let mut last_timestamp = None; // TODO(ek): Hack due to no heartbeat
 		let mut more = true;
 		while more {
 			let mut stream = idx_client
 				.subscribe(IndexerQuery {
 					source_address: "".to_string(),
-					schema_id: vec![String::from(schema_id)],
-					offset: *fetch_offset,
+					schema_id: vec![self.status_schema.clone()],
+					offset: self.ss_fetch_offset,
 					count: 1000000,
 				})
 				.await?
@@ -483,20 +450,10 @@ impl Domain {
 			more = false;
 			while let Some(entry) = stream.message().await? {
 				more = true;
-				*fetch_offset = entry.id + 1;
-				match last_timestamp {
-					None => {
-						last_timestamp = Some(entry.timestamp);
-					},
-					Some(ts) => {
-						if ts < entry.timestamp {
-							last_timestamp = Some(entry.timestamp)
-						}
-					},
-				}
+				self.ss_fetch_offset += 1;
 				match snap_status_from_vc(entry.schema_value.as_str()) {
 					Ok((snap_id, issuer_id, value)) => {
-						updates
+						self.snap_status_updates
 							.entry(entry.timestamp)
 							.or_default()
 							.entry(snap_id)
@@ -513,15 +470,12 @@ impl Domain {
 				}
 			}
 		}
-		if let Some(ts) = last_timestamp {
-			updates.entry(ts + 600000).or_default();
-		}
 		Ok(())
 	}
 
-	async fn fetch_did_mapping(
-		lc_client: &mut LinearCombinerClient<Channel>,
-	) -> Result<BTreeMap<u32, String>, Box<dyn Error>> {
+	async fn fetch_did_mappings(
+		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
+	) -> Result<(), Box<dyn Error>> {
 		let mut start = 0;
 		let mut more = true;
 		let mut peer_id_to_did = BTreeMap::new();
@@ -549,43 +503,133 @@ impl Domain {
 				more = true;
 			}
 		}
-		Ok(peer_id_to_did)
-	}
-
-	async fn update_did_mappings(
-		&mut self, lc_client: &mut LinearCombinerClient<Channel>,
-	) -> Result<(), Box<dyn Error>> {
-		self.peer_id_to_did = Self::fetch_did_mapping(lc_client).await?;
+		self.peer_id_to_did = peer_id_to_did;
 		self.peer_did_to_id =
 			self.peer_id_to_did.iter().map(|(id, did)| (did.clone(), *id)).collect();
 		Ok(())
 	}
 
-	async fn publish_scores(
-		&mut self, ts_window: Timestamp, tp_d: f64,
-		distrusters: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
-	) -> Result<(), Box<dyn Error>> {
-		let ts_window = if ts_window < self.start_timestamp {
+	fn fetch_next_lt_update(&mut self, now: Option<Timestamp>) -> Option<Update> {
+		let first = match self.local_trust_updates.first_entry() {
+			Some(entry) => entry,
+			None => return None,
+		};
+		let timestamp = *first.key();
+		if now.is_some() && timestamp >= now.unwrap() {
 			info!(
-				self.start_timestamp,
-				"using clipped timestamp for historic data",
+				timestamp = timestamp.to_iso8601(),
+				"ignoring post-dated LT update for now"
 			);
-			self.start_timestamp += 1;
-			self.start_timestamp - 1
+			return None;
+		}
+		let trust_matrix = first.remove();
+		Some(Update { timestamp, body: UpdateBody::LocalTrust(trust_matrix) })
+	}
+
+	fn fetch_next_ss_update(&mut self, now: Option<Timestamp>) -> Option<Update> {
+		let first = match self.snap_status_updates.first_entry() {
+			Some(entry) => entry,
+			None => return None,
+		};
+		let timestamp = *first.key();
+		if now.is_some() && timestamp >= now.unwrap() {
+			info!(
+				timestamp = timestamp.to_iso8601(),
+				"ignoring post-dated SS update for now"
+			);
+			return None;
+		}
+		let snap_statuses = first.remove();
+		Some(Update { timestamp, body: UpdateBody::SnapStatuses(snap_statuses) })
+	}
+
+	async fn recompute(&mut self, clients: &mut Clients) -> Result<(), Box<dyn Error>> {
+		self.fetch_did_mappings(&mut clients.lc).await?;
+
+		let (_pt_ts, pt_ent) = clients.tv.get(&self.pt_id).await?;
+		let pt = read_tv(pt_ent).await?;
+		let (_lt_ts, lt_ent) = clients.tm.get(&self.lt_id).await?;
+		let (outbound_trusts, inbound_distrusts) = read_trusts(lt_ent).await?;
+		let mut ht = HashSet::<u32>::new();
+		for (&pt_peer, _) in pt.iter() {
+			if let Some(trusted_by_pt_peer) = outbound_trusts.get(&pt_peer) {
+				for &ht_peer in trusted_by_pt_peer {
+					ht.insert(ht_peer);
+				}
+			}
+		}
+		let ht_dids: Vec<String> = ht
+			.iter()
+			.map(|peer| self.peer_id_to_did.get(peer).cloned().unwrap_or(peer.to_string()))
+			.collect();
+		trace!(domain = self.domain_id, ?ht_dids, "highly trusted peers");
+
+		match self.run_et(&mut clients.et, &mut clients.tv).await {
+			Ok((gtp, gt)) => {
+				self.gtp = gtp;
+				self.gt = gt;
+				// In case gt was discounted exactly to 0.0,
+				// gtp will have an entry but gt won't.  Add it back.
+				for &peer_id in self.gtp.keys() {
+					self.gt.entry(peer_id).or_default();
+				}
+				// In case a peer has only discounts,
+				// gt will have an entry but gtp won't.  Add it back.
+				for &peer_id in self.gt.keys() {
+					self.gtp.entry(peer_id).or_default();
+				}
+			},
+			Err(e) => {
+				error!(
+					domain = self.domain_id,
+					err = ?e,
+					"compute failed, Snap scores will be based on old peer scores"
+				);
+			},
+		}
+		let mut tp_d = 1f64;
+		for ht_peer in ht {
+			let tp = self.gtp.get(&ht_peer).cloned().unwrap_or(0f64);
+			if tp_d > tp {
+				tp_d = tp;
+			}
+		}
+		trace!(
+			domain = self.domain_id,
+			tp_d,
+			"minimum highly trusted peer trust"
+		);
+		self.compute_snap_scores(tp_d).await?;
+		self.publish_scores(tp_d, &inbound_distrusts).await?;
+		Ok(())
+	}
+
+	async fn publish_scores(
+		&mut self, tp_d: f64, distrusters: &HashMap<Trustee, HashSet<Truster>>,
+	) -> Result<(), Box<dyn Error>> {
+		let compute_ts = self.compute_ts.expect("no compute timestamp while publishing");
+		let publish_ts = if compute_ts < self.alt_pub_ts {
+			trace!(
+				domain = self.domain_id,
+				original = self.compute_ts.unwrap().to_iso8601(),
+				clipped = self.alt_pub_ts.to_iso8601(),
+				"using clipped timestamp for historic data"
+			);
+			self.alt_pub_ts += 1;
+			self.alt_pub_ts - 1
 		} else {
-			ts_window
+			compute_ts
 		};
 		let mut locations = Vec::new();
 		for url in &self.s3_output_urls {
-			locations.push(url.join(&format!("{}.zip", ts_window))?.to_string());
+			locations.push(url.join(&format!("{}.zip", publish_ts))?.to_string());
 		}
-		info!(?locations, "uploading manifest");
-		let mut manifest = Self::make_manifest(issuer_id, ts_window).await?;
-		manifest.locations = Some(locations);
+		trace!(domain = self.domain_id, ?locations, "uploading manifest");
+		let manifest = self.make_manifest(publish_ts, compute_ts, locations, tp_d).await?;
 		let output_root = std::path::PathBuf::from("spd_scores");
 		let output_dir = output_root.join(self.domain_id.to_string());
 		std::fs::create_dir_all(&output_dir)?;
-		let base_name = std::path::PathBuf::from(ts_window.to_string());
+		let base_name = std::path::PathBuf::from(publish_ts.to_string());
 		let manifest_filename = base_name.with_extension("json");
 		let zip_filename = base_name.with_extension("zip");
 		let zip_path = output_dir.join(&zip_filename);
@@ -594,10 +638,10 @@ impl Domain {
 			let mut zip = zip::ZipWriter::new(zip_file);
 			let options = zip::write::FileOptions::default();
 			zip.start_file("peer_scores.jsonl", options)?;
-			self.write_peer_vcs(tp_d, distrusters, issuer_id, ts_window, &mut zip).await?;
+			self.write_peer_vcs(tp_d, distrusters, publish_ts, &mut zip).await?;
 			if self.is_security_domain() {
 				zip.start_file("snap_scores.jsonl", options)?;
-				self.write_snap_vcs(tp_d, issuer_id, ts_window, &mut zip).await?;
+				self.write_snap_vcs(tp_d, publish_ts, &mut zip).await?;
 			}
 			zip.start_file("MANIFEST.json", options)?;
 			serde_jcs::to_writer(&mut zip, &manifest)?;
@@ -636,7 +680,7 @@ impl Domain {
 			if !path.is_empty() {
 				path += "/";
 			}
-			let path = format!("{}{}.zip", path, ts_window);
+			let path = format!("{}{}.zip", path, publish_ts);
 			let bucket = url.host().unwrap().to_string();
 			match client
 				.put_object()
@@ -646,8 +690,19 @@ impl Domain {
 				.send()
 				.await
 			{
-				Ok(_res) => debug!(bucket, path = &path, "uploaded to S3"),
-				Err(err) => warn!(?err, bucket, path = &path, "cannot upload to S3"),
+				Ok(_res) => debug!(
+					domain = self.domain_id,
+					bucket,
+					path = &path,
+					"uploaded to S3"
+				),
+				Err(err) => warn!(
+					domain = self.domain_id,
+					?err,
+					bucket,
+					path = &path,
+					"cannot upload to S3"
+				),
 			}
 		}
 		let post_scores_client = reqwest::Client::new();
@@ -661,10 +716,15 @@ impl Domain {
 			};
 			match req.json(&manifest).send().await {
 				Ok(res) => match res.error_for_status() {
-					Ok(res) => info!(%url, status = %res.status(), "sent manifest"),
-					Err(err) => warn!(?err, %url, "cannot send manifest"),
+					Ok(res) => {
+						info!(
+							domain = self.domain_id, ?url, status = %res.status(),
+							"sent manifest"
+						)
+					},
+					Err(err) => warn!(domain = self.domain_id, ?err, %url, "cannot send manifest"),
 				},
-				Err(err) => warn!(?err, %url, "cannot send manifest"),
+				Err(err) => warn!(domain = self.domain_id, ?err, %url, "cannot send manifest"),
 			}
 		}
 		Ok(())
@@ -699,29 +759,27 @@ impl Domain {
 		Ok(())
 	}
 
-	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn run_et(
-		lt_id: &str, pt_id: &str, gt_id: &str, gtp_id: &str, alpha: Option<f64>,
-		et_client: &mut ComputeClient<Channel>, tv_client: &mut TrustVectorClient<Channel>,
+		&self, et_client: &mut ComputeClient<Channel>, tv_client: &mut TrustVectorClient<Channel>,
 	) -> Result<(TrustVector, TrustVector), Box<dyn Error>> {
-		Self::copy_vector(tv_client, pt_id, gt_id).await?;
+		Self::copy_vector(tv_client, &self.pt_id, &self.gt_id).await?;
 		et_client
 			.basic_compute(compute::Params {
-				local_trust_id: lt_id.to_string(),
-				pre_trust_id: pt_id.to_string(),
-				alpha,
+				local_trust_id: self.lt_id.clone(),
+				pre_trust_id: self.pt_id.clone(),
+				alpha: self.alpha,
 				epsilon: None,
-				global_trust_id: gt_id.to_string(),
-				positive_global_trust_id: gtp_id.to_string(),
+				global_trust_id: self.gt_id.clone(),
+				positive_global_trust_id: self.gtp_id.clone(),
 				max_iterations: 0,
 				destinations: vec![],
 			})
 			.await?;
-		let (_timestamp, entries) = tv_client.get(gtp_id).await?;
+		let (_timestamp, entries) = tv_client.get(&self.gtp_id).await?;
 		pin_mut!(entries);
 		let gtp = read_tv(entries).await?;
 		trace!(?gtp, "undiscounted global trust");
-		let (_timestamp, entries) = tv_client.get(gt_id).await?;
+		let (_timestamp, entries) = tv_client.get(&self.gt_id).await?;
 		pin_mut!(entries);
 		let gt = read_tv(entries).await?;
 		trace!(?gt, "discounted global trust");
@@ -789,8 +847,8 @@ impl Domain {
 	}
 
 	async fn write_peer_vcs(
-		&mut self, tp_d: f64, distrusts: &HashMap<Trustee, HashSet<Truster>>, issuer_id: &str,
-		timestamp: Timestamp, output: &mut impl std::io::Write,
+		&mut self, tp_d: f64, distrusts: &HashMap<Trustee, HashSet<Truster>>, timestamp: Timestamp,
+		output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		let empty_distrusters = HashSet::<Truster>::new();
 		let mut score_ranks = BTreeMap::<OrderedFloat<Value>, usize>::new();
@@ -804,6 +862,7 @@ impl Domain {
 			cumulative_rank += count;
 		}
 		for (peer_id, score_value) in &self.gt {
+			let score_value_before_discount = self.gtp.get(peer_id).copied().unwrap_or(0.0);
 			let peer_did = match self.peer_id_to_did.get(peer_id) {
 				Some(did) => did,
 				None => {
@@ -834,14 +893,14 @@ impl Domain {
 				output,
 				(self
 					.make_trust_score_vc(
-						issuer_id,
 						timestamp,
 						peer_did,
 						"EigenTrust",
 						*score_value,
+						Some(score_value_before_discount),
 						None,
 						Some(result_label),
-						self.accuracies.get(issuer_id).map(|a| {
+						self.accuracies.get(peer_did).map(|a| {
 							a.level().expect("accuracies map should not contain zero entries")
 						}),
 						score_ranks.get(score_value.into()).map(|rank| *rank as u64),
@@ -855,8 +914,7 @@ impl Domain {
 	}
 
 	async fn write_snap_vcs(
-		&mut self, tp_d: f64, issuer_id: &str, timestamp: Timestamp,
-		output: &mut impl std::io::Write,
+		&mut self, tp_d: f64, timestamp: Timestamp, output: &mut impl std::io::Write,
 	) -> Result<(), Box<dyn Error>> {
 		for (snap_id, score) in &self.snap_scores {
 			let result_label = SnapSecurityLabel::from_snap_score(score, tp_d) as i32;
@@ -864,11 +922,11 @@ impl Domain {
 				output,
 				(self
 					.make_trust_score_vc(
-						issuer_id,
 						timestamp,
 						snap_id,
 						"IssuerTrustWeightedAverage",
 						score.value,
+						None,
 						Some(score.confidence),
 						Some(result_label),
 						None,
@@ -884,9 +942,10 @@ impl Domain {
 
 	#[allow(clippy::too_many_arguments)] // TODO(ek)
 	async fn make_trust_score_vc(
-		&self, issuer_id: &str, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
-		score_value: SnapScoreValue, score_confidence: Option<SnapScoreConfidence>,
-		result: Option<i32>, accuracy: Option<f64>, rank: Option<u64>, scope: &str,
+		&self, timestamp: Timestamp, snap_id: &SnapId, score_type: &str,
+		score_value: SnapScoreValue, score_value_before_discount: Option<SnapScoreValue>,
+		score_confidence: Option<SnapScoreConfidence>, result: Option<i32>, accuracy: Option<f64>,
+		rank: Option<u64>, scope: &str,
 	) -> Result<String, Box<dyn Error>> {
 		let mut vc = TrustScoreCredential {
 			context: vec!["https://www.w3.org/2018/credentials/v1".to_string()],
@@ -895,7 +954,7 @@ impl Domain {
 				"VerifiableCredential".to_string(),
 				"TrustScoreCredential".to_string(),
 			]),
-			issuer: String::from(issuer_id),
+			issuer: self.issuer_id.clone(),
 			issuance_date: format!(
 				"{:?}",
 				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
@@ -905,6 +964,7 @@ impl Domain {
 				trust_score_type: score_type.to_string(),
 				trust_score: TrustScore {
 					value: score_value,
+					value_before_discount: score_value_before_discount,
 					confidence: score_confidence,
 					result,
 					accuracy: if self.is_security_domain() { accuracy } else { None },
@@ -925,15 +985,23 @@ impl Domain {
 	}
 
 	async fn make_manifest(
-		issuer_id: &str, timestamp: Timestamp,
+		&self, issuance_date: Timestamp, effective_date: Timestamp, locations: Vec<String>,
+		trust_threshold: f64,
 	) -> Result<Manifest, Box<dyn Error>> {
 		Ok(Manifest {
-			issuer: String::from(issuer_id),
+			issuer: self.issuer_id.clone(),
+			// TODO(ek): Convert to .to_iso8601() after checking with MM about ms timestamps.
 			issuance_date: format!(
 				"{:?}",
-				chrono::NaiveDateTime::from_timestamp_millis(timestamp as i64).unwrap().and_utc()
+				chrono::NaiveDateTime::from_timestamp_millis(issuance_date as i64)
+					.unwrap()
+					.and_utc()
 			),
-			locations: None,
+			effective_date: effective_date.to_iso8601(),
+			epoch: self.start_ts.to_iso8601(),
+			scope: self.scope.clone(),
+			locations,
+			trust_threshold,
 			proof: ManifestProof {},
 		})
 	}
@@ -956,6 +1024,14 @@ pub fn force_symlink<P: AsRef<std::path::Path>, Q: AsRef<std::path::Path>>(
 		}
 		std::fs::remove_file(link.as_ref())?;
 	}
+}
+
+struct Clients {
+	idx: IndexerClient<Channel>,
+	lc: LinearCombinerClient<Channel>,
+	tv: TrustVectorClient<Channel>,
+	tm: TrustMatrixClient<Channel>,
+	et: ComputeClient<Channel>,
 }
 
 struct Main {
@@ -1028,6 +1104,14 @@ impl Main {
 			.map(|(_, param)| param)
 			.cloned()
 	}
+	fn pop_urls_for_domain_id(
+		urls: &mut HashMap<DomainId, Vec<String>>, id: DomainId,
+	) -> Result<Vec<Url>, Box<dyn Error>> {
+		Ok(match urls.remove(&id) {
+			Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
+			None => vec![],
+		})
+	}
 
 	pub fn new(args: Args) -> Result<Box<Self>, Box<dyn Error>> {
 		let mut lt_ids = Self::parse_domain_params(&args.lt_ids)?;
@@ -1053,14 +1137,9 @@ impl Main {
 				* 1000;
 		info!(ts = &start_timestamp, "starting");
 		for domain_id in domain_ids {
-			let s3_output_urls = match s3_urls.remove(&domain_id) {
-				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
-				None => vec![],
-			};
-			let post_scores_endpoints = match post_scores_endpoints.remove(&domain_id) {
-				Some(urls) => urls.into_iter().map(|url| Url::from_str(&url)).try_collect()?,
-				None => vec![],
-			};
+			let s3_output_urls = Self::pop_urls_for_domain_id(&mut s3_urls, domain_id)?;
+			let post_scores_endpoints =
+				Self::pop_urls_for_domain_id(&mut post_scores_endpoints, domain_id)?;
 			let api_keys = post_scores_endpoints
 				.iter()
 				.cloned()
@@ -1072,6 +1151,7 @@ impl Main {
 				domain_id,
 				Domain {
 					domain_id,
+					interval: main.args.interval,
 					scope: scopes
 						.remove(&domain_id)
 						.unwrap_or_else(|| format!("Domain{}", domain_id)),
@@ -1079,26 +1159,28 @@ impl Main {
 					pt_id: pt_ids.remove(&domain_id).unwrap_or_default(),
 					gt_id: gt_ids.remove(&domain_id).unwrap_or_default(),
 					gtp_id: gtp_ids.remove(&domain_id).unwrap_or_default(),
+					alpha: main.args.alpha,
 					status_schema: status_schemas.remove(&domain_id).unwrap_or_default(),
+					issuer_id: main.args.issuer_id.clone(),
 					s3_output_urls,
 					post_scores_endpoints,
 					api_keys,
 					local_trust_updates: BTreeMap::new(),
+					lt_form1: TrustMatrix::new(),
+					lt_form0: TrustMatrix::new(),
 					peer_did_to_id: BTreeMap::new(),
 					peer_id_to_did: BTreeMap::new(),
-					lt_fetch_ts_form1: 0,
-					lt_fetch_ts_form0: 0,
 					ss_fetch_offset: 0,
-					ss_update_ts: 0,
-					last_update_ts: 0,
 					last_compute_ts: 0,
+					compute_ts: None,
 					gt: TrustVector::new(),
 					gtp: TrustVector::new(),
 					snap_status_updates: BTreeMap::new(),
 					snap_statuses: SnapStatuses::new(),
 					snap_scores: SnapScores::new(),
 					accuracies: BTreeMap::new(),
-					start_timestamp,
+					start_ts: start_timestamp,
+					alt_pub_ts: start_timestamp,
 				},
 			);
 		}
@@ -1113,12 +1195,12 @@ impl Main {
 			"gRPC endpoints",
 		);
 
-		let mut interval = tokio::time::interval(Duration::from_secs(10));
+		let mut interval = tokio::time::interval(time::Duration::from_secs(5));
 		info!("initializing go-eigentrust");
 		self.init_et().await?;
 		loop {
-			debug!("scheduling next run");
 			interval.tick().await;
+			debug!("starting run");
 			match self.run_once().await {
 				Ok(_) => {
 					trace!("finished run");
@@ -1128,6 +1210,16 @@ impl Main {
 				},
 			}
 		}
+	}
+
+	async fn make_clients(&self) -> Result<Clients, Box<dyn Error>> {
+		Ok(Clients {
+			idx: self.idx_client().await?,
+			lc: self.lc_client().await?,
+			tm: self.tm_client().await?,
+			tv: self.tv_client().await?,
+			et: self.et_client().await?,
+		})
 	}
 
 	async fn lc_client(&self) -> Result<LinearCombinerClient<Channel>, Box<dyn Error>> {
@@ -1214,20 +1306,10 @@ impl Main {
 	}
 
 	async fn run_once(&mut self) -> Result<(), Box<dyn Error>> {
-		let idx_client = &mut self.idx_client().await?;
-		let lc_client = &mut self.lc_client().await?;
-		let tm_client = &mut self.tm_client().await?;
-		let tv_client = &mut self.tv_client().await?;
-		let et_client = &mut self.et_client().await?;
+		let mut clients = self.make_clients().await?;
 		for (&domain_id, domain) in &mut self.domains {
 			// trace!(id = domain_id, "processing domain");
-			if let Err(e) = domain
-				.run_once(
-					idx_client, lc_client, tm_client, tv_client, et_client, self.args.interval,
-					self.args.alpha, &self.args.issuer_id,
-				)
-				.await
-			{
+			if let Err(e) = domain.run_once(&mut clients).await {
 				error!(err = ?e, id = domain_id, "cannot process domain");
 			}
 		}
@@ -1293,4 +1375,18 @@ fn setup_logging(format: &Option<LogFormatArg>, level: &LevelFilter) -> Result<(
 		},
 	};
 	Ok(())
+}
+
+trait ToIso8601 {
+	fn to_iso8601(&self) -> String;
+}
+
+impl ToIso8601 for Timestamp {
+	fn to_iso8601(&self) -> String {
+		let (secs, msecs) = num::integer::div_rem(*self, 1_000);
+		chrono::DateTime::from_timestamp(secs as i64, (msecs * 1_000_000) as u32)
+			.map_or("<INVALID>".into(), |dt| {
+				dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+			})
+	}
 }
