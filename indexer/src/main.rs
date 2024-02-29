@@ -3,15 +3,10 @@ use tokio::time::Duration;
 
 use storage::lm_db::LMDBClient;
 
-// use crate::clients::clique::client::CliqueClient;
-// use crate::clients::csv::{client::CSVClient, types::CSVClientConfig};
 use crate::clients::metamask_connector::client::MetamaskConnectorClient;
 use crate::config::dotenv::Config;
 use crate::frontends::api::grpc_server::GRPCServer;
-// use crate::frontends::api::grpc_server::client::GRPCServerClient;
 use crate::logger::global::AppLogger;
-// use crate::tasks::clique::task::CliqueTask;
-// use crate::tasks::csv_poc::task::CSVPOCTask;
 use crate::tasks::metamask_connector::task::MetamaskConnectorTask;
 use crate::tasks::service::TaskService;
 

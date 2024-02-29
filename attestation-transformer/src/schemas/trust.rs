@@ -1,11 +1,10 @@
-use super::{Domain, IntoTerm, Proof, Validation};
-use crate::{
-	did::{Did, Schema},
-	error::AttTrError,
-	term::Term,
-	utils::address_from_ecdsa_key,
-};
 use serde_derive::{Deserialize, Serialize};
+
+use crate::did::{Did, Schema};
+use crate::error::AttTrError;
+use crate::schemas::{Domain, IntoTerm, Proof, Validation};
+use crate::term::Term;
+use crate::utils::address_from_ecdsa_key;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct DomainTrust {
@@ -134,18 +133,15 @@ impl IntoTerm for TrustSchema {
 
 #[cfg(test)]
 mod test {
-	use crate::{
-		did::Did,
-		schemas::{
-			trust::{CredentialSubject, DomainTrust},
-			Domain, Proof, Validation,
-		},
-		utils::address_from_ecdsa_key,
-	};
-
-	use super::TrustSchema;
-	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
+	use secp256k1::rand::thread_rng;
+	use secp256k1::{generate_keypair, Message, Secp256k1};
 	use sha3::{Digest, Keccak256};
+
+	use crate::did::Did;
+	use crate::schemas::{Domain, Proof, Validation};
+	use crate::utils::address_from_ecdsa_key;
+
+	use super::*;
 
 	#[test]
 	fn should_validate_trust_schema() {

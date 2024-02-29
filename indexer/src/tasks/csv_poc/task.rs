@@ -1,9 +1,10 @@
+use std::time::Duration;
+
 use digest::Digest;
 use hex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sha3::Sha3_256;
-use std::time::Duration;
 use tracing::{debug, info};
 
 pub use crate::clients::csv::client::CSVClient;

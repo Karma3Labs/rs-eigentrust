@@ -1,8 +1,10 @@
 use itertools::Itertools;
-use proto_buf::transformer::{TermBatch, TermObject};
 use rocksdb::{WriteBatch, DB};
 
-use crate::{error::AttTrError, term::Term};
+use proto_buf::transformer::{TermBatch, TermObject};
+
+use crate::error::AttTrError;
+use crate::term::Term;
 
 #[derive(Debug)]
 pub struct TermManager;
@@ -60,10 +62,14 @@ impl TermManager {
 #[cfg(test)]
 mod test {
 	use itertools::Itertools;
-	use proto_buf::transformer::{TermBatch, TermObject};
 	use rocksdb::{Options, DB};
 
-	use crate::{managers::term::TermManager, schemas::Domain, term::Term};
+	use proto_buf::transformer::{TermBatch, TermObject};
+
+	use crate::schemas::Domain;
+	use crate::term::Term;
+
+	use super::*;
 
 	#[test]
 	fn should_write_read_term() {

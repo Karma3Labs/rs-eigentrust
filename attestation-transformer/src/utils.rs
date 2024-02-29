@@ -11,9 +11,11 @@ pub fn address_from_ecdsa_key(pub_key: &PublicKey) -> Vec<u8> {
 
 #[cfg(test)]
 mod test {
-	use super::address_from_ecdsa_key;
-	use secp256k1::PublicKey;
 	use std::str::FromStr;
+
+	use secp256k1::PublicKey;
+
+	use super::*;
 
 	#[test]
 	fn should_recreate_address_and_did_from_pk() {

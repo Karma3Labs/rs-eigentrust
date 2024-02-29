@@ -6,19 +6,20 @@ use serde_json::from_str;
 use tonic::transport::Channel;
 use tonic::{transport::Server, Request, Response, Status};
 
-use error::AttTrError;
-use managers::checkpoint::CheckpointManager;
-use managers::term::TermManager;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
-use schemas::security::SecurityReportSchema;
-use schemas::status::StatusSchema;
-use schemas::trust::TrustSchema;
-use schemas::{IntoTerm, SchemaType};
-use term::Term;
+
+use crate::error::AttTrError;
+use crate::managers::checkpoint::CheckpointManager;
+use crate::managers::term::TermManager;
+use crate::schemas::security::SecurityReportSchema;
+use crate::schemas::status::StatusSchema;
+use crate::schemas::trust::TrustSchema;
+use crate::schemas::{IntoTerm, SchemaType};
+use crate::term::Term;
 
 pub mod did;
 pub mod error;
@@ -197,7 +198,8 @@ mod test {
 	use crate::schemas::{Domain, Proof};
 	use crate::term::Term;
 	use crate::utils::address_from_ecdsa_key;
-	use crate::TransformerService;
+
+	use super::*;
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {
