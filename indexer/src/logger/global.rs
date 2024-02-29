@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use tracing_subscriber::FmtSubscriber;
 
 use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::FmtSubscriber;
 
 // move logger config here
 use crate::config::dotenv::LoggerConfig;

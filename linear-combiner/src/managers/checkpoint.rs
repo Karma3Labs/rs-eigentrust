@@ -38,8 +38,9 @@ impl CheckpointManager {
 
 #[cfg(test)]
 mod test {
-	use crate::managers::checkpoint::CheckpointManager;
 	use rocksdb::{Options, DB};
+
+	use super::*;
 
 	#[test]
 	fn should_write_read_checkpoint() {

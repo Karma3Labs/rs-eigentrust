@@ -1,10 +1,9 @@
-use crate::{error::AttTrError, term::Term};
-use secp256k1::{
-	ecdsa::{RecoverableSignature, RecoveryId},
-	Message, PublicKey, Secp256k1,
-};
+use secp256k1::ecdsa::{RecoverableSignature, RecoveryId};
+use secp256k1::{Message, PublicKey, Secp256k1};
 use serde_derive::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
+
+use crate::{error::AttTrError, term::Term};
 
 pub mod security;
 pub mod status;

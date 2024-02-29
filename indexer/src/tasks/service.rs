@@ -3,7 +3,7 @@ use std::time::Duration;
 use tracing::info;
 
 use crate::storage::types::BaseKVStorage;
-pub use crate::tasks::types::{BaseTask, TaskResponse};
+use crate::tasks::types::{BaseTask, TaskResponse};
 
 pub struct TaskService {
 	task: Box<dyn BaseTask>,
