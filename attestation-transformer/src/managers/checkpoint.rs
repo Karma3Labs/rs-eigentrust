@@ -1,5 +1,6 @@
-use crate::error::AttTrError;
 use rocksdb::DB;
+
+use crate::error::AttTrError;
 
 #[derive(Debug)]
 pub struct CheckpointManager;
@@ -50,7 +51,7 @@ impl CheckpointManager {
 mod test {
 	use rocksdb::{Options, DB};
 
-	use crate::managers::checkpoint::CheckpointManager;
+	use super::*;
 
 	#[test]
 	fn should_write_read_checkpoint() {

@@ -1,3 +1,14 @@
+use clap::Parser;
+use tracing::info;
+
+use crate::clients::csv::{client::CSVClient, types::CSVClientConfig};
+use crate::config::dotenv::Config;
+use crate::frontends::api::grpc_server::GRPCServer;
+use crate::logger::global::AppLogger;
+use crate::storage::lm_db::LMDBClient;
+use crate::tasks::csv_poc::task::CSVPOCTask;
+use crate::tasks::service::TaskService;
+
 pub mod cli;
 pub mod clients;
 pub mod config;
@@ -5,20 +16,6 @@ pub mod frontends;
 pub mod logger;
 pub mod storage;
 pub mod tasks;
-
-use clap::Parser;
-use tracing::info;
-
-use crate::logger::global::AppLogger;
-use crate::tasks::service::TaskService;
-use frontends::api::grpc_server::GRPCServer;
-use storage::lm_db::LMDBClient;
-
-use crate::clients::csv::{client::CSVClient, types::CSVClientConfig};
-
-use crate::tasks::csv_poc::task::CSVPOCTask;
-
-use crate::config::dotenv::Config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

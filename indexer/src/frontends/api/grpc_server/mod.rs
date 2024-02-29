@@ -1,15 +1,19 @@
-use crate::frontends::api::grpc_server::types::GRPCServerConfig;
-use crate::tasks::service::{TaskResponse, TaskService};
-use proto_buf::indexer::indexer_server::{Indexer, IndexerServer};
-use proto_buf::indexer::{IndexerEvent, Query};
 use std::cmp;
 use std::error::Error;
 use std::time::SystemTime;
+
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 use tracing::info;
+
+use proto_buf::indexer::indexer_server::{Indexer, IndexerServer};
+use proto_buf::indexer::{IndexerEvent, Query};
+
+use crate::frontends::api::grpc_server::types::GRPCServerConfig;
+use crate::tasks::service::TaskService;
+use crate::tasks::types::TaskResponse;
 
 pub mod types;
 

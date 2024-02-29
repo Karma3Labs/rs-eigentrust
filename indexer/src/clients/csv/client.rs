@@ -1,11 +1,11 @@
-use csv::{ReaderBuilder, StringRecord};
-use eyre::Result;
 use std::error::Error;
 use std::fs::File;
+
+use csv::{ReaderBuilder, StringRecord};
+use eyre::Result;
 use tracing::debug;
 
-use super::types::CSVClientConfig;
-pub use crate::clients::types::EVMLogsClient;
+use crate::clients::csv::types::CSVClientConfig;
 
 pub struct CSVClient {
 	config: CSVClientConfig,

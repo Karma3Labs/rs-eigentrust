@@ -1,6 +1,7 @@
 use rocksdb::{IteratorMode, WriteBatch, DB};
 
-use crate::{error::LcError, item::LtItem};
+use crate::error::LcError;
+use crate::item::LtItem;
 
 #[derive(Debug)]
 pub struct UpdateManager;
@@ -48,8 +49,11 @@ impl UpdateManager {
 
 #[cfg(test)]
 mod test {
-	use crate::{item::LtItem, managers::update::UpdateManager};
 	use rocksdb::{Options, DB};
+
+	use crate::item::LtItem;
+
+	use super::*;
 
 	#[test]
 	fn should_read_delete_batch() {

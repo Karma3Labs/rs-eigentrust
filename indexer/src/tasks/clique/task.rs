@@ -1,5 +1,3 @@
-use tracing::{debug, info};
-
 use std::time::Duration;
 
 use digest::Digest;
@@ -7,13 +5,12 @@ use hex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sha3::Sha3_256;
+use tracing::{debug, info};
 
-pub use crate::clients::types::EVMLogsClient;
 // todo change to EVMLogsClient, make threadsafe
-pub use crate::clients::clique::client::CliqueClient;
-pub use crate::clients::clique::types::EVMIndexerConfig;
-
-pub use crate::tasks::types::{BaseTask, BaseTaskState, TaskResponse};
+use crate::clients::clique::client::CliqueClient;
+use crate::clients::clique::types::EVMIndexerConfig;
+use crate::tasks::types::{BaseTask, BaseTaskState, TaskResponse};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CliqueTaskState {
