@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tonic = "0.7"
-prost = "0.10"
+tonic.workspace = true
+prost.workspace = true
 
 [build-dependencies]
-tonic-build = "0.7"
+tonic-build.workspace = true

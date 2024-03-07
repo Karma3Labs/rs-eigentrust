@@ -15,3 +15,10 @@ members = [
 version = "0.0.1"
 authors = ["Eugene Kim, Jenya Nepoimannykh, Filip Lazovic"]
 edition = "2021"
+
+[workspace.dependencies]
+tonic = "0.10"
+tonic-build = "0.10"
+prost = "0.12"
+prost-types = "0.12"
+proto-buf = { path = "proto-buf" }
