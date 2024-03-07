@@ -1,0 +1,20 @@
+[package]
+name = "trustvector"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+prost.workspace = true
+prost-types.workspace = true
+tonic.workspace = true
+async-stream = "0.3"
+futures-core = "0.3"
+num = "0.4"
+simple-error = "0.3"
+http-body = "0.4"
+futures = "0.3"
+tokio-stream = "0.1"
+
+[build-dependencies]
+tonic-build.workspace = true

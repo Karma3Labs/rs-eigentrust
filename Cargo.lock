@@ -117,6 +117,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert_matches"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
+
+[[package]]
 name = "async-stream"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -288,6 +294,12 @@ name = "bech32"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d86b93f97252c47b41663388e6d155714a9d0c398b99f1005cbc5f978b29f445"
+
+[[package]]
+name = "binascii"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "383d29d513d8764dcdc42ea295d979eb99c3c9f00607b3692cf68a431f7dca72"
 
 [[package]]
 name = "bincode"
@@ -642,6 +654,22 @@ name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
+
+[[package]]
+name = "compute"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "http-body",
+ "num",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "simple-error",
+ "tonic",
+ "tonic-build",
+ "trustvector",
+]
 
 [[package]]
 name = "const-hex"
@@ -2273,6 +2301,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-spd-did"
+version = "0.0.1"
+dependencies = [
+ "assert_matches",
+ "itertools 0.12.0",
+ "thiserror",
+]
+
+[[package]]
 name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2305,6 +2342,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "num"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2316,12 +2367,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-complex"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23c6602fda94a57c990fe0df199a035d83576b496aa29f4e634a8ac6004e68a6"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "num-integer"
 version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
 dependencies = [
  "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-iter"
+version = "0.1.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d869c01cc0c455284163fd0092f1f93835385ccab5a98a0dcc497b2f8bf055a9"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
+dependencies = [
+ "autocfg",
+ "num-bigint",
+ "num-integer",
  "num-traits",
 ]
 
@@ -2851,6 +2934,8 @@ name = "proto-buf"
 version = "0.1.0"
 dependencies = [
  "prost",
+ "prost-build",
+ "prost-types",
  "tonic",
  "tonic-build",
 ]
@@ -3421,6 +3506,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "simple-error"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8542b68b8800c3cda649d2c72d688b6907b30f1580043135d61669d4aad1c175"
+
+[[package]]
 name = "simple_asn1"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3479,6 +3570,25 @@ dependencies = [
  "phf",
  "thiserror",
  "unicode-xid",
+]
+
+[[package]]
+name = "spd-tv"
+version = "0.0.1"
+dependencies = [
+ "binascii",
+ "clap",
+ "itertools 0.12.0",
+ "mm-spd-did",
+ "num",
+ "proto-buf",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "trustvector",
 ]
 
 [[package]]
@@ -4038,6 +4148,41 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "trustmatrix"
+version = "0.0.1"
+dependencies = [
+ "async-stream",
+ "futures",
+ "futures-core",
+ "futures-util",
+ "http-body",
+ "num",
+ "prost",
+ "prost-types",
+ "simple-error",
+ "tokio-stream",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
+name = "trustvector"
+version = "0.0.1"
+dependencies = [
+ "async-stream",
+ "futures",
+ "futures-core",
+ "http-body",
+ "num",
+ "prost",
+ "prost-types",
+ "simple-error",
+ "tokio-stream",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
