@@ -1,0 +1,123 @@
+syntax = "proto3";
+package compute;
+
+import "trustvector.proto";
+
+option go_package = "k3l.io/go-eigentrust/pkg/api/pb/compute;computepb";
+
+// A timestamp is expressed in one or more qwords (64-bit unsigned integers),
+// and is used for trust matrices/vectors and their entries.
+// go-eigentrust treats the qwords as a variable-length big endian unsigned int,
+// e.g. {0x1234, 0x567890abcdef} -> 0x12340000567890abcdef.
+//
+// Their semantics are to be defined by applications.  Examples:
+//
+// - {seconds} of a UNIX timestamp
+// - {microseconds} of a UNIX timestamp
+// - {seconds, nanosecond part (0-999999999)} of a UNIX timestamp
+// - {block height, txn index} of an EVM on-chain event.
+
+message Params {
+  // Local trust matrix ID.
+  string local_trust_id = 1;
+
+  // Pre-trust vector ID.
+  string pre_trust_id = 2;
+
+  // Alpha value (pre-trust strength).
+  optional double alpha = 3;
+
+  // Epsilon value (convergence exit criteria).
+  optional double epsilon = 4;
+
+  // Global trust vector ID.
+  // Must already exist, i.e. call CreateTrustVector to create one.
+  // Its contents are used as the initial vector (iteration starting point).
+  // If its contents are zero, e.g. a brand new trust vector is passed,
+  // the pre-trust contents are copied and used as the starting point.
+  // Upon return, the vector contains the computed global trust –
+  // use GetTrustVector to retrieve its contents.
+  string global_trust_id = 5;
+
+  // Maximum number of iterations to perform, 0 (default): unlimited.
+  uint32 max_iterations = 6;
+
+  // Where to upload the results.
+  // Leave empty to disable automatic pushing.
+  repeated trustvector.Destination destinations = 7;
+
+  // Positive-only trust vector ID.
+  string positive_global_trust_id = 8;
+
+  // TODO(ek): Add flat-tail
+}
+
+// A periodic compute job specification.
+message JobSpec {
+  // Compute parameters.
+  // Input timestamps (such as local trust and pre-trust)
+  // must have the same semantics.
+  Params params = 1;
+
+  // Re-compute period.
+  //
+  // Timestamps are partitioned into time windows,
+  // i.e. window number = timestamp % period.
+  // A re-compute is triggered upon seeing an input update (LT or PT) whose
+  // timestamp belongs to a later window than the current result timestamp.
+  // The result bears the starting timestamp of the later window,
+  // and reflects all the inputs BEFORE the starting timestamp.
+  //
+  // Example: With period=1000 and current result timestamp of 9000 (initial):
+  //
+  // input | window         | triggered | result timestamp
+  // ==============================================
+  // 9947  | [9000..10000)  | no        |
+  // 10814 | [10000..11000) | yes       | 10000
+  // 11438 | [11000..12000) | yes       | 11000
+  // 11975 | [11000..12000) | no        |
+  // 11999 | [11000..12000) | no        |
+  // 12000 | [12000..13000) | yes       | 12000
+  // 12014 | [12000..13000) | no        |
+  //
+  // (Note that the result for timestamp=12000
+  // does NOT reflect the triggering input at timestamp=12000.)
+  repeated uint64 period_qwords = 2;
+}
+
+message BasicComputeRequest {
+  Params params = 1;
+}
+
+message BasicComputeResponse {
+  // TODO(ek): Add flat-tail
+}
+
+message CreateJobRequest {
+  JobSpec spec = 1;
+}
+
+message CreateJobResponse {
+  string id = 1;
+}
+
+message DeleteJobRequest {
+  string id = 1;
+}
+
+message DeleteJobResponse {
+}
+
+service Service {
+  // Perform a basic EigenTrust compute.
+  rpc BasicCompute(BasicComputeRequest)
+      returns (BasicComputeResponse) {}
+
+  // Create a compute job.
+  rpc CreateJob(CreateJobRequest)
+      returns (CreateJobResponse) {}
+
+  // Delete/decommission a compute job.
+  rpc DeleteJob(DeleteJobRequest)
+      returns (DeleteJobResponse) {}
+}
