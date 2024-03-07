@@ -34,5 +34,5 @@ hyper-staticfile = "0.10.0"
 http = "1.0.0"
 hyper-static = "0.2.1"
 clap = { version = "4.4", features = ["derive"] }
-time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 thiserror = "1.0"
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }

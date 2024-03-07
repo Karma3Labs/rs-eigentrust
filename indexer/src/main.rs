@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		Box::new(MetamaskConnectorTask::new(metamask_connector_client))
 	};
 
-	let task_service: TaskService = TaskService::new(task, Box::new(db.clone()));
+	let task_service = TaskService::new(task, Box::new(db.clone()));
 
 	let grpc_server_config = config.grpc_server_config;
 
