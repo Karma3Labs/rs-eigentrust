@@ -4,7 +4,7 @@ use heed::types::Str;
 use heed::{Database, EnvOpenOptions};
 
 use crate::storage::lm_db::types::LMDBClientConfig;
-use crate::storage::types::BaseKVStorage;
+use crate::storage::types::KVStorageTrait;
 
 pub mod types;
 
@@ -31,7 +31,7 @@ impl LMDBClient {
 	}
 }
 
-impl BaseKVStorage for LMDBClient {
+impl KVStorageTrait for LMDBClient {
 	fn put(&self, key: &str, value: &str) -> heed::Result<()> {
 		let mut write_txn = self.env.write_txn()?;
 		self.db.put(&mut write_txn, key, value)?;

@@ -7,14 +7,14 @@ use serde_json;
 use sha3::Sha3_256;
 use tracing::{debug, info};
 
-use crate::clients::csv::client::CSVClient;
-use crate::tasks::types::{BaseTask, BaseTaskState, TaskResponse};
+pub use crate::clients::csv::client::CSVClient;
+pub use crate::tasks::types::{TaskGlobalState, TaskRecord, TaskTrait};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CSVPOCTaskState {
 	from: u64,
 	range: u64,
-	global: BaseTaskState,
+	global: TaskGlobalState,
 }
 
 pub struct CSVPOCTask {
@@ -29,9 +29,7 @@ const CSV_COLUMN_INDEX: usize = 0;
 
 impl CSVPOCTask {
 	pub fn new(client: CSVClient) -> Self {
-		let global = BaseTaskState { is_synced: false, is_finished: false, records_total: 0 };
-
-		// todo restore prev state
+		let global = TaskGlobalState { is_synced: false, is_finished: false, records_total: 0 };
 		let state = CSVPOCTaskState { from: 0, range: 2000, global };
 
 		debug!("CSV POC task created");
@@ -44,8 +42,8 @@ impl CSVPOCTask {
 }
 
 #[tonic::async_trait]
-impl BaseTask for CSVPOCTask {
-	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskResponse> {
+impl TaskTrait for CSVPOCTask {
+	async fn run(&mut self, offset: Option<u64>, limit: Option<u64>) -> Vec<TaskRecord> {
 		let from = offset.unwrap_or(self.state.from);
 		let range = limit.unwrap_or(self.state.from + self.state.range);
 
@@ -58,13 +56,13 @@ impl BaseTask for CSVPOCTask {
 
 		let is_finished = self.state.range > records_total.try_into().unwrap();
 
-		let results: Vec<TaskResponse> = records
+		let results: Vec<TaskRecord> = records
 			.into_iter()
-			.map(|record| -> TaskResponse {
+			.map(|record| -> TaskRecord {
 				let r = record.unwrap();
 
 				let schema_id = r.get(CSV_COLUMN_SCHEMA_ID).unwrap().parse::<usize>().unwrap_or(0);
-				TaskResponse {
+				TaskRecord {
 					timestamp: r.get(CSV_COLUMN_INDEX_TIMESTAMP).unwrap().to_string(),
 					id: r.get(CSV_COLUMN_INDEX).unwrap().parse::<usize>().unwrap_or(0),
 					job_id: "0".to_string(),
@@ -74,7 +72,7 @@ impl BaseTask for CSVPOCTask {
 			})
 			.collect();
 
-		let global = BaseTaskState { is_synced: is_finished, is_finished, records_total };
+		let global = TaskGlobalState { is_synced: is_finished, is_finished, records_total };
 
 		let _from_new = self.state.from + self.state.range;
 		let new_state = CSVPOCTaskState {
@@ -103,7 +101,7 @@ impl BaseTask for CSVPOCTask {
 		format!("csv-poc:{}", hash)
 	}
 
-	fn get_state(&self) -> BaseTaskState {
+	fn get_state(&self) -> TaskGlobalState {
 		self.state.global.clone()
 	}
 
@@ -113,5 +111,9 @@ impl BaseTask for CSVPOCTask {
 
 	fn get_state_dump(&self) -> String {
 		serde_json::to_string(&self.state).expect("Failed to serialize to JSON")
+	}
+
+	fn set_state_dump(&mut self, state_json_string: &str) {
+		let _my_struct: CSVPOCTaskState = serde_json::from_str(state_json_string).unwrap();
 	}
 }
