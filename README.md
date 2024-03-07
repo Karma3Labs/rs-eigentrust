@@ -129,7 +129,7 @@ We define the security score for the Snap $s$ as a set of two numbers:
 - **Score value** $R_c(s) \in [0..1]$
 - **Score confidence level** $C(s) \in [0..1]$
 
-The score value is the weighed average of opinions, weighted by the opiner’s
+The score value is the weighted average of opinions, weighted by the opiner’s
 trust standing; the score value is the sum of all opiners’ trust standings:
 
 $$
@@ -147,7 +147,7 @@ sybils’ opinions.
 
 Once $s$’s collective opinion becomes strong enough, i.e. $C(s)$ reaches a
 threshold, we take a look at the actual collective opinion $R_c(s)$. The
-threshold is set in such a way that any highly trusted auditor opining is
+threshold is set in such a way that any highly trusted auditor opinion is
 sufficient, i.e. $C(s) \ge T^+(d)$, where $d$ is the weakest highly trusted
 auditor (weakest = with lowest positive-LT-only trust score).
 
