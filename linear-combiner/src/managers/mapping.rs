@@ -1,5 +1,7 @@
-use crate::{error::LcError, item::MappingItem};
 use rocksdb::{Direction, IteratorMode, DB};
+
+use crate::error::LcError;
+use crate::item::MappingItem;
 
 #[derive(Debug)]
 pub struct MappingManager;

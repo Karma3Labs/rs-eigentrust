@@ -1,16 +1,17 @@
-use clap::Parser as ClapParser;
-use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
-use proto_buf::combiner::{LtBatch, LtHistoryBatch, MappingQuery};
-use proto_buf::transformer::transformer_client::TransformerClient;
-use proto_buf::transformer::{EventBatch, TermBatch};
 use std::error::Error;
-
 use std::time::Duration;
+
+use clap::Parser as ClapParser;
 use tokio::time::interval;
 use tokio_stream::wrappers::IntervalStream;
 use tokio_stream::StreamExt;
 use tonic::Request;
 use tracing::{info, trace};
+
+use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
+use proto_buf::combiner::{LtBatch, LtHistoryBatch, MappingQuery};
+use proto_buf::transformer::transformer_client::TransformerClient;
+use proto_buf::transformer::{EventBatch, TermBatch};
 
 const BATCH_SIZE: u32 = 1000;
 const INTERVAL_SECS: u64 = 5;

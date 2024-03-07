@@ -1,6 +1,7 @@
-use crate::error::LcError;
 use rocksdb::DB;
 use tracing::debug;
+
+use crate::error::LcError;
 
 #[derive(Debug)]
 pub struct IndexManager;
@@ -28,8 +29,9 @@ impl IndexManager {
 
 #[cfg(test)]
 mod test {
-	use crate::managers::index::IndexManager;
 	use rocksdb::{Options, DB};
+
+	use super::*;
 
 	#[test]
 	fn should_update_and_get_index() {

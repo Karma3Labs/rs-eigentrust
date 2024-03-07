@@ -1,10 +1,9 @@
-use super::{Domain, IntoTerm, Proof, Validation};
-use crate::{
-	did::Did,
-	error::AttTrError,
-	term::{Term, TermForm},
-};
 use serde_derive::{Deserialize, Serialize};
+
+use crate::did::Did;
+use crate::error::AttTrError;
+use crate::schemas::{Domain, IntoTerm, Proof, Validation};
+use crate::term::{Term, TermForm};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub enum SecurityStatus {
@@ -138,17 +137,14 @@ impl IntoTerm for SecurityReportSchema {
 
 #[cfg(test)]
 mod test {
-	use crate::{
-		did::Did,
-		schemas::{
-			security::{CredentialSubject, SecurityFinding, SecurityReportSchema, SecurityStatus},
-			Proof, Validation,
-		},
-		utils::address_from_ecdsa_key,
-	};
-
 	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
 	use sha3::{Digest, Keccak256};
+
+	use crate::did::Did;
+	use crate::schemas::{Proof, Validation};
+	use crate::utils::address_from_ecdsa_key;
+
+	use super::*;
 
 	#[test]
 	fn should_validate_audit_report_schema() {

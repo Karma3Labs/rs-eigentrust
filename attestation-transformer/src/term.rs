@@ -1,6 +1,8 @@
-use crate::error::AttTrError;
-use proto_buf::transformer::{Form, TermObject};
 use serde_derive::{Deserialize, Serialize};
+
+use proto_buf::transformer::{Form, TermObject};
+
+use crate::error::AttTrError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TermForm {
@@ -78,7 +80,7 @@ impl From<Term> for TermObject {
 
 #[cfg(test)]
 mod test {
-	use super::{Term, TermForm};
+	use super::*;
 
 	#[test]
 	fn should_convert_term_to_bytes_and_back() {

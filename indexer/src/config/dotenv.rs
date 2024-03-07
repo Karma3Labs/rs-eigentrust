@@ -1,10 +1,12 @@
+use std::env;
+
+use dotenv::dotenv;
+use tracing::Level;
+
 use crate::clients::clique::types::EVMIndexerConfig;
 use crate::clients::metamask_connector::types::MetamaskConnectorClientConfig;
 use crate::frontends::api::grpc_server::types::GRPCServerConfig;
 use crate::storage::lm_db::types::LMDBClientConfig;
-use dotenv::dotenv;
-use std::env;
-use tracing::Level;
 
 // types to components
 #[derive(Clone, Debug)]

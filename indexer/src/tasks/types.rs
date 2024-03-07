@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 
 // todo better layer separation rename to TaskTrait
 #[tonic::async_trait]

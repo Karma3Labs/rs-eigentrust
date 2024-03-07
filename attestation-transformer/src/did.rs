@@ -84,7 +84,7 @@ impl From<Did> for String {
 mod test {
 	use crate::did::Schema;
 
-	use super::Did;
+	use super::*;
 
 	#[test]
 	fn test_did_parsing() {

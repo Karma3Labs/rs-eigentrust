@@ -1,9 +1,11 @@
-use crate::term::TermForm;
-use crate::{did::Did, error::AttTrError, term::Term};
-use mm_spd_vc::OneOrMore;
 use serde_derive::{Deserialize, Serialize};
 
-use super::{Domain, IntoTerm, Proof, Validation};
+use mm_spd_vc::OneOrMore;
+
+use crate::did::Did;
+use crate::error::AttTrError;
+use crate::schemas::{Domain, IntoTerm, Proof, Validation};
+use crate::term::{Term, TermForm};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum CurrentStatus {
@@ -114,13 +116,17 @@ impl IntoTerm for StatusSchema {
 
 #[cfg(test)]
 mod test {
-	use crate::schemas::status::{CredentialSubject, StatusSchema};
+	use secp256k1::rand::thread_rng;
+	use secp256k1::{generate_keypair, Message, Secp256k1};
+	use sha3::{Digest, Keccak256};
+
+	use mm_spd_vc::OneOrMore;
+
+	use crate::did::Did;
 	use crate::schemas::{Proof, Validation};
 	use crate::utils::address_from_ecdsa_key;
-	use crate::{did::Did, schemas::status::CurrentStatus};
-	use mm_spd_vc::OneOrMore;
-	use secp256k1::{generate_keypair, rand::thread_rng, Message, Secp256k1};
-	use sha3::{Digest, Keccak256};
+
+	use super::*;
 
 	#[test]
 	fn should_validate_endorse_credential() {

@@ -1,25 +1,16 @@
-use ethers::{
-	abi::RawLog,
-	contract::decode_logs,
-	core::types::{Address, Filter},
-	prelude::abigen,
-	providers::{
-		Http,
-		Middleware,
-		Provider,
-		// Ws
-	},
-};
-
-use tracing::debug;
-
-use eyre::Result;
 use std::cmp;
 use std::error::Error;
 use std::sync::Arc;
 
-use super::types::EVMIndexerConfig;
-pub use crate::clients::types::EVMLogsClient;
+use ethers::abi::RawLog;
+use ethers::contract::decode_logs;
+use ethers::core::types::{Address, Filter};
+use ethers::prelude::abigen;
+use ethers::providers::{Http, Middleware, Provider};
+use eyre::Result;
+use tracing::debug;
+
+use crate::clients::clique::types::EVMIndexerConfig;
 
 pub struct CliqueClient {
 	config: EVMIndexerConfig,

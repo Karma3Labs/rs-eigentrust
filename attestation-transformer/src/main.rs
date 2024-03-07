@@ -4,23 +4,24 @@ use clap::Parser as ClapParser;
 use futures::stream::iter;
 use rocksdb::{Options, DB};
 use serde_json::from_str;
-use tonic::transport::Endpoint;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::transport::{Endpoint, Server};
+use tonic::{Request, Response, Status};
+use tracing::{info, trace, warn};
 
-use error::AttTrError;
-use managers::checkpoint::CheckpointManager;
-use managers::term::TermManager;
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
 use proto_buf::indexer::indexer_client::IndexerClient;
 use proto_buf::indexer::{IndexerEvent, Query};
 use proto_buf::transformer::transformer_server::{Transformer, TransformerServer};
 use proto_buf::transformer::{EventBatch, EventResult, TermBatch, TermResult};
-// use schemas::security::SecurityReportSchema;
-// use schemas::status::StatusSchema;
-use schemas::trust::TrustSchema;
-use schemas::{IntoTerm, SchemaType};
-use term::Term;
-use tracing::{info, trace, warn};
+
+use crate::error::AttTrError;
+use crate::managers::checkpoint::CheckpointManager;
+use crate::managers::term::TermManager;
+use crate::schemas::{IntoTerm, SchemaType};
+// use crate::schemas::security::SecurityReportSchema;
+// use crate::schemas::status::StatusSchema;
+use crate::schemas::trust::TrustSchema;
+use crate::term::Term;
 
 pub mod did;
 pub mod error;
@@ -231,12 +232,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-	use mm_spd_vc::OneOrMore;
 	use secp256k1::rand::thread_rng;
 	use secp256k1::{generate_keypair, Message, Secp256k1, SecretKey};
 	use serde_json::to_string;
 	use sha3::{Digest, Keccak256};
 
+	use mm_spd_vc::OneOrMore;
 	use proto_buf::indexer::IndexerEvent;
 
 	use crate::did::{Did, Schema};
@@ -247,7 +248,8 @@ mod test {
 	use crate::schemas::{Domain, Proof};
 	// use crate::term::{Term, TermForm};
 	use crate::utils::address_from_ecdsa_key;
-	use crate::TransformerService;
+
+	use super::*;
 
 	impl StatusSchema {
 		pub fn generate(id: String, current_status: CurrentStatus) -> Self {

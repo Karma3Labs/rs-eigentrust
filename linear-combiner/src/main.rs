@@ -7,21 +7,21 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 use tracing::{debug, info};
 
-use error::LcError;
-use managers::{
-	checkpoint::CheckpointManager, index::IndexManager, item::ItemManager, mapping::MappingManager,
-	update::UpdateManager,
-};
 use mm_spd_did::canonicalize_peer_did;
-use proto_buf::{
-	combiner::{
-		linear_combiner_server::{LinearCombiner, LinearCombinerServer},
-		GetIndexForDidRequest, GetIndexForDidResponse, LtBatch, LtHistoryBatch, LtObject, Mapping,
-		MappingQuery,
-	},
-	common::Void,
-	transformer::TermObject,
+use proto_buf::combiner::linear_combiner_server::{LinearCombiner, LinearCombinerServer};
+use proto_buf::combiner::{
+	GetIndexForDidRequest, GetIndexForDidResponse, LtBatch, LtHistoryBatch, LtObject, Mapping,
+	MappingQuery,
 };
+use proto_buf::common::Void;
+use proto_buf::transformer::TermObject;
+
+use crate::error::LcError;
+use crate::managers::checkpoint::CheckpointManager;
+use crate::managers::index::IndexManager;
+use crate::managers::item::ItemManager;
+use crate::managers::mapping::MappingManager;
+use crate::managers::update::UpdateManager;
 
 pub mod error;
 pub mod item;

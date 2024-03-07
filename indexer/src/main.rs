@@ -2,16 +2,17 @@ use clap::Parser;
 use tokio::time::Duration;
 use tracing::info;
 
-use crate::clients::csv::{client::CSVClient, types::CSVClientConfig};
+use crate::clients::csv::client::CSVClient;
+use crate::clients::csv::types::CSVClientConfig;
 use crate::clients::metamask_connector::client::MetamaskConnectorClient;
 use crate::config::dotenv::Config;
 // use crate::frontends::api::grpc_server::client::GRPCServerClient;
 use crate::frontends::api::grpc_server::GRPCServer;
 use crate::storage::lm_db::LMDBClient;
-// use crate::tasks::clique::task::CliqueTask;
 use crate::tasks::csv_poc::task::CSVPOCTask;
 use crate::tasks::metamask_connector::task::MetamaskConnectorTask;
-use crate::tasks::service::{TaskService, TaskTrait};
+use crate::tasks::service::TaskService;
+use crate::tasks::types::TaskTrait;
 
 pub mod cli;
 pub mod clients;
