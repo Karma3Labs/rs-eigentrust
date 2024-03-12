@@ -77,9 +77,9 @@ Additional considerations:
     * `Software security`
     * `Software development`
 * The `Software security` and `Software development` scopes are currently only
-  used for expressing trust, not distrust.
+  used for expressing trust, not distrust. That is, the `.value` field is `-1`.
 * Similarly, the `Honesty` scope is currently only used for expressing distrust,
-  not trust.
+  not trust. That is, the `.value` field is `1`.
 * The action of withdrawing a previously issued `TrustCredential` for a
   peer/scope is done by re-issuing another `TrustCredential` for the same
   peer/scope with `credentialSubject.trustworthiness[].level` of `0`.
@@ -91,6 +91,17 @@ Additional considerations:
     * This will later be designed/implemented, e.g. using mechanisms such as
       [VC Revocation List](https://w3c-ccg.github.io/vc-status-rl-2020/) and/or
       [VC Ethr Revocation](https://spherity.github.io/vc-ethr-revocation-registry/).
+
+#### Multiple stages
+
+It is possible to organize input data into multiple stages (such as "baseline",
+"sybil formation", "sybil attack", "community response/mitigation") and
+delineate adjacent stages so that each stage is guaranteed an output snapshot
+(which represents the state of the trust network before the next stage starts).
+Simply space the next stage (in terms of its first entry timestamp) by 10
+minutes or more (600,000 microseconds in timestamp diff). The default interval
+can be adjusted by adding `--interval=milliseconds` flag to
+the `snap-score-computer` run in the test script.
 
 #### Pre-trust file
 
