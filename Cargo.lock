@@ -2640,6 +2640,7 @@ dependencies = [
  "ethers",
  "ethers-providers",
  "eyre",
+ "futures",
  "heed",
  "hex",
  "http 1.0.0",

@@ -36,3 +36,4 @@ hyper-static = "0.2.1"
 clap = { version = "4.4", features = ["derive"] }
 thiserror = "1.0"
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+futures = "0.3"
