@@ -30,6 +30,14 @@ impl LtItem {
 		bytes
 	}
 
+	pub fn get_prefix_from_key<I: AsRef<[u8]>>(key: I) -> Vec<u8> {
+		assert_eq!(key.as_ref().len(), 16);
+		let mut key_bytes = [0; 16];
+		key_bytes.copy_from_slice(key.as_ref());
+
+		key_bytes[..8].to_vec()
+	}
+
 	pub fn from_raw<I: AsRef<[u8]>>(key: I, value: I) -> Self {
 		let mut key_bytes = [0; 16];
 		key_bytes.copy_from_slice(key.as_ref());

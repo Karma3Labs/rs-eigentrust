@@ -18,15 +18,18 @@ impl UpdateManager {
 
 	pub fn read_batch(db: &DB, prefix: Vec<u8>, n: u32) -> Result<Vec<LtItem>, LcError> {
 		let cf = db.cf_handle("update").ok_or(LcError::NotFoundError)?;
-		let mut iter = db.prefix_iterator_cf(&cf, prefix);
+		let mut iter = db.prefix_iterator_cf(&cf, prefix.clone());
 		iter.set_mode(IteratorMode::Start);
 
 		let size = usize::try_from(n).map_err(|_| LcError::ParseError)?;
 		/* items */
 		iter.take(size).try_fold(Vec::new(), |mut acc, item| {
 			item.map(|(key, value)| {
-				let lt_item = LtItem::from_raw(key, value);
-				acc.push(lt_item);
+				let item_prefix = LtItem::get_prefix_from_key(key.clone());
+				if item_prefix == prefix {
+					let lt_item = LtItem::from_raw(key, value);
+					acc.push(lt_item);
+				}
 				acc
 			})
 			.map_err(LcError::DbError)

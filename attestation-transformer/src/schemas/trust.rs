@@ -1,10 +1,12 @@
 use serde_derive::{Deserialize, Serialize};
 
-use crate::did::{Did, Schema};
+use mm_spd_did::canonicalize_peer_did;
+use mm_spd_vc::OneOrMore;
+
+use crate::did::Did;
 use crate::error::AttTrError;
 use crate::schemas::{Domain, IntoTerm, Proof, Validation};
-use crate::term::Term;
-use crate::utils::address_from_ecdsa_key;
+use crate::term::{Term, TermForm};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct DomainTrust {
@@ -34,8 +36,8 @@ impl CredentialSubject {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TrustSchema {
-	#[serde(alias = "type")]
-	kind: String,
+	#[serde(rename = "type")]
+	kind: OneOrMore<String>,
 	issuer: String,
 	credential_subject: CredentialSubject,
 	proof: Proof,
@@ -45,6 +47,7 @@ impl TrustSchema {
 	pub fn new(
 		kind: String, issuer: String, credential_subject: CredentialSubject, proof: Proof,
 	) -> Self {
+		let kind = OneOrMore::More(vec![kind]);
 		Self { kind, issuer, credential_subject, proof }
 	}
 }
@@ -72,21 +75,38 @@ impl Validation for TrustSchema {
 
 impl IntoTerm for TrustSchema {
 	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
-		let pk = self.validate()?;
-
-		let from_address = address_from_ecdsa_key(&pk);
-		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		if from_did != self.issuer {
-			return Err(AttTrError::VerificationError);
-		}
+		// TODO: uncomment when verification spec is defined
+		// let pk = self.validate()?;
+		// let from_address = address_from_ecdsa_key(&pk);
+		// let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		// if from_did != self.issuer {
+		// 	return Err(AttTrError::VerificationError);
+		// }
+		let issuer = canonicalize_peer_did(&self.issuer).map_err(AttTrError::InvalidPeerDid)?;
+		// if issuer != self.issuer {
+		// 	info!(
+		// 		original = self.issuer,
+		// 		canonical = issuer,
+		// 		"issuer DID canonicalized"
+		// 	);
+		// }
+		let subject = canonicalize_peer_did(&self.credential_subject.id)
+			.map_err(AttTrError::InvalidPeerDid)?;
+		// if subject != self.credential_subject.id {
+		// 	info!(
+		// 		original = self.credential_subject.id,
+		// 		canonical = subject,
+		// 		"subject DID canonicalized"
+		// 	);
+		// }
 
 		let mut terms = Vec::new();
 		for trust_arc in &self.credential_subject.trustworthiness {
-			let form = trust_arc.level >= 0.;
+			let form = if trust_arc.level >= 0. { TermForm::Trust } else { TermForm::Distrust };
 			let term_group = match trust_arc.scope {
 				Domain::SoftwareDevelopment => vec![Term::new(
-					from_did.clone(),
-					self.credential_subject.id.clone(),
+					issuer.clone(),
+					subject.clone(),
 					trust_arc.level.abs() * 10.,
 					Domain::SoftwareDevelopment.into(),
 					form,
@@ -94,8 +114,8 @@ impl IntoTerm for TrustSchema {
 				)],
 				Domain::SoftwareSecurity => {
 					vec![Term::new(
-						from_did.clone(),
-						self.credential_subject.id.clone(),
+						issuer.clone(),
+						subject.clone(),
 						trust_arc.level.abs() * 10.,
 						Domain::SoftwareSecurity.into(),
 						form,
@@ -105,16 +125,16 @@ impl IntoTerm for TrustSchema {
 				Domain::Honesty => {
 					vec![
 						Term::new(
-							from_did.clone(),
-							self.credential_subject.id.clone(),
+							issuer.clone(),
+							subject.clone(),
 							trust_arc.level.abs() * 1.,
 							Domain::SoftwareDevelopment.into(),
-							form,
+							form.clone(),
 							timestamp,
 						),
 						Term::new(
-							from_did.clone(),
-							self.credential_subject.id.clone(),
+							issuer.clone(),
+							subject.clone(),
 							trust_arc.level.abs() * 1.,
 							Domain::SoftwareSecurity.into(),
 							form,
@@ -136,6 +156,8 @@ mod test {
 	use secp256k1::rand::thread_rng;
 	use secp256k1::{generate_keypair, Message, Secp256k1};
 	use sha3::{Digest, Keccak256};
+
+	use mm_spd_vc::OneOrMore;
 
 	use crate::did::Did;
 	use crate::schemas::{Domain, Proof, Validation};
@@ -174,10 +196,15 @@ mod test {
 		let kind = "AuditReportApproveCredential".to_string();
 		let addr = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:0x{}", hex::encode(addr));
-		let cs = CredentialSubject { id: did_string, trustworthiness: vec![trust_arc] };
-		let proof = Proof { signature: sig_string };
+		let cs = CredentialSubject::new(did_string, vec![trust_arc]);
+		let proof = Proof { signature: Some(sig_string) };
 
-		let aa_schema = TrustSchema { kind, issuer, credential_subject: cs, proof };
+		let aa_schema = TrustSchema {
+			kind: OneOrMore::More(vec![kind]),
+			issuer,
+			credential_subject: cs,
+			proof,
+		};
 
 		let rec_pk = aa_schema.validate().unwrap();
 

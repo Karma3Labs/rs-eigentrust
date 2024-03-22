@@ -1,4 +1,6 @@
+use crate::schemas::SchemaTypeError;
 use hex::FromHexError;
+use mm_spd_did::CanonicalizePeerDidError;
 use rocksdb::Error as RocksDbError;
 use secp256k1::Error as SecpError;
 use serde_json::Error;
@@ -26,6 +28,12 @@ pub enum AttTrError {
 
 	#[error("NotFoundError")]
 	NotFoundError,
+
+	#[error("invalid subject or issuer DID: {0}")]
+	InvalidPeerDid(CanonicalizePeerDidError),
+
+	#[error("invalid schema type: {0}")]
+	InvalidSchema(SchemaTypeError),
 
 	#[error("ParseError")]
 	ParseError,

@@ -9,6 +9,154 @@ Software Security and Software Development. These User reputation scores are
 used to calculate Snap scores and Community Sentiment, which helps surface Snaps
 considered Safe or Malicious based on community reputation.
 
+## Running simulated test
+
+Ensure that `jq` is installed on the system, then run `./run_simulation.sh` with
+two arguments:
+
+- Verifiable credentials filename.
+- Pre-trust filename
+
+Example:
+
+```sh
+./run_simulation.sh ~/testcase.csv ~/pretrust.txt
+```
+
+It builds/installs everything on the local machine, then runs a local pipeline
+with the given input. In another terminal window, check the contents of
+`ssc.log`; once it prints the `starting run` message 2-3 times in a row, stop
+the pipeline using Ctrl-C.
+
+The output is found in the subdirectories of `./spd_scores/` (created as
+needed):
+
+* `./spd_scores/1/` for the software development scope
+* `./spd_scores/2/` for the software security scope
+
+Each directory contains a series of archive (`.zip`) + manifest (`.json`) pairs,
+named after the issuance UNIX timestamp in milliseconds.
+
+### Simulation Input
+
+#### Verifiable Credentials File
+
+Verifiable credentials are fed into the system using a CSV file.
+Each record should have four fields (in this order):
+
+1. `id`: A monotonically increasing sequence number, from 1
+2. `timestamp`: A UNIX timestamp in millisecond precision.
+3. `schema_id`: `1` if the VC is a `ReviewCredential`, `2` if
+   a `TrustCredential`
+4. `schema_value`: A (CSV-quoted) verifiable credential JSON, in the format
+   documented in the
+   **[draft CAIP](https://github.com/dayksx/CAIPs/blob/main/CAIPs/caip-x.md).**
+
+   To ease processing, the following VC fields are not used and may be left
+   empty:
+
+    - `proof`
+    - `credentialSubject.trustworthiness[].reason` (in `TrustCredential`-s)
+    - `credentialSubject.statusReason` (in `ReviewCredential`-s)
+
+Sample input CSV file:
+
+```csv
+id;timestamp;schema_id;schema_value
+1;1707490806644;2;"{""@context"":[""https://www.w3.org/2018/credentials/v2""],""credentialSubject"":{""id"":""did:pkh:eip155:59144:0xefc6191B3245df60B209Ec58631c7dCF04137329"",""trustworthiness"":[{""level"":1,""reason"":[],""scope"":""Software development""},{""level"":0,""reason"":[],""scope"":""Software security""}]},""issuanceDate"":""2024-02-09T10:22:21.670Z"",""issuer"":""did:pkh:eip155:59144:0x6eCfD8252C19aC2Bf4bd1cBdc026C001C93E179D"",""proof"":{},""type"":[""VerifiableCredential"",""TrustCredential""]}"
+2;1707493457525;2;"{""@context"":[""https://www.w3.org/2018/credentials/v2""],""credentialSubject"":{""id"":""did:pkh:eip155:59144:0xefc6191B3245df60B209Ec58631c7dCF04137329"",""trustworthiness"":[{""level"":1,""reason"":[],""scope"":""Software development""},{""level"":0,""reason"":[],""scope"":""Software security""}]},""issuanceDate"":""2024-02-09T10:22:21.670Z"",""issuer"":""did:pkh:eip155:59144:0x6eCfD8252C19aC2Bf4bd1cBdc026C001C93E179D"",""proof"":{},""type"":[""VerifiableCredential"",""TrustCredential""]}"
+3;1707990795781;1;"{""@context"":[""https://www.w3.org/2018/credentials/v2""],""credentialSubject"":{""currentStatus"":""Endorsed"",""id"":""snap://lfxsHs6C6buodVo0zVJakNAHgIXAGkHyVTL12Rw0xdw="",""statusReason"":{""type"":""Endorse"",""value"":[]}},""issuanceDate"":""2024-02-15T09:53:10.811Z"",""issuer"":""did:pkh:eip155:59144:0x3892967AA898d7EeBf1B08d3E1F31B2F4C84317A"",""proof"":{},""type"":[""VerifiableCredential"",""ReviewCredential""]}"
+4;1707990982793;1;"{""@context"":[""https://www.w3.org/2018/credentials/v2""],""credentialSubject"":{""currentStatus"":""Disputed"",""id"":""snap://lfxsHs6C6buodVo0zVJakNAHgIXAGkHyVTL12Rw0xdw="",""statusReason"":{""type"":""Malicious"",""value"":[]}},""issuanceDate"":""2024-02-15T09:56:19.055Z"",""issuer"":""did:pkh:eip155:59140:0x6eCfD8252C19aC2Bf4bd1cBdc026C001C93E179D"",""proof"":{},""type"":[""VerifiableCredential"",""ReviewCredential""]}"
+```
+
+Additional considerations:
+
+* The `credentialSubject.trustworthiness[].scope` in a `TrustCredential` can be
+  one of:
+    * `Honesty`
+    * `Software security`
+    * `Software development`
+* The `Software security` and `Software development` scopes are currently only
+  used for expressing trust, not distrust. That is, the `.value` field is `-1`.
+* Similarly, the `Honesty` scope is currently only used for expressing distrust,
+  not trust. That is, the `.value` field is `1`.
+* The action of withdrawing a previously issued `TrustCredential` for a
+  peer/scope is done by re-issuing another `TrustCredential` for the same
+  peer/scope with `credentialSubject.trustworthiness[].level` of `0`.
+* A peer can signal a change in their opinion about a Snap version by re-issuing
+  another `ReviewCredential` for the same Snap version with the opposite
+  `currentStatus` field value (flip between `Endorsed` and `Disputed`).
+* Currently it is not possible to withdraw a previously issued
+  `ReviewCredential`, i.e. to go back to the "no opinion" state.
+    * This will later be designed/implemented, e.g. using mechanisms such as
+      [VC Revocation List](https://w3c-ccg.github.io/vc-status-rl-2020/) and/or
+      [VC Ethr Revocation](https://spherity.github.io/vc-ethr-revocation-registry/).
+
+#### Multiple stages
+
+It is possible to organize input data into multiple stages (such as "baseline",
+"sybil formation", "sybil attack", "community response/mitigation") and
+delineate adjacent stages so that each stage is guaranteed an output snapshot
+(which represents the state of the trust network before the next stage starts).
+Simply space the next stage (in terms of its first entry timestamp) by 10
+minutes or more (600,000 microseconds in timestamp diff). The default interval
+can be adjusted by adding `--interval=milliseconds` flag to
+the `snap-score-computer` run in the test script.
+
+#### Pre-trust file
+
+Pre-trust is configured into the system using a text file with two fields,
+separated by a single space:
+
+- Peer DID
+- Relative weight (use `1` for everyone for equal distribution).
+
+Sample file with 5 equally pre-trusted peers:
+
+```
+did:pkh:eip155:1:0x44dc4e3309b80ef7abf41c7d0a68f0337a88f044 1
+did:pkh:eip155:1:0x4EBee6bA2771C19aDf9AF348985bCf06d3270d42 1
+did:pkh:eip155:1:0xE5aF1B8619E3FbD91aFDFB710b0cF688Ce1a4fCF 1
+did:pkh:eip155:1:0x224b11F0747c7688a10aCC15F785354aA6493ED6 1
+did:pkh:eip155:1:0x690FCDE0B69B8B66342Ac390A82092845c6F7f1c 1
+```
+
+### Simulation Output File
+
+All output `.zip` archive files belong to the same series, identified by the
+"epoch" timestamp (the pipeline's start timestamp). Each `.zip` archive file is
+a score snapshot of every user and Snap known to the system, as of a specific
+"effective" anchor time. The file contains:
+
+* `MANIFEST.json` – the archive manifest
+* `peer_scores.jsonl` and `snap_scores.jsonl` – peer/Snap score VCs, one per
+  line.
+
+Sample manifest `spd_scores/2/1710239744000.json` (pretty-printed):
+
+```json
+{
+  "effectiveDate": "2024-02-23T17:12:00.000Z",
+  "epoch": "2024-03-12T10:35:44.000Z",
+  "issuanceDate": "2024-03-12T10:35:44.124Z",
+  "issuer": "did:pkh:eip155:1:0x23d86aa31d4198a78baa98e49bb2da52cd15c6f0",
+  "locations": [],
+  "proof": {},
+  "scope": "SoftwareSecurity"
+}
+```
+
+The manifest above states that:
+
+* The `.zip` file containing this manifest belongs to the series (`epoch`) that
+  started on 2024-03-12 10:35:44 UTC.
+* The scores found within have been calculated after processing all input VCs
+  registered before 2024-02-23 17:12:00 UTC.
+* The snapshot was issued at 2024-03-12 10:35:44.124 UTC.
+* The scores found within are in the software security scope.
+
+## Algorithm Description
+
 ### **Inputs**
 
 Users can issue explicit trust or distrust attestations to each other and Snaps.
@@ -121,7 +269,7 @@ as peers directly endorsed by the pre-trusted peers. – end note]
 $P_h \subset P$ denotes the set of all highly trusted auditors in the network.
 
 Given a Snap $s$, $O(s) \subset P$ is the set of peers who opined (filed a
-StatusCredential) on $s$. For $p \in O(s)$, $R(s,p) \in [0..1]$
+ReviewCredential) on $s$. For $p \in O(s)$, $R(s,p) \in [0..1]$
 denotes the peer $p$’s status opinion about the Snap $s$.
 
 We define the security score for the Snap $s$ as a set of two numbers:
@@ -188,7 +336,7 @@ trusted auditors (that is, $d$ is the “weakest dissident”).
 
 - If $d$ is the only one that reported the Snap whereas everyone else endorsed
   it:
-  
+
   $$R(s,p) = 1\text{ if }p \ne d\text{, }0\text{ if }p = d$$
 
   This results in the highest Snap score value threshold where the Snap is still

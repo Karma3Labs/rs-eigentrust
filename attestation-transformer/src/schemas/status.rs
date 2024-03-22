@@ -1,12 +1,13 @@
 use serde_derive::{Deserialize, Serialize};
 
-use crate::did::{Did, Schema};
+use mm_spd_vc::OneOrMore;
+
+use crate::did::Did;
 use crate::error::AttTrError;
 use crate::schemas::{Domain, IntoTerm, Proof, Validation};
-use crate::term::Term;
-use crate::utils::address_from_ecdsa_key;
+use crate::term::{Term, TermForm};
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum CurrentStatus {
 	Endorsed,
 	Disputed,
@@ -22,23 +23,34 @@ impl From<CurrentStatus> for u8 {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
+pub struct StatusReason {
+	#[serde(rename = "type")]
+	kind: Option<String>,
+	value: OneOrMore<String>,
+	lang: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialSubject {
 	id: String,
 	current_status: CurrentStatus,
+	status_reason: Option<StatusReason>,
 }
 
 impl CredentialSubject {
-	pub fn new(id: String, current_status: CurrentStatus) -> Self {
-		Self { id, current_status }
+	pub fn new(
+		id: String, current_status: CurrentStatus, status_reason: Option<StatusReason>,
+	) -> Self {
+		Self { id, current_status, status_reason }
 	}
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusSchema {
-	#[serde(alias = "type")]
-	kind: String,
+	#[serde(rename = "type")]
+	kind: OneOrMore<String>,
 	issuer: String,
 	credential_subject: CredentialSubject,
 	proof: Proof,
@@ -46,7 +58,8 @@ pub struct StatusSchema {
 
 impl StatusSchema {
 	pub fn new(
-		kind: String, issuer: String, credential_subject: CredentialSubject, proof: Proof,
+		kind: OneOrMore<String>, issuer: String, credential_subject: CredentialSubject,
+		proof: Proof,
 	) -> Self {
 		Self { kind, issuer, credential_subject, proof }
 	}
@@ -74,23 +87,23 @@ impl Validation for StatusSchema {
 
 impl IntoTerm for StatusSchema {
 	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
-		let pk = self.validate()?;
-
-		let from_address = address_from_ecdsa_key(&pk);
-		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		if from_did != self.issuer {
-			return Err(AttTrError::VerificationError);
-		}
+		// TODO: uncomment when verification spec is defined
+		// let pk = self.validate()?;
+		// let from_address = address_from_ecdsa_key(&pk);
+		// let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		// if from_did != self.issuer {
+		// 	return Err(AttTrError::VerificationError);
+		// }
 
 		let weight = 50.;
 		let domain = Domain::SoftwareSecurity;
 		let form = match self.credential_subject.current_status {
-			CurrentStatus::Endorsed => true,
-			CurrentStatus::Disputed => false,
+			CurrentStatus::Endorsed => TermForm::Trust,
+			CurrentStatus::Disputed => TermForm::Distrust,
 		};
 
 		let term = Term::new(
-			from_did,
+			self.issuer,
 			self.credential_subject.id,
 			weight,
 			domain.into(),
@@ -106,6 +119,8 @@ mod test {
 	use secp256k1::rand::thread_rng;
 	use secp256k1::{generate_keypair, Message, Secp256k1};
 	use sha3::{Digest, Keccak256};
+
+	use mm_spd_vc::OneOrMore;
 
 	use crate::did::Did;
 	use crate::schemas::{Proof, Validation};
@@ -139,11 +154,11 @@ mod test {
 		bytes.push(rec_id);
 		let sig_string = hex::encode(bytes);
 
-		let kind = "AuditReportDisapproveCredential".to_string();
+		let kind = OneOrMore::One("AuditReportDisapproveCredential".to_string());
 		let address = address_from_ecdsa_key(&pk);
 		let issuer = format!("did:pkh:eth:0x{}", hex::encode(address));
-		let cs = CredentialSubject { id: did_string, current_status };
-		let proof = Proof { signature: sig_string };
+		let cs = CredentialSubject::new(did_string, current_status, None);
+		let proof = Proof { signature: Some(sig_string) };
 
 		let follow_schema = StatusSchema { kind, issuer, credential_subject: cs, proof };
 

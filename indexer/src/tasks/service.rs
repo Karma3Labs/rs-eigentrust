@@ -1,4 +1,4 @@
-use tokio::time::{sleep, Duration};
+use tokio::time::sleep;
 use tracing::{debug, info};
 
 use crate::storage::types::KVStorageTrait;
@@ -64,11 +64,7 @@ impl TaskService {
 			// info!("batch received {} id=", task_id);
 
 			let duration = self.task.get_sleep_interval();
-			self.sleep(duration).await;
+			sleep(duration).await;
 		}
-	}
-
-	pub async fn sleep(&self, duration: Duration) {
-		sleep(duration).await;
 	}
 }

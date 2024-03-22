@@ -1,10 +1,9 @@
 use serde_derive::{Deserialize, Serialize};
 
-use crate::did::{Did, Schema};
+use crate::did::Did;
 use crate::error::AttTrError;
 use crate::schemas::{Domain, IntoTerm, Proof, Validation};
-use crate::term::Term;
-use crate::utils::address_from_ecdsa_key;
+use crate::term::{Term, TermForm};
 
 #[derive(Deserialize, Serialize, Clone)]
 pub enum SecurityStatus {
@@ -24,7 +23,7 @@ impl From<SecurityStatus> for u8 {
 #[derive(Deserialize, Serialize, Clone)]
 pub struct SecurityFinding {
 	criticality: f32,
-	#[serde(alias = "type")]
+	#[serde(rename = "type")]
 	kind: Option<String>,
 	description: Option<String>,
 	lang: Option<String>,
@@ -57,7 +56,7 @@ impl CredentialSubject {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SecurityReportSchema {
-	#[serde(alias = "type")]
+	#[serde(rename = "type")]
 	kind: String,
 	issuer: String,
 	credential_subject: CredentialSubject,
@@ -93,24 +92,24 @@ impl Validation for SecurityReportSchema {
 
 impl IntoTerm for SecurityReportSchema {
 	fn into_term(self, timestamp: u64) -> Result<Vec<Term>, AttTrError> {
-		let pk = self.validate()?;
-
-		let from_address = address_from_ecdsa_key(&pk);
-		let from_did: String = Did::new(Schema::PkhEth, from_address).into();
-		if from_did != self.issuer {
-			return Err(AttTrError::VerificationError);
-		}
+		// TODO: uncomment when final spec is defined
+		// let pk = self.validate()?;
+		// let from_address = address_from_ecdsa_key(&pk);
+		// let from_did: String = Did::new(Schema::PkhEth, from_address).into();
+		// if from_did != self.issuer {
+		// 	return Err(AttTrError::VerificationError);
+		// }
 
 		let form = match self.credential_subject.security_status {
-			SecurityStatus::Unsecure => false,
-			SecurityStatus::Secure => true,
+			SecurityStatus::Unsecure => TermForm::Distrust,
+			SecurityStatus::Secure => TermForm::Trust,
 		};
 
 		let weight = 50.;
 		let mut terms = Vec::new();
-		if form {
+		if form == TermForm::Trust {
 			let term = Term::new(
-				from_did,
+				self.issuer.clone(),
 				self.credential_subject.id,
 				weight,
 				Domain::SoftwareSecurity.into(),
@@ -121,11 +120,11 @@ impl IntoTerm for SecurityReportSchema {
 		} else {
 			for finding in &self.credential_subject.security_findings {
 				let term = Term::new(
-					from_did.clone(),
+					self.issuer.clone(),
 					self.credential_subject.id.clone(),
 					finding.criticality * weight,
 					Domain::SoftwareSecurity.into(),
-					form,
+					form.clone(),
 					timestamp,
 				);
 				terms.push(term);

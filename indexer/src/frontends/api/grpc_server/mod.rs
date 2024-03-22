@@ -13,7 +13,6 @@ use proto_buf::indexer::{IndexerEvent, Query};
 
 use crate::frontends::api::grpc_server::types::GRPCServerConfig;
 use crate::tasks::cache::CacheService;
-use crate::tasks::service::TaskService;
 
 pub mod client;
 pub mod types;
@@ -24,7 +23,7 @@ pub struct IndexerService {
 
 pub struct GRPCServer {
 	config: GRPCServerConfig,
-	task_service: TaskService,
+	cache_file_path: PathBuf,
 }
 
 impl IndexerService {
@@ -92,25 +91,19 @@ impl Indexer for IndexerService {
 }
 
 impl GRPCServer {
-	pub fn new(config: GRPCServerConfig, task_service: TaskService) -> Self {
-		GRPCServer { config, task_service }
+	pub fn new(config: GRPCServerConfig, cache_file_path: PathBuf) -> Self {
+		GRPCServer { config, cache_file_path }
 	}
 
 	pub async fn serve(&mut self) -> Result<(), Box<dyn Error>> {
 		let address = format!("{}{}", "[::1]:", self.config.port).parse()?;
 		info!("GRPC server is starting at {}", address);
 
-		// todo task id only
-		let cache_file_path = self.task_service.cache.get_file_path();
+		let cache_file_path = self.cache_file_path.clone();
 		println!("{:?}", cache_file_path);
 		let indexer_server = IndexerServer::new(IndexerService::new(cache_file_path));
 
-		tokio::spawn(async move {
-			let _ = Server::builder().add_service(indexer_server).serve(address).await;
-		});
-
-		// todo don't need to launch in server
-		self.task_service.run().await;
+		Server::builder().add_service(indexer_server).serve(address).await?;
 
 		Ok(())
 	}

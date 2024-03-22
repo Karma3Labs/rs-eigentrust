@@ -67,7 +67,7 @@ mod test {
 	use proto_buf::transformer::{TermBatch, TermObject};
 
 	use crate::schemas::Domain;
-	use crate::term::Term;
+	use crate::term::{Term, TermForm};
 
 	use super::*;
 
@@ -83,7 +83,7 @@ mod test {
 			"did:pkh:eth:0x90f8bf6a479f320ead074411a4b0e7944ea8c9c3".to_string(),
 			25.,
 			Domain::SoftwareSecurity.into(),
-			true,
+			TermForm::Trust,
 			0,
 		)];
 		let indexed_terms =

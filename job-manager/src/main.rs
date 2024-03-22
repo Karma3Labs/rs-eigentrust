@@ -1,29 +1,52 @@
 use std::error::Error;
 use std::time::Duration;
 
+use clap::Parser as ClapParser;
 use tokio::time::interval;
 use tokio_stream::wrappers::IntervalStream;
 use tokio_stream::StreamExt;
-use tonic::transport::Channel;
 use tonic::Request;
+use tracing::{info, trace};
 
 use proto_buf::combiner::linear_combiner_client::LinearCombinerClient;
-use proto_buf::combiner::{LtBatch, LtHistoryBatch};
+use proto_buf::combiner::{LtBatch, LtHistoryBatch, MappingQuery};
 use proto_buf::transformer::transformer_client::TransformerClient;
 use proto_buf::transformer::{EventBatch, TermBatch};
 
 const BATCH_SIZE: u32 = 1000;
 const INTERVAL_SECS: u64 = 5;
-const NUM_ITERATIONS: usize = 3;
-const MAX_SIZE: u32 = 10;
+const NUM_ITERATIONS: usize = 100000000000;
+const MAX_SIZE: u32 = 7;
+
+#[derive(ClapParser)]
+struct Args {
+	/// Attestation transformer gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50051")]
+	transformer_grpc: tonic::transport::Endpoint,
+
+	/// Linear combiner gRPC endpoint.
+	#[arg(long, value_name = "URL", default_value = "http://[::1]:50052")]
+	linear_combiner_grpc: tonic::transport::Endpoint,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	let tr_channel = Channel::from_static("http://[::1]:50051").connect().await?;
-	let mut tr_client = TransformerClient::new(tr_channel);
-
-	let lc_channel = Channel::from_static("http://[::1]:50052").connect().await?;
-	let mut lc_client = LinearCombinerClient::new(lc_channel);
+	let args = Args::parse();
+	{
+		use tracing_subscriber::*;
+		let env_filter = EnvFilter::builder()
+			.with_env_var("SPD_JM_LOG")
+			.from_env()?
+			.add_directive(filter::LevelFilter::WARN.into());
+		fmt::Subscriber::builder()
+			.with_env_filter(env_filter)
+			.with_writer(std::io::stderr)
+			.with_ansi(true)
+			.init();
+	}
+	info!("initializing JM");
+	let mut tr_client = TransformerClient::connect(args.transformer_grpc).await?;
+	let mut lc_client = LinearCombinerClient::connect(args.linear_combiner_grpc).await?;
 
 	let interval_size = Duration::from_secs(INTERVAL_SECS);
 	let stream = IntervalStream::new(interval(interval_size));
@@ -32,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Some(_ts) = limited_stream.next().await {
 		let event_request = Request::new(EventBatch { size: BATCH_SIZE });
 		let response = tr_client.sync_indexer(event_request).await?.into_inner();
-		println!("sync_indexer response {:?}", response);
+		trace!(?response, "sync_indexer response");
 
 		if response.num_terms != 0 {
 			let void_request = Request::new(TermBatch {
@@ -40,12 +63,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				size: response.num_terms,
 			});
 			let response = tr_client.term_stream(void_request).await?.into_inner();
-			println!("term_stream response {:?}", response);
+			trace!(?response, "term_stream response");
 		}
 	}
 
-	let trust_form = 0;
-	let distrust_form = 1;
+	let trust_form = 1;
+	let distrust_form = 0;
 	let development_domain = 1;
 	let security_domain = 2;
 
@@ -94,6 +117,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res1.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt1[x][y] = res.value;
 	}
 
@@ -101,6 +127,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res2.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt2[x][y] = res.value;
 	}
 
@@ -108,6 +137,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res3.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt3[x][y] = res.value;
 	}
 
@@ -115,22 +147,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	while let Ok(Some(res)) = res4.message().await {
 		let x = usize::try_from(res.x).unwrap();
 		let y = usize::try_from(res.y).unwrap();
+		if x >= MAX_SIZE as usize || y >= MAX_SIZE as usize {
+			continue;
+		}
 		lt4[x][y] = res.value;
 	}
 
-	println!("SoftwareSecurity - Trust:");
-	lt1.map(|x| println!("{:?}", x));
-	println!("SoftwareSecurity - Distrust:");
-	lt2.map(|x| println!("{:?}", x));
-	println!("SoftwareDevelopment - Trust:");
-	lt3.map(|x| println!("{:?}", x));
-	println!("SoftwareDevelopment - Distrust:");
-	lt4.map(|x| println!("{:?}", x));
+	lt1.map(|x| trace!(?x, "SoftwareSecurity    -    Trust"));
+	lt2.map(|x| trace!(?x, "SoftwareSecurity    - Distrust"));
+	lt3.map(|x| trace!(?x, "SoftwareDevelopment -    Trust"));
+	lt4.map(|x| trace!(?x, "SoftwareDevelopment - Distrust"));
 
 	let batch_new = LtBatch { domain: security_domain, form: trust_form, size: 100 };
 	let mut res_new = lc_client.get_new_data(Request::new(batch_new)).await?.into_inner();
 	while let Ok(Some(res)) = res_new.message().await {
-		println!("SoftwareSecurity - Trust - LT items: {:?}", res);
+		trace!(?res, "SoftwareSecurity -    Trust - LT items");
+	}
+
+	let batch_new = LtBatch { domain: security_domain, form: distrust_form, size: 100 };
+	let mut res_new = lc_client.get_new_data(Request::new(batch_new)).await?.into_inner();
+	while let Ok(Some(res)) = res_new.message().await {
+		trace!(?res, "SoftwareSecurity - Distrust - LT items");
+	}
+
+	let batch_new = MappingQuery { start: 0, size: 100 };
+	let mut mapping_data = lc_client.get_did_mapping(Request::new(batch_new)).await?.into_inner();
+	while let Ok(Some(res)) = mapping_data.message().await {
+		trace!(
+			did = String::from_utf8(hex::decode(res.did).unwrap()).unwrap(),
+			index = res.id,
+			"Mapping"
+		);
 	}
 
 	Ok(())

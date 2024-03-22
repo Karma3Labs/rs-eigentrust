@@ -1,10 +1,15 @@
+use std::fmt::Debug;
+use std::future::Future;
+
 use clap::Parser;
-use tokio::time::Duration;
+use futures::join;
+use tracing::{info, warn};
 
 use crate::clients::csv::client::CSVClient;
 use crate::clients::csv::types::CSVClientConfig;
 use crate::clients::metamask_connector::client::MetamaskConnectorClient;
 use crate::config::dotenv::Config;
+// use crate::frontends::api::grpc_server::client::GRPCServerClient;
 use crate::frontends::api::grpc_server::GRPCServer;
 use crate::storage::lm_db::LMDBClient;
 use crate::tasks::csv_poc::task::CSVPOCTask;
@@ -44,21 +49,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		Box::new(MetamaskConnectorTask::new(metamask_connector_client))
 	};
 
-	let task_service = TaskService::new(task, Box::new(db.clone()));
+	let mut task_service = TaskService::new(task, Box::new(db.clone()));
+	let cache_file_path = task_service.cache.get_file_path();
 
 	let grpc_server_config = config.grpc_server_config;
 
-	let mut server = GRPCServer::new(grpc_server_config, task_service);
+	let mut server = GRPCServer::new(grpc_server_config, cache_file_path);
 
-	tokio::spawn(async {
-		let _ = crate::frontends::api::rest::server::serve().await;
-	});
+	join!(
+		task_service.run(),
+		warn_and_default_upon_error("REST server", frontends::api::rest::server::serve()),
+		//warn_and_default_upon_error("GRPC test client", GRPCServerClient::run()),
+		warn_and_default_upon_error("gRPC server", server.serve()),
+	);
 
-	tokio::spawn(async {
-		tokio::time::sleep(Duration::from_secs(5)).await;
-		// let _ = GRPCServerClient::run().await;
-	});
-
-	server.serve().await?;
+	info!("all done");
 	Ok(())
+}
+
+async fn warn_and_default_upon_error<T: Default, E: Debug, F: Future<Output = Result<T, E>>>(
+	name: &str, f: F,
+) -> T {
+	match f.await {
+		Ok(v) => v,
+		Err(err) => {
+			warn!(?err, name, "task failed");
+			T::default()
+		},
+	}
 }

@@ -1,3 +1,4 @@
+use mm_spd_did::CanonicalizePeerDidError;
 use rocksdb::Error as RocksDbError;
 use thiserror::Error;
 
@@ -14,6 +15,9 @@ pub enum LcError {
 
 	#[error("ParseError")]
 	ParseError,
+
+	#[error("invalid subject or issuer DID: {0}")]
+	InvalidPeerDid(CanonicalizePeerDidError),
 }
 
 impl From<LcError> for tonic::Status {
